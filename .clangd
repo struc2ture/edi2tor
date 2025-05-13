@@ -1,0 +1,11 @@
+CompileFlags:
+    Add: [
+        "-I/opt/homebrew/include",
+        "-L/opt/homebrew/lib",
+        "-lglfw",
+        "-framework", "OpenGL",
+        "-DGL_SILENCE_DEPRECATION",
+        "-Wall",
+        "-Wextra",
+        "-Werror"
+    ]
