@@ -70,6 +70,21 @@ int main() {
     glDeleteShader(vs);
     glDeleteShader(fs);
 
+    {
+        FILE *f = fopen("src/main.c", "r");
+        if (!f) {
+            perror("fopen");
+            exit(1);
+        }
+
+        char line[1024];
+        while (fgets(line, sizeof(line), f)) {
+            fputs(line, stdout);
+        }
+
+        fclose(f);
+    }
+
     char text[] = "HELLO WORLD!!!";
     char buffer[99999];
     float triangle_buffer[6 * 2 * 9999]; // 6 vertices (x, y) per quad
