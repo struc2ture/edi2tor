@@ -1,10 +1,22 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 #include <stb_easy_font.h>
 
-#define MAX_VERT 131072
+#define VERT_MAX 4096
+
+typedef struct {
+    char **lines;
+    int line_count;
+    int capacity;
+} Text_Buffer;
+
+typedef struct {
+    float verts[VERT_MAX * 2];
+    int vert_count;
+} Vert_Buffer;
 
 const char *vs_src =
 "#version 410 core\n"
@@ -23,11 +35,9 @@ const char *fs_src =
 "    FragColor = vec4(1.0, 0.5, 0.2, 1.0);\n"
 "}";
 
-const float vertices[] = {
-    -0.5f, -0.5f,
-     0.5f, -0.5f,
-     0.0f,  0.5f
-};
+Text_Buffer read_file(const char *path);
+
+void render_line(int x, int y, char *line, Vert_Buffer *out_vert_buf);
 
 int main() {
     if (!glfwInit()) return -1;
@@ -71,21 +81,16 @@ int main() {
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    FILE *f = fopen("src/main.c", "r");
-    if (!f) {
-        perror("fopen");
-        exit(1);
-    }
-
     GLuint vao, vbo;
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER,  MAX_VERT * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
+    Text_Buffer text_buffer = read_file("src/main.c");
 
     while (!glfwWindowShouldClose(window)) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
@@ -97,51 +102,74 @@ int main() {
         glUseProgram(prog);
         glBindVertexArray(vao);
 
-        char line[1024];
         int y_offset = 10;
         int line_height = 20;
 
-        while (fgets(line, sizeof(line), f)) {
-            char buffer[99999];
-            float triangle_buffer[MAX_VERT * 2]; // 6 vertices (x, y) per quad
-            int quad_count = stb_easy_font_print(10, y_offset, line, NULL, buffer, sizeof(buffer));
-            int vert_count = quad_count * 6;
-
-            // stb_easy_font outputs quads: 4 vertices per glyph box
-            {
-                float *src = (float *)buffer;
-
-                for (int i = 0; i < quad_count; ++i) {
-                    float *q = &src[i * 4 * 4];
-
-                    float *dst = &triangle_buffer[i * 6 * 2];
-
-                    // Triangle 1
-                    dst[0] = q[0]; dst[1] = q[1];
-                    dst[2] = q[4]; dst[3] = q[5];
-                    dst[4] = q[8]; dst[5] = q[9];
-
-                    // Triangle 2
-                    dst[6] = q[0];  dst[7] = q[1];
-                    dst[8] = q[8];  dst[9] = q[9];
-                    dst[10] = q[12]; dst[11] = q[13];
-                }
-            }
-
-            glBufferSubData(GL_ARRAY_BUFFER, 0, vert_count * 2 * sizeof(float), triangle_buffer);
-            glDrawArrays((GL_TRIANGLES), 0, vert_count);
+        for (int line_i = 0; line_i < text_buffer.line_count; line_i++) {
+            Vert_Buffer vert_buf = {0};
+            render_line(10, y_offset, text_buffer.lines[line_i], &vert_buf);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * 2 * sizeof(float), vert_buf.verts);
+            glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 
             y_offset += line_height;
         }
-
-        rewind(f);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    fclose(f);
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
+}
+
+Text_Buffer read_file(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        perror("fopen");
+        exit(1);
+    }
+
+    Text_Buffer result = {0};
+
+    int count = 0;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), f)) {
+        result.lines = realloc(result.lines, (count + 1) * sizeof(char *));
+        result.lines[count++] = strdup(buf);
+    }
+
+    result.line_count = count;
+    result.capacity = result.line_count;
+
+    fclose(f);
+
+    return result;
+}
+
+void render_line(int x, int y, char *line, Vert_Buffer *out_vert_buf) {
+    char quad_buf[99999];
+    int quad_count = stb_easy_font_print(x, y, line, NULL, quad_buf, sizeof(quad_buf));
+    out_vert_buf->vert_count = quad_count * 6;
+
+    // stb_easy_font outputs quads: 4 vertices per glyph box
+    {
+        float *src = (float *)quad_buf;
+
+        for (int i = 0; i < quad_count; ++i) {
+            float *q = &src[i * 4 * 4];
+
+            float *dst = &out_vert_buf->verts[i * 6 * 2];
+
+            // Triangle 1
+            dst[0] = q[0]; dst[1] = q[1];
+            dst[2] = q[4]; dst[3] = q[5];
+            dst[4] = q[8]; dst[5] = q[9];
+
+            // Triangle 2
+            dst[6] = q[0];  dst[7] = q[1];
+            dst[8] = q[8];  dst[9] = q[9];
+            dst[10] = q[12]; dst[11] = q[13];
+        }
+    }
 }
