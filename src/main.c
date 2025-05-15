@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <stb_easy_font.h>
 
+#define MAX_VERT 131072
 
 const char *vs_src =
 "#version 410 core\n"
@@ -70,46 +71,10 @@ int main() {
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    {
-        FILE *f = fopen("src/main.c", "r");
-        if (!f) {
-            perror("fopen");
-            exit(1);
-        }
-
-        char line[1024];
-        while (fgets(line, sizeof(line), f)) {
-            fputs(line, stdout);
-        }
-
-        fclose(f);
-    }
-
-    char text[] = "HELLO WORLD!!!";
-    char buffer[99999];
-    float triangle_buffer[6 * 2 * 9999]; // 6 vertices (x, y) per quad
-    int quad_count = stb_easy_font_print(10, 10, text, NULL, buffer, sizeof(buffer));
-    int vert_count = quad_count * 6;
-
-    // stb_easy_font outputs quads: 4 vertices per glyph box
-    {
-        float *src = (float *)buffer;
-
-        for (int i = 0; i < quad_count; ++i) {
-            float *q = &src[i * 4 * 4];
-
-            float *dst = &triangle_buffer[i * 6 * 2];
-
-            // Triangle 1
-            dst[0] = q[0]; dst[1] = q[1];
-            dst[2] = q[4]; dst[3] = q[5];
-            dst[4] = q[8]; dst[5] = q[9];
-
-            // Triangle 2
-            dst[6] = q[0];  dst[7] = q[1];
-            dst[8] = q[8];  dst[9] = q[9];
-            dst[10] = q[12]; dst[11] = q[13];
-        }
+    FILE *f = fopen("src/main.c", "r");
+    if (!f) {
+        perror("fopen");
+        exit(1);
     }
 
     GLuint vao, vbo;
@@ -117,21 +82,65 @@ int main() {
     glGenBuffers(1, &vbo);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, vert_count * 2 * sizeof(float), triangle_buffer, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,  MAX_VERT * sizeof(float), NULL, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
+
     while (!glfwWindowShouldClose(window)) {
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
+            glfwSetWindowShouldClose(window, 1);
+        }
+
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(prog);
         glBindVertexArray(vao);
-        glDrawArrays((GL_TRIANGLES), 0, vert_count);
+
+        char line[1024];
+        int y_offset = 10;
+        int line_height = 20;
+
+        while (fgets(line, sizeof(line), f)) {
+            char buffer[99999];
+            float triangle_buffer[MAX_VERT * 2]; // 6 vertices (x, y) per quad
+            int quad_count = stb_easy_font_print(10, y_offset, line, NULL, buffer, sizeof(buffer));
+            int vert_count = quad_count * 6;
+
+            // stb_easy_font outputs quads: 4 vertices per glyph box
+            {
+                float *src = (float *)buffer;
+
+                for (int i = 0; i < quad_count; ++i) {
+                    float *q = &src[i * 4 * 4];
+
+                    float *dst = &triangle_buffer[i * 6 * 2];
+
+                    // Triangle 1
+                    dst[0] = q[0]; dst[1] = q[1];
+                    dst[2] = q[4]; dst[3] = q[5];
+                    dst[4] = q[8]; dst[5] = q[9];
+
+                    // Triangle 2
+                    dst[6] = q[0];  dst[7] = q[1];
+                    dst[8] = q[8];  dst[9] = q[9];
+                    dst[10] = q[12]; dst[11] = q[13];
+                }
+            }
+
+            glBufferSubData(GL_ARRAY_BUFFER, 0, vert_count * 2 * sizeof(float), triangle_buffer);
+            glDrawArrays((GL_TRIANGLES), 0, vert_count);
+
+            y_offset += line_height;
+        }
+
+        rewind(f);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
+    fclose(f);
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
