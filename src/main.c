@@ -7,17 +7,6 @@
 
 #define VERT_MAX 4096
 
-typedef struct {
-    char **lines;
-    int line_count;
-    int capacity;
-} Text_Buffer;
-
-typedef struct {
-    float verts[VERT_MAX * 2];
-    int vert_count;
-} Vert_Buffer;
-
 const char *vs_src =
 "#version 410 core\n"
 "layout (location = 0) in vec2 aPos;\n"
@@ -35,8 +24,22 @@ const char *fs_src =
 "    FragColor = vec4(1.0, 0.5, 0.2, 1.0);\n"
 "}";
 
-Text_Buffer read_file(const char *path);
+static int g_first_line = 0;
+static int g_line_count = 0;
 
+typedef struct {
+    char **lines;
+    int line_count;
+    int capacity;
+} Text_Buffer;
+
+typedef struct {
+    float verts[VERT_MAX * 2];
+    int vert_count;
+} Vert_Buffer;
+
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
+Text_Buffer read_file(const char *path);
 void render_line(int x, int y, char *line, Vert_Buffer *out_vert_buf);
 
 int main() {
@@ -47,10 +50,12 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-    GLFWwindow *window = glfwCreateWindow(800, 600, "Test", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(800, 600, "EDITOR", NULL, NULL);
     if (!window) return -1;
 
     glfwMakeContextCurrent(window);
+
+    glfwSetKeyCallback(window, key_callback);
 
     printf("OpenGL version: %s\n", glGetString(GL_VERSION));
 
@@ -91,12 +96,9 @@ int main() {
     glEnableVertexAttribArray(0);
 
     Text_Buffer text_buffer = read_file("src/main.c");
+    g_line_count = text_buffer.line_count;
 
     while (!glfwWindowShouldClose(window)) {
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
-            glfwSetWindowShouldClose(window, 1);
-        }
-
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(prog);
@@ -105,7 +107,7 @@ int main() {
         int y_offset = 10;
         int line_height = 20;
 
-        for (int line_i = 0; line_i < text_buffer.line_count; line_i++) {
+        for (int line_i = g_first_line; line_i < text_buffer.line_count; line_i++) {
             Vert_Buffer vert_buf = {0};
             render_line(10, y_offset, text_buffer.lines[line_i], &vert_buf);
             glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * 2 * sizeof(float), vert_buf.verts);
@@ -121,6 +123,23 @@ int main() {
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
+}
+
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    (void)scancode; (void)mods;
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, 1);
+    } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        g_first_line++;
+        if (g_first_line >= g_line_count) {
+            g_first_line = g_line_count - 1;
+        }
+    } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        g_first_line--;
+        if (g_first_line < 0) {
+            g_first_line = 0;
+        }
+    }
 }
 
 Text_Buffer read_file(const char *path) {
