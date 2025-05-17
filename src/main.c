@@ -36,6 +36,7 @@ typedef struct {
 } Vert_Buffer;
 
 static int g_first_line = 0;
+static int g_edit_line = 0;
 static Text_Buffer g_text_buffer = {0};
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
@@ -144,19 +145,19 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        g_first_line++;
-        if (g_first_line >= g_text_buffer.line_count) {
-            g_first_line = g_text_buffer.line_count - 1;
+        g_edit_line++;
+        if (g_edit_line >= g_text_buffer.line_count) {
+            g_edit_line = g_text_buffer.line_count - 1;
         }
     } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        g_first_line--;
-        if (g_first_line < 0) {
-            g_first_line = 0;
+        g_edit_line--;
+        if (g_edit_line < 0) {
+            g_edit_line = 0;
         }
     } else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        new_line(&g_text_buffer, g_first_line);
+        new_line(&g_text_buffer, g_edit_line);
     } else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        remove_line(&g_text_buffer, g_first_line);
+        remove_line(&g_text_buffer, g_edit_line);
     }
 }
 
@@ -236,7 +237,7 @@ void new_line(Text_Buffer *text_buffer, int cursor_line) {
     strcpy(text_buffer->lines[cursor_line + 1], "\n");
 
     text_buffer->line_count++;
-    text_buffer->capacity++;
+    text_buffer->capacity = text_buffer->line_count;
 
     printf("added line #%d; line_count = %d; capacity = %d\n", cursor_line, text_buffer->line_count, text_buffer->capacity);
 }
@@ -248,6 +249,7 @@ void remove_line(Text_Buffer *text_buffer, int cursor_line) {
 
     if (text_buffer->line_count > 0) {
         free(text_buffer->lines[--text_buffer->line_count]);
+        text_buffer->capacity = text_buffer->line_count;
     }
 
     printf("deleted line #%d; line_count = %d; capacity = %d\n", cursor_line, text_buffer->line_count, text_buffer->capacity);
