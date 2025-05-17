@@ -24,9 +24,6 @@ const char *fs_src =
 "    FragColor = vec4(1.0, 0.5, 0.2, 1.0);\n"
 "}";
 
-static int g_first_line = 0;
-static int g_line_count = 0;
-
 typedef struct {
     char **lines;
     int line_count;
@@ -38,9 +35,17 @@ typedef struct {
     int vert_count;
 } Vert_Buffer;
 
+static int g_first_line = 0;
+static Text_Buffer g_text_buffer = {0};
+
+void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
+
 Text_Buffer read_file(const char *path);
 void render_line(int x, int y, char *line, Vert_Buffer *out_vert_buf);
+void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c);
+void new_line(Text_Buffer *text_buffer, int cursor_line);
+void remove_line(Text_Buffer *text_buffer, int cursor_line);
 
 int main() {
     if (!glfwInit()) return -1;
@@ -56,6 +61,7 @@ int main() {
     glfwMakeContextCurrent(window);
 
     glfwSetKeyCallback(window, key_callback);
+    glfwSetCharCallback(window, char_callback);
 
     printf("OpenGL version: %s\n", glGetString(GL_VERSION));
 
@@ -95,8 +101,7 @@ int main() {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
-    Text_Buffer text_buffer = read_file("src/main.c");
-    g_line_count = text_buffer.line_count;
+    g_text_buffer = read_file("res/mock.txt");
 
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);
@@ -107,9 +112,9 @@ int main() {
         int y_offset = 10;
         int line_height = 20;
 
-        for (int line_i = g_first_line; line_i < text_buffer.line_count; line_i++) {
+        for (int line_i = g_first_line; line_i < g_text_buffer.line_count; line_i++) {
             Vert_Buffer vert_buf = {0};
-            render_line(10, y_offset, text_buffer.lines[line_i], &vert_buf);
+            render_line(10, y_offset, g_text_buffer.lines[line_i], &vert_buf);
             glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * 2 * sizeof(float), vert_buf.verts);
             glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 
@@ -125,20 +130,33 @@ int main() {
     return 0;
 }
 
+void char_callback(GLFWwindow *window, unsigned int codepoint) {
+    (void)window;
+
+    if (codepoint < 128) {
+        append_char_to_line(&g_text_buffer, g_first_line, (char)codepoint);
+    }
+}
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     (void)scancode; (void)mods;
+
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         g_first_line++;
-        if (g_first_line >= g_line_count) {
-            g_first_line = g_line_count - 1;
+        if (g_first_line >= g_text_buffer.line_count) {
+            g_first_line = g_text_buffer.line_count - 1;
         }
     } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         g_first_line--;
         if (g_first_line < 0) {
             g_first_line = 0;
         }
+    } else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        new_line(&g_text_buffer, g_first_line);
+    } else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        remove_line(&g_text_buffer, g_first_line);
     }
 }
 
@@ -191,4 +209,46 @@ void render_line(int x, int y, char *line, Vert_Buffer *out_vert_buf) {
             dst[10] = q[12]; dst[11] = q[13];
         }
     }
+}
+
+void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c) {
+    // printf("Append '%c' to line #%d '%s'\n", c, cursor_line, text_buffer->lines[g_first_line]);
+
+    char *old_line = text_buffer->lines[cursor_line];
+    size_t old_len = strlen(old_line);
+    char *new_line = malloc(old_len + 2);
+    memcpy(new_line, old_line, old_len);
+    new_line[old_len - 1] = c;
+    new_line[old_len] = '\n';
+    new_line[old_len + 1] = '\0';
+    free(old_line);
+    text_buffer->lines[cursor_line] = new_line;
+}
+
+void new_line(Text_Buffer *text_buffer, int cursor_line) {
+    text_buffer->lines = realloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(char *));
+
+    for (int i = text_buffer->line_count; i > cursor_line ; i--) {
+        text_buffer->lines[i] = text_buffer->lines[i - 1];
+    }
+
+    text_buffer->lines[cursor_line + 1] = malloc(2);
+    strcpy(text_buffer->lines[cursor_line + 1], "\n");
+
+    text_buffer->line_count++;
+    text_buffer->capacity++;
+
+    printf("added line #%d; line_count = %d; capacity = %d\n", cursor_line, text_buffer->line_count, text_buffer->capacity);
+}
+
+void remove_line(Text_Buffer *text_buffer, int cursor_line) {
+    for (int i = cursor_line; i < text_buffer->line_count - 1; i++) {
+        text_buffer->lines[i] = text_buffer->lines[i + 1];
+    }
+
+    if (text_buffer->line_count > 0) {
+        free(text_buffer->lines[--text_buffer->line_count]);
+    }
+
+    printf("deleted line #%d; line_count = %d; capacity = %d\n", cursor_line, text_buffer->line_count, text_buffer->capacity);
 }
