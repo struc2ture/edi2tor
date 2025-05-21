@@ -1,0 +1,2 @@
+file bin/editor
+command alias andbuffer expression -Z 10 -- g_text_buffer.lines

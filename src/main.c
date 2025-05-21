@@ -32,7 +32,6 @@ const char *fs_src =
 typedef struct {
     char **lines;
     int line_count;
-    int capacity;
 } Text_Buffer;
 
 typedef struct {
@@ -53,7 +52,7 @@ typedef struct {
 static bool g_debug_invis = false;
 
 static Text_Buffer g_text_buffer = {0};
-static Cursor g_cursor = {0};
+static Cursor g_cursor = { .line_i = 1, .char_i = 0};
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -63,8 +62,6 @@ void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer
 void draw_string(int x, int y, char *string, unsigned char color[4]);
 void draw_content_string(int x, int y, char *string, unsigned char color[4]);
 
-void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c);
-
 void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor);
 void remove_char(Text_Buffer *text_buffer, Cursor *cursor);
 
@@ -73,7 +70,6 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
 
 void insert_line(Text_Buffer *text_buffer, char *line, int insert_at);
 void remove_line(Text_Buffer *text_buffer, int remove_at);
-void recanonicalize_text_buffer(Text_Buffer *text_buffer);
 
 int main()
 {
@@ -133,7 +129,7 @@ int main()
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
     glEnableVertexAttribArray(1);
 
-    g_text_buffer = read_file("res/mock.txt");
+    g_text_buffer = read_file("res/mock3.txt");
 
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);
@@ -169,13 +165,12 @@ int main()
 
         char line_i_str_buf[256];
         snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-            "STATUS: cursor: %d, %d; line len: %zu; invis: %d; lines: %d; lines cap: %d",
+            "STATUS: cursor: %d, %d; line len: %zu; invis: %d; lines: %d",
             g_cursor.line_i,
             g_cursor.char_i,
             strlen(g_text_buffer.lines[g_cursor.line_i]),
             g_debug_invis,
-            g_text_buffer.line_count,
-            g_text_buffer.capacity);
+            g_text_buffer.line_count);
         unsigned char color[] = { 200, 200, 200, 200 };
         draw_string(10, 600 - line_height, line_i_str_buf, color);
 
@@ -217,6 +212,8 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         remove_char(&g_text_buffer, &g_cursor);
     } else if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
         g_debug_invis = !g_debug_invis;
+    } else if (key == GLFW_KEY_F12 && action == GLFW_PRESS) {
+        __builtin_debugtrap();
     }
 }
 
@@ -227,21 +224,15 @@ Text_Buffer read_file(const char *path)
         perror("fopen");
         exit(1);
     }
-
     Text_Buffer result = {0};
-
     int count = 0;
     char buf[1024];
     while (fgets(buf, sizeof(buf), f)) {
         result.lines = realloc(result.lines, (count + 1) * sizeof(char *));
         result.lines[count++] = strdup(buf);
     }
-
     result.line_count = count;
-    result.capacity = result.line_count;
-
     fclose(f);
-
     return result;
 }
 
@@ -303,37 +294,24 @@ void draw_content_string(int x, int y, char *string, unsigned char color[4])
     }
 }
 
-void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c)
-{
-    // printf("Append '%c' to line #%d '%s'\n", c, cursor_line, text_buffer->lines[g_first_line]);
-
-    char *old_line = text_buffer->lines[cursor_line];
-    size_t old_len = strlen(old_line);
-    char *new_line = malloc(old_len + 2);
-    memcpy(new_line, old_line, old_len);
-    new_line[old_len - 1] = c;
-    new_line[old_len] = '\n';
-    new_line[old_len + 1] = '\0';
-    free(old_line);
-    text_buffer->lines[cursor_line] = new_line;
-}
-
 void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor)
 {
-    size_t len = strlen(text_buffer->lines[cursor->line_i]);
-    text_buffer->lines[cursor->line_i] = realloc(text_buffer->lines[cursor->line_i], len + 2);
-    char *line = text_buffer->lines[cursor->line_i];
-
-    for (int i = len; i >= cursor->char_i; i--) {
-        line[i + 1] = line[i];
-    }
-
-    line[cursor->char_i] = c;
-    move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i + 1);
-
     if (c == '\n') {
-        recanonicalize_text_buffer(&g_text_buffer);
+        char *next_line = strdup(text_buffer->lines[cursor->line_i] + cursor->char_i);
+        insert_line((&g_text_buffer), next_line, cursor->line_i + 1);
+        text_buffer->lines[cursor->line_i] = realloc(text_buffer->lines[cursor->line_i], cursor->char_i + 2);
+        text_buffer->lines[cursor->line_i][cursor->char_i] = '\n';
+        text_buffer->lines[cursor->line_i][cursor->char_i + 1] = '\0';
         move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i + 1, 0);
+    } else {
+        size_t len = strlen(text_buffer->lines[cursor->line_i]);
+        text_buffer->lines[cursor->line_i] = realloc(text_buffer->lines[cursor->line_i], len + 2);
+        char *line = text_buffer->lines[cursor->line_i];
+        for (int i = len; i >= cursor->char_i; i--) {
+            line[i + 1] = line[i];
+        }
+        line[cursor->char_i] = c;
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i + 1);
     }
 }
 
@@ -343,30 +321,24 @@ void remove_char(Text_Buffer *text_buffer, Cursor *cursor)
         if (cursor->line_i <= 0) {
             return;
         }
-
-        char *line = text_buffer->lines[cursor->line_i];
-        int len = strlen(line);
-
-        char *prev_line = text_buffer->lines[cursor->line_i - 1];
-        int prev_len = strlen(prev_line);
-        prev_line = realloc(prev_line, prev_len + len); // +1 for null terminator, but -1 because deleting \n char
-        for (int i = 0; i <= len; i++) {
-            prev_line[prev_len - 1 + i] = line[i];
-        }
-        text_buffer->lines[cursor->line_i - 1] = prev_line;
+        char *line1 = text_buffer->lines[cursor->line_i];
+        int len1 = strlen(line1);
+        char *line0 = text_buffer->lines[cursor->line_i - 1];
+        int len0 = strlen(line0);
+        line0 = realloc(line0, len0 + len1);
+        strcpy(line0 + len0 - 1, line1);
+        text_buffer->lines[cursor->line_i - 1] = line0;
         remove_line(text_buffer, cursor->line_i);
-        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i - 1, 1000);
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i - 1, len0 - 1);
+    } else {
+        char *line = text_buffer->lines[cursor->line_i];
+        size_t len = strlen(line);
+        for (int i = cursor->char_i; i <= (int)len; i++) {
+            line[i - 1] = line[i];
+        }
+        text_buffer->lines[cursor->line_i] = realloc(line, len);
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i - 1);
     }
-
-    char *line = text_buffer->lines[cursor->line_i];
-    size_t len = strlen(line);
-
-    for (int i = cursor->char_i; i <= (int)len; i++) {
-        line[i - 1] = line[i];
-    }
-
-    text_buffer->lines[cursor->line_i] = realloc(line, len);
-    move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i - 1);
 }
 
 void convert_to_debug_invis(char *string)
@@ -390,7 +362,6 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
     if (cursor->line_i >= text_buffer->line_count) {
         cursor->line_i = text_buffer->line_count - 1;
     }
-
     cursor->char_i = char_i;
     if (cursor->char_i < 0) {
         cursor->char_i = 0;
@@ -404,42 +375,19 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
 void insert_line(Text_Buffer *text_buffer, char *line, int insert_at)
 {
     text_buffer->lines = realloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(char *));
-
     for (int i = text_buffer->line_count - 1; i >= insert_at ; i--) {
         text_buffer->lines[i + 1] = text_buffer->lines[i];
     }
-
-    text_buffer->lines[insert_at] = line;
-
     text_buffer->line_count++;
-    text_buffer->capacity = text_buffer->line_count;
+    text_buffer->lines[insert_at] = line;
 }
 
 void remove_line(Text_Buffer *text_buffer, int remove_at)
 {
+    free(text_buffer->lines[remove_at]);
     for (int i = remove_at + 1; i < text_buffer->line_count - 1; i++) {
         text_buffer->lines[i - 1] = text_buffer->lines[i];
     }
-
-    free(text_buffer->lines[text_buffer->line_count]);
-
     text_buffer->line_count--;
-    text_buffer->capacity = text_buffer->line_count;
     text_buffer->lines = realloc(text_buffer->lines, text_buffer->line_count * sizeof(char *));
-}
-
-void recanonicalize_text_buffer(Text_Buffer *text_buffer)
-{
-    for (int line_i = 0; line_i < text_buffer->line_count; line_i++) {
-        char *line = text_buffer->lines[line_i];
-        int len = strlen(line);
-        for (int char_i = 0; char_i < len - 1; char_i++) {
-            if (line[char_i] == '\n') {
-                char *new_line = strdup(line + char_i + 1);
-                line[char_i + 1] = '\0';
-                insert_line(text_buffer, new_line, line_i + 1);
-                break;
-            }
-        }
-    }
 }

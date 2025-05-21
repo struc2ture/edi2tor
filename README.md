@@ -1,1 +1,3 @@
 # editor
+
+lldb -s .lldb
