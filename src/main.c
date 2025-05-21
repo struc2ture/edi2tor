@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -35,6 +36,11 @@ typedef struct {
 } Text_Buffer;
 
 typedef struct {
+    int line_i;
+    int char_i;
+} Cursor;
+
+typedef struct {
     float x, y;
     unsigned char r, g, b, a;
 } Vert;
@@ -44,9 +50,10 @@ typedef struct {
     int vert_count;
 } Vert_Buffer;
 
-static int g_first_line = 0;
-static int g_edit_line = 0;
+static bool g_debug_invis = false;
+
 static Text_Buffer g_text_buffer = {0};
+static Cursor g_cursor = {0};
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -54,11 +61,22 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 Text_Buffer read_file(const char *path);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
 void draw_string(int x, int y, char *string, unsigned char color[4]);
-void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c);
-void new_line(Text_Buffer *text_buffer, int cursor_line);
-void remove_line(Text_Buffer *text_buffer, int cursor_line);
+void draw_content_string(int x, int y, char *string, unsigned char color[4]);
 
-int main() {
+void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c);
+
+void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor);
+void remove_char(Text_Buffer *text_buffer, Cursor *cursor);
+
+void convert_to_debug_invis(char *string);
+void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_i);
+
+void insert_line(Text_Buffer *text_buffer, char *line, int insert_at);
+void remove_line(Text_Buffer *text_buffer, int remove_at);
+void recanonicalize_text_buffer(Text_Buffer *text_buffer);
+
+int main()
+{
     if (!glfwInit()) return -1;
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -127,9 +145,9 @@ int main() {
         int y_offset = 10;
         int line_height = 20;
 
-        for (int line_i = g_first_line; line_i < g_text_buffer.line_count; line_i++) {
+        for (int line_i = 0; line_i < g_text_buffer.line_count; line_i++) {
             unsigned char color[] = { 240, 240, 240, 240 };
-            if (line_i == g_edit_line) {
+            if (line_i == g_cursor.line_i) {
                 color[0] = 50;
                 color[1] = 50;
                 color[2] = 255;
@@ -143,11 +161,23 @@ int main() {
 
             x_offset += stb_easy_font_width(line_i_str_buf);
 
-            draw_string(x_offset, y_offset, g_text_buffer.lines[line_i], color);
+            draw_content_string(x_offset, y_offset, g_text_buffer.lines[line_i], color);
 
             x_offset = 10;
             y_offset += line_height;
         }
+
+        char line_i_str_buf[256];
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+            "STATUS: cursor: %d, %d; line len: %zu; invis: %d; lines: %d; lines cap: %d",
+            g_cursor.line_i,
+            g_cursor.char_i,
+            strlen(g_text_buffer.lines[g_cursor.line_i]),
+            g_debug_invis,
+            g_text_buffer.line_count,
+            g_text_buffer.capacity);
+        unsigned char color[] = { 200, 200, 200, 200 };
+        draw_string(10, 600 - line_height, line_i_str_buf, color);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -158,37 +188,40 @@ int main() {
     return 0;
 }
 
-void char_callback(GLFWwindow *window, unsigned int codepoint) {
+void char_callback(GLFWwindow *window, unsigned int codepoint)
+{
     (void)window;
 
     if (codepoint < 128) {
-        append_char_to_line(&g_text_buffer, g_first_line, (char)codepoint);
+        insert_char(&g_text_buffer, (char)codepoint, &g_cursor);
     }
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
     (void)scancode; (void)mods;
 
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        g_edit_line++;
-        if (g_edit_line >= g_text_buffer.line_count) {
-            g_edit_line = g_text_buffer.line_count - 1;
-        }
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i + 1, g_cursor.char_i);
     } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        g_edit_line--;
-        if (g_edit_line < 0) {
-            g_edit_line = 0;
-        }
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i - 1, g_cursor.char_i);
+    } else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i - 1);
+    } else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i + 1);
     } else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        new_line(&g_text_buffer, g_edit_line);
+        insert_char(&g_text_buffer, '\n', &g_cursor);
     } else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        remove_line(&g_text_buffer, g_edit_line);
+        remove_char(&g_text_buffer, &g_cursor);
+    } else if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
+        g_debug_invis = !g_debug_invis;
     }
 }
 
-Text_Buffer read_file(const char *path) {
+Text_Buffer read_file(const char *path)
+{
     FILE *f = fopen(path, "r");
     if (!f) {
         perror("fopen");
@@ -212,7 +245,8 @@ Text_Buffer read_file(const char *path) {
     return result;
 }
 
-void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf) {
+void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf)
+{
     (void)color;
     char quad_buf[99999];
     int quad_count = stb_easy_font_print(x, y, line, NULL, quad_buf, sizeof(quad_buf));
@@ -247,15 +281,30 @@ void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer
     }
 }
 
-void draw_string(int x, int y, char *string, unsigned char color[4]) {
+void draw_string(int x, int y, char *string, unsigned char color[4])
+{
     Vert_Buffer vert_buf = {0};
     render_string(x, y, string, color, &vert_buf);
-
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
-void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c) {
+void draw_content_string(int x, int y, char *string, unsigned char color[4])
+{
+    if (g_debug_invis) {
+        string = strdup(string);
+        convert_to_debug_invis(string);
+    }
+
+    draw_string(x, y, string, color);
+
+    if (g_debug_invis) {
+        free(string);
+    }
+}
+
+void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c)
+{
     // printf("Append '%c' to line #%d '%s'\n", c, cursor_line, text_buffer->lines[g_first_line]);
 
     char *old_line = text_buffer->lines[cursor_line];
@@ -269,31 +318,128 @@ void append_char_to_line(Text_Buffer *text_buffer, int cursor_line, char c) {
     text_buffer->lines[cursor_line] = new_line;
 }
 
-void new_line(Text_Buffer *text_buffer, int cursor_line) {
-    text_buffer->lines = realloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(char *));
+void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor)
+{
+    size_t len = strlen(text_buffer->lines[cursor->line_i]);
+    text_buffer->lines[cursor->line_i] = realloc(text_buffer->lines[cursor->line_i], len + 2);
+    char *line = text_buffer->lines[cursor->line_i];
 
-    for (int i = text_buffer->line_count; i > cursor_line ; i--) {
-        text_buffer->lines[i] = text_buffer->lines[i - 1];
+    for (int i = len; i >= cursor->char_i; i--) {
+        line[i + 1] = line[i];
     }
 
-    text_buffer->lines[cursor_line + 1] = malloc(2);
-    strcpy(text_buffer->lines[cursor_line + 1], "\n");
+    line[cursor->char_i] = c;
+    move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i + 1);
+
+    if (c == '\n') {
+        recanonicalize_text_buffer(&g_text_buffer);
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i + 1, 0);
+    }
+}
+
+void remove_char(Text_Buffer *text_buffer, Cursor *cursor)
+{
+    if (cursor->char_i <= 0) {
+        if (cursor->line_i <= 0) {
+            return;
+        }
+
+        char *line = text_buffer->lines[cursor->line_i];
+        int len = strlen(line);
+
+        char *prev_line = text_buffer->lines[cursor->line_i - 1];
+        int prev_len = strlen(prev_line);
+        prev_line = realloc(prev_line, prev_len + len); // +1 for null terminator, but -1 because deleting \n char
+        for (int i = 0; i <= len; i++) {
+            prev_line[prev_len - 1 + i] = line[i];
+        }
+        text_buffer->lines[cursor->line_i - 1] = prev_line;
+        remove_line(text_buffer, cursor->line_i);
+        move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i - 1, 1000);
+    }
+
+    char *line = text_buffer->lines[cursor->line_i];
+    size_t len = strlen(line);
+
+    for (int i = cursor->char_i; i <= (int)len; i++) {
+        line[i - 1] = line[i];
+    }
+
+    text_buffer->lines[cursor->line_i] = realloc(line, len);
+    move_cursor(&g_text_buffer, &g_cursor, g_cursor.line_i, g_cursor.char_i - 1);
+}
+
+void convert_to_debug_invis(char *string)
+{
+    while (*string) {
+        if (*string == ' ') {
+            *string = '.';
+        } else if (*string == '\n') {
+            *string = '-';
+        }
+        string++;
+    }
+}
+
+void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_i)
+{
+    cursor->line_i = line_i;
+    if (cursor->line_i < 0) {
+        cursor->line_i = 0;
+    }
+    if (cursor->line_i >= text_buffer->line_count) {
+        cursor->line_i = text_buffer->line_count - 1;
+    }
+
+    cursor->char_i = char_i;
+    if (cursor->char_i < 0) {
+        cursor->char_i = 0;
+    }
+    int line_len = strlen(text_buffer->lines[cursor->line_i]);
+    if (cursor->char_i >= line_len) {
+        cursor->char_i = line_len - 1;
+    }
+}
+
+void insert_line(Text_Buffer *text_buffer, char *line, int insert_at)
+{
+    text_buffer->lines = realloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(char *));
+
+    for (int i = text_buffer->line_count - 1; i >= insert_at ; i--) {
+        text_buffer->lines[i + 1] = text_buffer->lines[i];
+    }
+
+    text_buffer->lines[insert_at] = line;
 
     text_buffer->line_count++;
     text_buffer->capacity = text_buffer->line_count;
-
-    printf("added line #%d; line_count = %d; capacity = %d\n", cursor_line, text_buffer->line_count, text_buffer->capacity);
 }
 
-void remove_line(Text_Buffer *text_buffer, int cursor_line) {
-    for (int i = cursor_line; i < text_buffer->line_count - 1; i++) {
-        text_buffer->lines[i] = text_buffer->lines[i + 1];
+void remove_line(Text_Buffer *text_buffer, int remove_at)
+{
+    for (int i = remove_at + 1; i < text_buffer->line_count - 1; i++) {
+        text_buffer->lines[i - 1] = text_buffer->lines[i];
     }
 
-    if (text_buffer->line_count > 0) {
-        free(text_buffer->lines[--text_buffer->line_count]);
-        text_buffer->capacity = text_buffer->line_count;
-    }
+    free(text_buffer->lines[text_buffer->line_count]);
 
-    printf("deleted line #%d; line_count = %d; capacity = %d\n", cursor_line, text_buffer->line_count, text_buffer->capacity);
+    text_buffer->line_count--;
+    text_buffer->capacity = text_buffer->line_count;
+    text_buffer->lines = realloc(text_buffer->lines, text_buffer->line_count * sizeof(char *));
+}
+
+void recanonicalize_text_buffer(Text_Buffer *text_buffer)
+{
+    for (int line_i = 0; line_i < text_buffer->line_count; line_i++) {
+        char *line = text_buffer->lines[line_i];
+        int len = strlen(line);
+        for (int char_i = 0; char_i < len - 1; char_i++) {
+            if (line[char_i] == '\n') {
+                char *new_line = strdup(line + char_i + 1);
+                line[char_i + 1] = '\0';
+                insert_line(text_buffer, new_line, line_i + 1);
+                break;
+            }
+        }
+    }
 }
