@@ -1,12 +1,15 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 #include <stb_easy_font.h>
 
 #define VERT_MAX 4096
+#define WINDOW_WIDTH 800
+#define WINDOW_HEIGHT 600
 
 const char *vs_src =
 "#version 410 core\n"
@@ -58,8 +61,12 @@ static Cursor g_cursor = { .line_i = 0, .char_i = 0};
 static int g_cursor_blink_on_frames = 30;
 static int g_cursor_frame_count = 0;
 
+static double g_canvas_x_offset = 0.0;
+static double g_canvas_y_offset = 0.0;
+
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
+void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
 
 Text_Buffer read_file(const char *path);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
@@ -85,13 +92,14 @@ int main()
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-    GLFWwindow *window = glfwCreateWindow(800, 600, "EDITOR", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH * 2, WINDOW_HEIGHT * 2, "EDITOR", NULL, NULL);
     if (!window) return -1;
 
     glfwMakeContextCurrent(window);
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetCharCallback(window, char_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
     printf("OpenGL version: %s\n", glGetString(GL_VERSION));
 
@@ -137,7 +145,7 @@ int main()
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
     glEnableVertexAttribArray(1);
 
-    g_text_buffer = read_file("res/mock.txt");
+    g_text_buffer = read_file("src/main.c");
 
     while (!glfwWindowShouldClose(window)) {
         if (g_should_break) {
@@ -150,39 +158,47 @@ int main()
         glUseProgram(prog);
         glBindVertexArray(vao);
 
-        int x_padding = 10;
-        int y_padding = 10;
+        int x_canvas_offset = 10 + (int)(g_canvas_x_offset * 10);
+        int y_canvas_offset = 10 + (int)(g_canvas_y_offset * 10);
         int line_height = 20;
         int x_line_num_offset = stb_easy_font_width("000: ");
 
-        int x_offset = x_padding;
-        int y_offset = y_padding;
+        int viewport_y_min = -y_canvas_offset;
+        int viewport_y_max = viewport_y_min + WINDOW_HEIGHT;
 
+        int lines_rendered = 0;
+
+        int x_offset = x_canvas_offset;
+        int y_offset = y_canvas_offset;
         for (int line_i = 0; line_i < g_text_buffer.line_count; line_i++) {
-            unsigned char color[] = { 240, 240, 240, 240 };
-            if (line_i == g_cursor.line_i) {
-                color[0] = 50;
-                color[1] = 50;
-                color[2] = 255;
-                color[0] = 255;
+            if ((line_i + 1) * line_height > viewport_y_min && line_i * line_height < viewport_y_max) {
+                unsigned char color[] = { 240, 240, 240, 240 };
+                if (line_i == g_cursor.line_i) {
+                    color[0] = 50;
+                    color[1] = 50;
+                    color[2] = 255;
+                    color[0] = 255;
+                }
+
+                char line_i_str_buf[256];
+                snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i);
+                draw_string(x_offset, y_offset, line_i_str_buf, color);
+                x_offset += x_line_num_offset;
+
+                draw_content_string(x_offset, y_offset, g_text_buffer.lines[line_i], color);
+
+                x_offset = x_canvas_offset;
+                lines_rendered++;
             }
 
-            char line_i_str_buf[256];
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i);
-            draw_string(x_offset, y_offset, line_i_str_buf, color);
-            x_offset += x_line_num_offset;
-
-            draw_content_string(x_offset, y_offset, g_text_buffer.lines[line_i], color);
-
-            x_offset = x_padding;
             y_offset += line_height;
         }
 
         if (!((g_cursor_frame_count % (g_cursor_blink_on_frames * 2)) / g_cursor_blink_on_frames))
         {
             int cursor_x_offset = stb_easy_font_width_up_to(g_text_buffer.lines[g_cursor.line_i], g_cursor.char_i);
-            int cursor_x = x_padding + x_line_num_offset + cursor_x_offset;
-            int cursor_y = y_padding + line_height * g_cursor.line_i;
+            int cursor_x = x_canvas_offset + x_line_num_offset + cursor_x_offset;
+            int cursor_y = y_canvas_offset + line_height * g_cursor.line_i;
             int cursor_width = stb_easy_font_char_width(g_text_buffer.lines[g_cursor.line_i][g_cursor.char_i]);
             if (cursor_width == 0) cursor_width = 6;
             int cursor_height = 12;
@@ -190,16 +206,22 @@ int main()
             draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
         }
 
-        char line_i_str_buf[256];
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-            "STATUS: cursor: %d, %d; line len: %zu; invis: %d; lines: %d",
-            g_cursor.line_i,
-            g_cursor.char_i,
-            strlen(g_text_buffer.lines[g_cursor.line_i]),
-            g_debug_invis,
-            g_text_buffer.line_count);
-        unsigned char color[] = { 200, 200, 200, 255 };
-        draw_string(10, 600 - line_height, line_i_str_buf, color);
+        {
+            char line_i_str_buf[256];
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+                "STATUS: cursor: %d, %d; line len: %zu; invis: %d; lines: %d; rendered: %d",
+                g_cursor.line_i,
+                g_cursor.char_i,
+                strlen(g_text_buffer.lines[g_cursor.line_i]),
+                g_debug_invis,
+                g_text_buffer.line_count,
+                lines_rendered);
+
+            unsigned char bg_color[] = { 30, 30, 30, 255 };
+            draw_quad(0, WINDOW_HEIGHT - line_height, WINDOW_WIDTH, line_height, bg_color);
+            unsigned char color[] = { 200, 200, 200, 255 };
+            draw_string(10, WINDOW_HEIGHT - line_height, line_i_str_buf, color);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -259,6 +281,13 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         g_should_break = true;
     }
     // printf("key pressed: %d; scancode: %d; action: %d; mods: %d\n", key, scancode, action, mods);
+}
+
+void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
+{
+    (void)window; (void)x_offset; (void)y_offset;
+    g_canvas_x_offset += x_offset;
+    g_canvas_y_offset += y_offset;
 }
 
 Text_Buffer read_file(const char *path)
@@ -426,8 +455,8 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
     }
     if (prev_cursor_char != char_i) {
         cursor->char_i = char_i;
-        if (cursor->char_i < 0 && char_switch_line) {
-            if (cursor->line_i > 0) {
+        if (cursor->char_i < 0) {
+            if (cursor->line_i > 0 && char_switch_line) {
                 cursor->line_i--;
                 int line_len = strlen(text_buffer->lines[cursor->line_i]);
                 cursor->char_i = line_len - 1;
@@ -436,8 +465,8 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
             }
         }
         int line_len = strlen(text_buffer->lines[cursor->line_i]);
-        if (cursor->char_i >= line_len && char_switch_line) {
-            if (cursor->line_i < text_buffer->line_count - 1) {
+        if (cursor->char_i >= line_len) {
+            if (cursor->line_i < text_buffer->line_count - 1 && char_switch_line) {
                 cursor->line_i++;
                 cursor->char_i = 0;
             } else {
