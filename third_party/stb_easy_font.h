@@ -245,6 +245,31 @@ static int stb_easy_font_width(char *text)
     return (int) ceil(max_len);
 }
 
+static int stb_easy_font_width_up_to(char *text, int up_to)
+{
+    float len = 0;
+    float max_len = 0;
+    int i = 0;
+    while (*text && i < up_to) {
+        if (*text == '\n') {
+            if (len > max_len) max_len = len;
+            len = 0;
+        } else {
+            len += stb_easy_font_charinfo[*text-32].advance & 15;
+            len += stb_easy_font_spacing_val;
+        }
+        ++text;
+        ++i;
+    }
+    if (len > max_len) max_len = len;
+    return (int) ceil(max_len);
+}
+
+static int stb_easy_font_char_width(char c)
+{
+    return stb_easy_font_charinfo[c - 32].advance & 15;
+}
+
 static int stb_easy_font_height(char *text)
 {
     float y = 0;

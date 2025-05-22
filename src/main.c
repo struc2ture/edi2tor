@@ -54,11 +54,15 @@ static bool g_debug_invis = false;
 static Text_Buffer g_text_buffer = {0};
 static Cursor g_cursor = { .line_i = 1, .char_i = 0};
 
+static int g_cursor_blink_on_frames = 30;
+static int g_cursor_frame_count = 0;
+
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 Text_Buffer read_file(const char *path);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
+void draw_quad(int x, int y, int width, int height, unsigned char color[4]);
 void draw_string(int x, int y, char *string, unsigned char color[4]);
 void draw_content_string(int x, int y, char *string, unsigned char color[4]);
 
@@ -89,6 +93,9 @@ int main()
     glfwSetCharCallback(window, char_callback);
 
     printf("OpenGL version: %s\n", glGetString(GL_VERSION));
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vs, 1, &vs_src, 0);
@@ -137,9 +144,13 @@ int main()
         glUseProgram(prog);
         glBindVertexArray(vao);
 
-        int x_offset = 10;
-        int y_offset = 10;
+        int x_padding = 10;
+        int y_padding = 10;
         int line_height = 20;
+        int x_line_num_offset = stb_easy_font_width("000: ");
+
+        int x_offset = x_padding;
+        int y_offset = y_padding;
 
         for (int line_i = 0; line_i < g_text_buffer.line_count; line_i++) {
             unsigned char color[] = { 240, 240, 240, 240 };
@@ -155,12 +166,24 @@ int main()
 
             draw_string(x_offset, y_offset, line_i_str_buf, color);
 
-            x_offset += stb_easy_font_width(line_i_str_buf);
+            x_offset += x_line_num_offset;
 
             draw_content_string(x_offset, y_offset, g_text_buffer.lines[line_i], color);
 
-            x_offset = 10;
+            x_offset = x_padding;
             y_offset += line_height;
+        }
+
+        if (!((g_cursor_frame_count % (g_cursor_blink_on_frames * 2)) / g_cursor_blink_on_frames))
+        {
+            int cursor_x_offset = stb_easy_font_width_up_to(g_text_buffer.lines[g_cursor.line_i], g_cursor.char_i);
+            int cursor_x = x_padding + x_line_num_offset + cursor_x_offset;
+            int cursor_y = y_padding + line_height * g_cursor.line_i;
+            int cursor_width = stb_easy_font_char_width(g_text_buffer.lines[g_cursor.line_i][g_cursor.char_i]);
+            if (cursor_width == 0) cursor_width = 6;
+            int cursor_height = 12;
+            unsigned char color[] = { 200, 200, 200, 255 };
+            draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
         }
 
         char line_i_str_buf[256];
@@ -171,11 +194,13 @@ int main()
             strlen(g_text_buffer.lines[g_cursor.line_i]),
             g_debug_invis,
             g_text_buffer.line_count);
-        unsigned char color[] = { 200, 200, 200, 200 };
+        unsigned char color[] = { 200, 200, 200, 255 };
         draw_string(10, 600 - line_height, line_i_str_buf, color);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        g_cursor_frame_count++;
     }
 
     glfwDestroyWindow(window);
@@ -186,7 +211,6 @@ int main()
 void char_callback(GLFWwindow *window, unsigned int codepoint)
 {
     (void)window;
-
     if (codepoint < 128) {
         insert_char(&g_text_buffer, (char)codepoint, &g_cursor);
     }
@@ -195,7 +219,6 @@ void char_callback(GLFWwindow *window, unsigned int codepoint)
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     (void)scancode; (void)mods;
-
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
@@ -242,26 +265,17 @@ void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer
     char quad_buf[99999];
     int quad_count = stb_easy_font_print(x, y, line, NULL, quad_buf, sizeof(quad_buf));
     out_vert_buf->vert_count = quad_count * 6;
-
-    // stb_easy_font outputs quads: 4 vertices per glyph box
     {
         float *src = (float *)quad_buf;
-
         for (int i = 0; i < quad_count; ++i) {
             float *q = &src[i * 4 * 4];
-
             Vert *dst = &out_vert_buf->verts[i * 6];
-
-            // Triangle 1
             dst[0].x = q[0];  dst[0].y = q[1];
             dst[1].x = q[4];  dst[1].y = q[5];
             dst[2].x = q[8];  dst[2].y = q[9];
-
-            // Triangle 2
             dst[3].x = q[0];  dst[3].y = q[1];
             dst[4].x = q[8];  dst[4].y = q[9];
             dst[5].x = q[12]; dst[5].y = q[13];
-
             for (int i = 0; i < 6; i++) {
                 dst[i].r = color[0];
                 dst[i].g = color[1];
@@ -270,6 +284,28 @@ void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer
             }
         }
     }
+}
+
+void draw_quad(int x, int y, int width, int height, unsigned char color[4])
+{
+    Vert_Buffer vert_buf = {0};
+    vert_buf.vert_count = 6;
+    vert_buf.verts[0].x = 0;     vert_buf.verts[0].y = 0;
+    vert_buf.verts[1].x = 0;     vert_buf.verts[1].y = height;
+    vert_buf.verts[2].x = width; vert_buf.verts[2].y = 0;
+    vert_buf.verts[3].x = width; vert_buf.verts[3].y = 0;
+    vert_buf.verts[4].x = 0;     vert_buf.verts[4].y = height;
+    vert_buf.verts[5].x = width; vert_buf.verts[5].y = height;
+    for (int i = 0; i < 6; i++) {
+        vert_buf.verts[i].x += x;
+        vert_buf.verts[i].y += y;
+        vert_buf.verts[i].r = color[0];
+        vert_buf.verts[i].g = color[1];
+        vert_buf.verts[i].b = color[2];
+        vert_buf.verts[i].a = color[3];
+    }
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
 void draw_string(int x, int y, char *string, unsigned char color[4])
@@ -370,6 +406,7 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
     if (cursor->char_i >= line_len) {
         cursor->char_i = line_len - 1;
     }
+    g_cursor_frame_count = 0;
 }
 
 void insert_line(Text_Buffer *text_buffer, char *line, int insert_at)

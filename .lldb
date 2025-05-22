@@ -1,2 +1,5 @@
+command script import ~/.lldb/scripts/helpers.py
+command script add -f helpers.make_and_run rm
+
 file bin/editor
 command alias andbuffer expression -Z 10 -- g_text_buffer.lines
