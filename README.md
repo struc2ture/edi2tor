@@ -1,3 +1,5 @@
-# editor
+# EDITOR
 
-lldb -s .lldb
+GROUNDBREAKING!!! editor
+
+Write the editor in the editor!!!
