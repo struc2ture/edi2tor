@@ -10,8 +10,8 @@
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 #define CURSOR_BLINK_ON_FRAMES 30
-#define FILE_PATH "src/editor.c"
-// #define FILE_PATH "res/mock3.txt"
+// #define FILE_PATH "src/editor.c"
+#define FILE_PATH "res/mock3.txt"
 
 const char *vs_src =
 "#version 410 core\n"
@@ -480,7 +480,7 @@ void insert_line(Text_Buffer *text_buffer, char *line, int insert_at)
 void remove_line(Text_Buffer *text_buffer, int remove_at)
 {
     free(text_buffer->lines[remove_at]);
-    for (int i = remove_at + 1; i < text_buffer->line_count - 1; i++) {
+    for (int i = remove_at + 1; i <= text_buffer->line_count - 1; i++) {
         text_buffer->lines[i - 1] = text_buffer->lines[i];
     }
     text_buffer->line_count--;
