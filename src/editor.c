@@ -10,8 +10,8 @@
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 #define CURSOR_BLINK_ON_FRAMES 30
-// #define FILE_PATH "src/editor.c"
-#define FILE_PATH "res/mock3.txt"
+#define FILE_PATH "src/editor.c"
+// #define FILE_PATH "res/mock3.txt"
 
 const char *vs_src =
 "#version 410 core\n"
@@ -92,6 +92,8 @@ void remove_line(Text_Buffer *text_buffer, int remove_at);
 
 File_Info read_file(const char *path, Text_Buffer *text_buffer);
 void write_file(Text_Buffer text_buffer, File_Info file_info);
+
+void rebuild_dl();
 
 void _init(GLFWwindow *window, void *_state)
 {
@@ -281,6 +283,8 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         state->debug_invis = !state->debug_invis;
     } else if (key == GLFW_KEY_F12 && action == GLFW_PRESS) {
         state->should_break = true;
+    } else if (key ==GLFW_KEY_F9 && action == GLFW_PRESS) {
+        rebuild_dl();
     } else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
         write_file(state->text_buffer, state->file_info);
     }
@@ -518,4 +522,13 @@ void write_file(Text_Buffer text_buffer, File_Info file_info)
     fclose(f);
 
     printf("Saved file to %s\n", file_info.path);
+}
+
+void rebuild_dl()
+{
+    int result = system("make dl");
+    if (result != 0) {
+        fprintf(stderr, "Build failed with code %d\n", result);
+    }
+    printf("Rebuilt dl\n");
 }
