@@ -1,7 +1,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
@@ -145,7 +144,7 @@ int main()
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
     glEnableVertexAttribArray(1);
 
-    g_text_buffer = read_file("src/main.c");
+    g_text_buffer = read_file("src/editor.c");
 
     while (!glfwWindowShouldClose(window)) {
         if (g_should_break) {
