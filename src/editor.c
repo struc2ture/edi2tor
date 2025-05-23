@@ -17,12 +17,10 @@ const char *vs_src =
 "#version 410 core\n"
 "layout (location = 0) in vec2 aPos;\n"
 "layout (location = 1) in vec4 aColor;\n"
+"uniform mat4 u_mvp;\n"
 "out vec4 Color;\n"
 "void main() {\n"
-"    vec2 zeroToOne = aPos / vec2(800, 600);\n"
-"    vec2 zeroToTwo = zeroToOne * 2.0;\n"
-"    vec2 clipSpace = zeroToTwo - 1.0;\n"
-"    gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);\n"
+"    gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);\n"
 "    Color = aColor;\n"
 "}";
 
@@ -95,6 +93,10 @@ void write_file(Text_Buffer text_buffer, File_Info file_info);
 
 void rebuild_dl();
 
+void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
+void make_view(float offset_x, float offset_y, float scale, float *out);
+void mul_mat4(const float *a, const float *b, float *out);
+
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
@@ -143,6 +145,16 @@ void _init(GLFWwindow *window, void *_state)
     state->file_info = read_file(FILE_PATH, &state->text_buffer);
 
     glfwSetWindowUserPointer(window, _state);
+
+    float ortho[16], view[16], mvp[16];
+    make_ortho(0, WINDOW_WIDTH, WINDOW_HEIGHT, 0, -1, 1, ortho);
+    // make_view(scroll_x, scroll_y, zoom, view);
+    make_view(0.0f, 0.0f, 1.0f, view);
+    mul_mat4(view, ortho, mvp);
+
+    glUseProgram(state->prog);
+    GLuint loc = glGetUniformLocation(state->prog, "u_mvp");
+    glUniformMatrix4fv(loc, 1, GL_FALSE, mvp);
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -531,4 +543,41 @@ void rebuild_dl()
         fprintf(stderr, "Build failed with code %d\n", result);
     }
     printf("Rebuilt dl\n");
+}
+
+void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out)
+{
+    float rl = right - left;
+    float tb = top - bottom;
+    float fn = far - near;
+
+    out[0]  = 2.0f / rl;  out[1]  = 0;         out[2]  = 0;          out[3]  = 0;
+    out[4]  = 0;          out[5]  = 2.0f / tb; out[6]  = 0;          out[7]  = 0;
+    out[8]  = 0;          out[9]  = 0;         out[10] = -2.0f / fn; out[11] = 0;
+    out[12] = -(right + left) / rl;
+    out[13] = -(top + bottom) / tb;
+    out[14] = -(far + near) / fn;
+    out[15] = 1.0f;
+}
+
+void make_view(float offset_x, float offset_y, float scale, float *out)
+{
+    out[0]  = scale; out[1]  = 0;     out[2]  = 0; out[3]  = 0;
+    out[4]  = 0;     out[5]  = scale; out[6]  = 0; out[7]  = 0;
+    out[8]  = 0;     out[9]  = 0;     out[10] = 1; out[11] = 0;
+    out[12] = -offset_x * scale;
+    out[13] = -offset_y * scale;
+    out[14] = 0;
+    out[15] = 1;
+}
+
+void mul_mat4(const float *a, const float *b, float *out) // row-major
+{
+    for (int row = 0; row < 4; row++)
+    for (int col = 0; col < 4; col++) {
+        out[col + row * 4] = 0.0f;
+        for (int k = 0; k < 4; k++) {
+            out[col + row * 4] += a[k + row * 4] * b[col + k * 4];
+        }
+    }
 }
