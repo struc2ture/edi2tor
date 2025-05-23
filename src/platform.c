@@ -59,41 +59,31 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
     GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "EDITOR", NULL, NULL);
     if (!window) return -1;
-
     glfwMakeContextCurrent(window);
-
     printf("[PLATFORM] OpenGL version: %s\n", glGetString(GL_VERSION));
 
     void *dl_handle = load_dl_handle("./bin/editor.dylib");
-
     _init_t _init = load__init(dl_handle);
     _hotreload_init_t _hotreload_init = load__hotreload_init(dl_handle);
     _render_t _render = load__render(dl_handle);
 
     void *_state = calloc(1, 4096);
-
     _init(window, _state);
     _hotreload_init(window);
 
     bool is_reloading = false;
-
     while (!glfwWindowShouldClose(window)) {
-        if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS && !is_reloading) {
+        if (glfwGetKey(window, GLFW_KEY_F10) == GLFW_PRESS && !is_reloading) {
             dlclose(dl_handle);
-
             dl_handle = load_dl_handle("./bin/editor.dylib");
             _init = load__init(dl_handle);
             _render = load__render(dl_handle);
             _hotreload_init = load__hotreload_init(dl_handle);
-
             _hotreload_init(window);
-
             is_reloading = true;
-
-            printf("Reloaded dll\n");
+            printf("[PLATFORM] Reloaded dll\n");
         } else if (glfwGetKey(window, GLFW_KEY_ENTER) != GLFW_PRESS) {
             is_reloading = false;
         }
