@@ -1,6 +1,9 @@
+#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <dlfcn.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
@@ -8,53 +11,64 @@
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 
-void *load_dl_handle(const char *dl_path)
+typedef void (*_init_t)(GLFWwindow *window, void *_state);
+typedef void (*_hotreload_init_t)(GLFWwindow *window);
+typedef void (*_render_t)(GLFWwindow *window, void *_state);
+
+typedef struct {
+    void *dl_handle;
+    char *dl_path;
+    time_t dl_timestamp;
+    _init_t _init;
+    _hotreload_init_t _hotreload_init;
+    _render_t _render;
+} Dl_Info;
+
+time_t get_file_timestamp(const char *path) {
+    struct stat attr;
+    if (stat(path, &attr) == 0) {
+        return attr.st_mtime;
+    }
+    fprintf(stderr, "[PLATFORM] Failed to get timestamp for file at %s\n", path);
+    exit(1);
+}
+
+void *xdlopen(const char *dl_path)
 {
     void *handle = dlopen(dl_path, RTLD_NOW);
     if (!handle) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        fprintf(stderr, "[PLATFORM] dlopen error: %s\n", dlerror());
         exit(1);
     }
     return handle;
 }
 
-typedef void (*_init_t)(GLFWwindow *window, void *_state);
-_init_t load__init(void *handle)
+void * xdlsym(void *handle, const char *name)
 {
-    _init_t f = (_init_t)dlsym(handle, "_init");
-    if (!f) {
-        fprintf(stderr, "dlsym error: %s\n", dlerror());
+    void *sym = dlsym(handle, name);
+    if (!sym) {
+        fprintf(stderr, "[PLATFORM] dlsym error: %s\n", dlerror());
         exit(1);
     }
-    return f;
+    return sym;
 }
 
-typedef void (*_hotreload_init_t)(GLFWwindow *window);
-_hotreload_init_t load__hotreload_init(void *handle)
-{
-    _hotreload_init_t f = (_hotreload_init_t)dlsym(handle, "_hotreload_init");
-    if (!f) {
-        fprintf(stderr, "dlsym error: %s\n", dlerror());
-        exit(1);
-    }
-    return f;
-}
 
-typedef void (*_render_t)(GLFWwindow *window, void *_state);
-_render_t load__render(void *handle)
+Dl_Info load_dl(const char *path)
 {
-    _render_t f = (_render_t)dlsym(handle, "_render");
-    if (!f) {
-        fprintf(stderr, "dlsym error: %s\n", dlerror());
-        exit(1);
-    }
-    return f;
+    Dl_Info dl_info = {0};
+    dl_info.dl_handle = xdlopen(path);
+    dl_info.dl_path = strdup(path);
+    dl_info.dl_timestamp = get_file_timestamp(path);
+    dl_info._init = xdlsym(dl_info.dl_handle, "_init");
+    dl_info._hotreload_init = xdlsym(dl_info.dl_handle, "_hotreload_init");
+    dl_info._render = xdlsym(dl_info.dl_handle, "_render");
+    return dl_info;
 }
 
 int main()
 {
     if (!glfwInit()) return -1;
-
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -64,33 +78,23 @@ int main()
     glfwMakeContextCurrent(window);
     printf("[PLATFORM] OpenGL version: %s\n", glGetString(GL_VERSION));
 
-    void *dl_handle = load_dl_handle("./bin/editor.dylib");
-    _init_t _init = load__init(dl_handle);
-    _hotreload_init_t _hotreload_init = load__hotreload_init(dl_handle);
-    _render_t _render = load__render(dl_handle);
-
+    Dl_Info dl_info = load_dl("./bin/editor.dylib");
     void *_state = calloc(1, 4096);
-    _init(window, _state);
-    _hotreload_init(window);
+    dl_info._init(window, _state);
+    dl_info._hotreload_init(window);
 
-    bool is_reloading = false;
     while (!glfwWindowShouldClose(window)) {
-        if (glfwGetKey(window, GLFW_KEY_F10) == GLFW_PRESS && !is_reloading) {
-            dlclose(dl_handle);
-            dl_handle = load_dl_handle("./bin/editor.dylib");
-            _init = load__init(dl_handle);
-            _render = load__render(dl_handle);
-            _hotreload_init = load__hotreload_init(dl_handle);
-            _hotreload_init(window);
-            is_reloading = true;
-            printf("[PLATFORM] Reloaded dll\n");
-        } else if (glfwGetKey(window, GLFW_KEY_ENTER) != GLFW_PRESS) {
-            is_reloading = false;
+        time_t dl_current_timestamp = get_file_timestamp(dl_info.dl_path);
+        if (dl_current_timestamp != dl_info.dl_timestamp) {
+            dlclose(dl_info.dl_handle);
+            dl_info = load_dl(dl_info.dl_path);
+            dl_info._hotreload_init(window);
+            printf("[PLATFORM] Reloaded dl\n");
         }
-        _render(window, _state);
+        dl_info._render(window, _state);
     }
 
-    dlclose(dl_handle);
+    dlclose(dl_info.dl_handle);
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
