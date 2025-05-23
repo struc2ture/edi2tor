@@ -10,6 +10,8 @@
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 #define CURSOR_BLINK_ON_FRAMES 30
+// #define FILE_PATH "src/editor.c"
+#define FILE_PATH "res/mock3.txt"
 
 const char *vs_src =
 "#version 410 core\n"
@@ -53,6 +55,10 @@ typedef struct {
 } Vert_Buffer;
 
 typedef struct {
+    char *path;
+} File_Info;
+
+typedef struct {
     GLuint prog;
     GLuint vao;
     GLuint vbo;
@@ -63,13 +69,13 @@ typedef struct {
     int cursor_frame_count;
     double canvas_x_offset;
     double canvas_y_offset;
+    File_Info file_info;
 } Editor_State;
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
 
-Text_Buffer read_file(const char *path);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
 void draw_quad(int x, int y, int width, int height, unsigned char color[4]);
 void draw_string(int x, int y, char *string, unsigned char color[4]);
@@ -83,6 +89,9 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
 
 void insert_line(Text_Buffer *text_buffer, char *line, int insert_at);
 void remove_line(Text_Buffer *text_buffer, int remove_at);
+
+File_Info read_file(const char *path, Text_Buffer *text_buffer);
+void write_file(Text_Buffer text_buffer, File_Info file_info);
 
 void _init(GLFWwindow *window, void *_state)
 {
@@ -129,7 +138,7 @@ void _init(GLFWwindow *window, void *_state)
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
     glEnableVertexAttribArray(1);
 
-    state->text_buffer = read_file("src/editor.c");
+    state->file_info = read_file(FILE_PATH, &state->text_buffer);
 
     glfwSetWindowUserPointer(window, _state);
 }
@@ -179,7 +188,7 @@ void _render(GLFWwindow *window, void *_state)
             }
 
             char line_i_str_buf[256];
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i);
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i + 1);
             draw_string(x_offset, y_offset, line_i_str_buf, color);
             x_offset += x_line_num_offset;
 
@@ -272,8 +281,9 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         state->debug_invis = !state->debug_invis;
     } else if (key == GLFW_KEY_F12 && action == GLFW_PRESS) {
         state->should_break = true;
+    } else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
+        write_file(state->text_buffer, state->file_info);
     }
-    // printf("key pressed: %d; scancode: %d; action: %d; mods: %d\n", key, scancode, action, mods);
 }
 
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
@@ -281,25 +291,6 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window);
     state->canvas_x_offset += x_offset;
     state->canvas_y_offset += y_offset;
-}
-
-Text_Buffer read_file(const char *path)
-{
-    FILE *f = fopen(path, "r");
-    if (!f) {
-        perror("fopen");
-        exit(1);
-    }
-    Text_Buffer result = {0};
-    int count = 0;
-    char buf[1024];
-    while (fgets(buf, sizeof(buf), f)) {
-        result.lines = realloc(result.lines, (count + 1) * sizeof(char *));
-        result.lines[count++] = strdup(buf);
-    }
-    result.line_count = count;
-    fclose(f);
-    return result;
 }
 
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf)
@@ -490,4 +481,41 @@ void remove_line(Text_Buffer *text_buffer, int remove_at)
     }
     text_buffer->line_count--;
     text_buffer->lines = realloc(text_buffer->lines, text_buffer->line_count * sizeof(char *));
+}
+
+File_Info read_file(const char *path, Text_Buffer *text_buffer)
+{
+    File_Info file_info = {0};
+    file_info.path = strdup(path);
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        perror("fopen for read");
+        exit(1);
+    }
+    int count = 0;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), f)) {
+        text_buffer->lines = realloc(text_buffer->lines, (count + 1) * sizeof(char *));
+        text_buffer->lines[count++] = strdup(buf);
+    }
+    text_buffer->line_count = count;
+    fclose(f);
+    return file_info;
+}
+
+void write_file(Text_Buffer text_buffer, File_Info file_info)
+{
+    FILE *f = fopen(file_info.path, "w");
+    if (!f) {
+        perror("fopen for write");
+        exit(1);
+    }
+
+    for (int i = 0; i < text_buffer.line_count; i++) {
+        fputs(text_buffer.lines[i], f);
+    }
+
+    fclose(f);
+
+    printf("Saved file to %s\n", file_info.path);
 }
