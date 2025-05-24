@@ -8,8 +8,8 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#define WINDOW_WIDTH 800
-#define WINDOW_HEIGHT 600
+#define INITIAL_WINDOW_WIDTH 800
+#define INITIAL_WINDOW_HEIGHT 600
 
 typedef void (*_init_t)(GLFWwindow *window, void *_state);
 typedef void (*_hotreload_init_t)(GLFWwindow *window);
@@ -73,7 +73,7 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "EDITOR", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, "EDITOR", NULL, NULL);
     if (!window) return -1;
     glfwMakeContextCurrent(window);
     printf("[PLATFORM] OpenGL version: %s\n", glGetString(GL_VERSION));

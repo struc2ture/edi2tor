@@ -7,8 +7,6 @@
 #include <stb_easy_font.h>
 
 #define VERT_MAX 4096
-#define WINDOW_WIDTH 800
-#define WINDOW_HEIGHT 600
 #define CURSOR_BLINK_ON_FRAMES 30
 // #define FILE_PATH "src/editor.c"
 #define FILE_PATH "res/mock3.txt"
@@ -33,14 +31,15 @@ const char *fs_src =
 "}";
 
 typedef struct {
-    char **lines;
-    int line_count;
-} Text_Buffer;
+    float x, y;
+} Vec_2;
+#define VEC2_FMT "<%0.2f, %0.2f>"
+#define VEC2_ARG(v) (v).x, (v).y
 
 typedef struct {
-    int line_i;
-    int char_i;
-} Cursor;
+    Vec_2 min;
+    Vec_2 max;
+} Rect_Bounds;
 
 typedef struct {
     float x, y;
@@ -53,26 +52,48 @@ typedef struct {
 } Vert_Buffer;
 
 typedef struct {
+    Vec_2 offset;
+    float zoom;
+} Viewport;
+
+typedef struct {
     char *path;
 } File_Info;
+
+typedef struct {
+    char **lines;
+    int line_count;
+} Text_Buffer;
+
+typedef struct {
+    int line_i;
+    int char_i;
+} Cursor;
 
 typedef struct {
     GLuint prog;
     GLuint vao;
     GLuint vbo;
+    GLuint shader_mvp_loc;
+    float view_transform[16];
+    float proj_transform[16];
+    Viewport viewport;
+    Vec_2 window_dim;
+    File_Info file_info;
     Text_Buffer text_buffer;
     Cursor cursor;
     bool should_break;
     bool debug_invis;
     int cursor_frame_count;
-    double canvas_x_offset;
-    double canvas_y_offset;
-    File_Info file_info;
+    long long frame_count;
 } Editor_State;
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
+void framebuffer_size_callback(GLFWwindow *window, int w, int h);
+void window_size_callback(GLFWwindow *window, int w, int h);
+void refresh_callback(GLFWwindow *window);
 
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
 void draw_quad(int x, int y, int width, int height, unsigned char color[4]);
@@ -97,12 +118,20 @@ void make_ortho(float left, float right, float bottom, float top, float near, fl
 void make_view(float offset_x, float offset_y, float scale, float *out);
 void mul_mat4(const float *a, const float *b, float *out);
 
+Rect_Bounds get_viewport_bounds(Vec_2 window_dim, Viewport viewport);
+void update_shader_mvp(Editor_State *state);
+
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    int framebuffer_w, framebuffer_h;
+    glfwGetFramebufferSize(window, &framebuffer_w, &framebuffer_h);
+    glViewport(0, 0, framebuffer_w, framebuffer_h);
+    printf("Framebuffer dim: %d, %d\n", framebuffer_w, framebuffer_h);
 
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vs, 1, &vs_src, 0);
@@ -120,7 +149,6 @@ void _init(GLFWwindow *window, void *_state)
             glGetShaderInfoLog(shader, sizeof(log), NULL, log);
             fprintf(stderr, "Shader compile error:\n%s\nSource:\n", log);
             fprintf(stderr, "%s\n", vs_src);
-
         }
     }
     state->prog = glCreateProgram();
@@ -130,31 +158,28 @@ void _init(GLFWwindow *window, void *_state)
     glDeleteShader(vs);
     glDeleteShader(fs);
 
+    glUseProgram(state->prog);
+
     glGenVertexArrays(1, &state->vao);
     glGenBuffers(1, &state->vbo);
     glBindVertexArray(state->vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
     glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
-
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)0);
     glEnableVertexAttribArray(0);
-
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
     glEnableVertexAttribArray(1);
-
-    state->file_info = read_file(FILE_PATH, &state->text_buffer);
-
     glfwSetWindowUserPointer(window, _state);
 
-    float ortho[16], view[16], mvp[16];
-    make_ortho(0, WINDOW_WIDTH, WINDOW_HEIGHT, 0, -1, 1, ortho);
-    // make_view(scroll_x, scroll_y, zoom, view);
-    make_view(0.0f, 0.0f, 1.0f, view);
-    mul_mat4(view, ortho, mvp);
+    state->shader_mvp_loc = glGetUniformLocation(state->prog, "u_mvp");
+    state->viewport.zoom = 1.0f;
+    int window_w, window_h;
+    glfwGetWindowSize(window, &window_w, &window_h);
+    state->window_dim.x = window_w;
+    state->window_dim.y = window_h;
+    update_shader_mvp(state);
 
-    glUseProgram(state->prog);
-    GLuint loc = glGetUniformLocation(state->prog, "u_mvp");
-    glUniformMatrix4fv(loc, 1, GL_FALSE, mvp);
+    state->file_info = read_file(FILE_PATH, &state->text_buffer);
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -163,6 +188,9 @@ void _hotreload_init(GLFWwindow *window)
     glfwSetKeyCallback(window, key_callback);
     glfwSetCharCallback(window, char_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetWindowSizeCallback(window, window_size_callback);
+    glfwSetWindowRefreshCallback(window, refresh_callback);
 }
 
 void _render(GLFWwindow *window, void *_state)
@@ -176,23 +204,18 @@ void _render(GLFWwindow *window, void *_state)
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glUseProgram(state->prog);
-    glBindVertexArray(state->vao);
-
-    int x_canvas_offset = 10 + (int)(state->canvas_x_offset * 10);
-    int y_canvas_offset = 10 + (int)(state->canvas_y_offset * 10);
-    int line_height = 20;
+    int x_canvas_offset = 0;
+    int y_canvas_offset = 0;
+    int line_height = 15;
     int x_line_num_offset = stb_easy_font_width("000: ");
-
-    int viewport_y_min = -y_canvas_offset;
-    int viewport_y_max = viewport_y_min + WINDOW_HEIGHT;
 
     int lines_rendered = 0;
 
     int x_offset = x_canvas_offset;
     int y_offset = y_canvas_offset;
     for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++) {
-        if ((line_i + 1) * line_height > viewport_y_min && line_i * line_height < viewport_y_max) {
+        // if ((line_i + 1) * line_height > viewport_y_min && line_i * line_height < viewport_y_max) {
+        {
             unsigned char color[] = { 240, 240, 240, 240 };
             if (line_i == state->cursor.line_i) {
                 color[0] = 50;
@@ -239,14 +262,15 @@ void _render(GLFWwindow *window, void *_state)
             lines_rendered);
 
         unsigned char bg_color[] = { 30, 30, 30, 255 };
-        draw_quad(0, WINDOW_HEIGHT - line_height, WINDOW_WIDTH, line_height, bg_color);
+        draw_quad(0, state->window_dim.y - line_height, state->window_dim.x, line_height, bg_color);
         unsigned char color[] = { 200, 200, 200, 255 };
-        draw_string(10, WINDOW_HEIGHT - line_height, line_i_str_buf, color);
+        draw_string(10, state->window_dim.y - line_height, line_i_str_buf, color);
     }
 
     glfwSwapBuffers(window);
     glfwPollEvents();
 
+    state->frame_count++;
     state->cursor_frame_count++;
 }
 
@@ -299,14 +323,40 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         rebuild_dl();
     } else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
         write_file(state->text_buffer, state->file_info);
+    } else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        state->viewport.zoom += 0.25f;
+        update_shader_mvp(state);
+    } else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        state->viewport.zoom -= 0.25f;
+        update_shader_mvp(state);
     }
 }
 
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
-    (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window);
-    state->canvas_x_offset += x_offset;
-    state->canvas_y_offset += y_offset;
+    (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
+    // state->canvas_x_offset += x_offset;
+    // state->canvas_y_offset += y_offset;
+}
+
+void framebuffer_size_callback(GLFWwindow *window, int w, int h)
+{
+    (void)window; (void)w; (void)h;
+    glViewport(0, 0, w, h);
+    printf("Framebuffer dim changed: %d, %d\n", w, h);
+}
+
+void window_size_callback(GLFWwindow *window, int w, int h)
+{
+    (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
+    state->window_dim.x = w;
+    state->window_dim.y = h;
+    update_shader_mvp(state);
+}
+
+void refresh_callback(GLFWwindow* window) {
+    (void)window; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
+    _render(window, state);
 }
 
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf)
@@ -580,4 +630,26 @@ void mul_mat4(const float *a, const float *b, float *out) // row-major
             out[col + row * 4] += a[k + row * 4] * b[col + k * 4];
         }
     }
+}
+
+Rect_Bounds get_viewport_bounds(Vec_2 window_dim, Viewport viewport)
+{
+    Rect_Bounds r = {0};
+    r.min.x = viewport.offset.x;
+    r.min.y = viewport.offset.y;
+    r.max.x = r.min.x + window_dim.x / viewport.zoom;
+    r.max.y = r.min.y + window_dim.y / viewport.zoom;
+    return r;
+}
+
+void update_shader_mvp(Editor_State *state)
+{
+    make_ortho(0, state->window_dim.x, state->window_dim.y, 0, -1, 1, state->proj_transform);
+    make_view(state->viewport.offset.x, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
+    float mvp[16];
+    mul_mat4(state->view_transform, state->proj_transform, mvp);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+
+    Rect_Bounds viewport_bounds = get_viewport_bounds(state->window_dim, state->viewport);
+    printf("Window dim: " VEC2_FMT "; Viewport bounds: min = " VEC2_FMT "; max = " VEC2_FMT "\n", VEC2_ARG(state->window_dim), VEC2_ARG(viewport_bounds.min), VEC2_ARG(viewport_bounds.max));
 }
