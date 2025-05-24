@@ -122,6 +122,8 @@ void mul_mat4(const float *a, const float *b, float *out);
 Rect_Bounds get_viewport_bounds(Vec_2 window_dim, Viewport viewport);
 Vec_2 get_viewport_dim(Vec_2 window_dim, Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
+bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Vec_2 window_dim, Viewport viewport);
+bool is_canvas_y_pos_in_bounds(float canvas_y, Vec_2 window_dim, Viewport viewport);
 void update_shader_mvp(Editor_State *state);
 
 void _init(GLFWwindow *window, void *_state)
@@ -216,8 +218,9 @@ void _render(GLFWwindow *window, void *_state)
     int x_offset = x_canvas_offset;
     int y_offset = y_canvas_offset;
     for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++) {
-        // if ((line_i + 1) * line_height > viewport_y_min && line_i * line_height < viewport_y_max) {
-        {
+        bool line_min_in_bounds = is_canvas_y_pos_in_bounds(line_i * line_height, state->window_dim, state->viewport);
+        bool line_max_in_bounds = is_canvas_y_pos_in_bounds((line_i + 1) * line_height, state->window_dim, state->viewport);
+        if (line_min_in_bounds || line_max_in_bounds) {
             unsigned char color[] = { 240, 240, 240, 240 };
             if (line_i == state->cursor.line_i) {
                 color[0] = 50;
@@ -283,7 +286,6 @@ void _render(GLFWwindow *window, void *_state)
             state->viewport.zoom,
             VEC2_ARG(mouse_window_pos),
             VEC2_ARG(mouse_canvas_pos));
-        printf("%d chars\n", (int)strlen(line_i_str_buf));
         draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
     }
 
@@ -676,6 +678,22 @@ Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport)
     r.x = viewport.offset.x + window_pos.x / viewport.zoom;
     r.y = viewport.offset.y + window_pos.y / viewport.zoom;
     return r;
+}
+
+bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Vec_2 window_dim, Viewport viewport)
+{
+    Rect_Bounds viewport_bounds = get_viewport_bounds(window_dim, viewport);
+    return (canvas_pos.x > viewport_bounds.min.x &&
+            canvas_pos.x < viewport_bounds.max.x &&
+            canvas_pos.y > viewport_bounds.min.y &&
+            canvas_pos.y < viewport_bounds.max.y);
+}
+
+bool is_canvas_y_pos_in_bounds(float canvas_y, Vec_2 window_dim, Viewport viewport)
+{
+    Rect_Bounds viewport_bounds = get_viewport_bounds(window_dim, viewport);
+    return (canvas_y > viewport_bounds.min.y &&
+            canvas_y < viewport_bounds.max.y);
 }
 
 void update_shader_mvp(Editor_State *state)
