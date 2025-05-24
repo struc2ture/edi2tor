@@ -121,6 +121,7 @@ void mul_mat4(const float *a, const float *b, float *out);
 
 Rect_Bounds get_viewport_bounds(Vec_2 window_dim, Viewport viewport);
 Vec_2 get_viewport_dim(Vec_2 window_dim, Viewport viewport);
+Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 void update_shader_mvp(Editor_State *state);
 
 void _init(GLFWwindow *window, void *_state)
@@ -165,7 +166,7 @@ void _init(GLFWwindow *window, void *_state)
     glGenBuffers(1, &state->vbo);
     glBindVertexArray(state->vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * 4 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
@@ -269,12 +270,20 @@ void _render(GLFWwindow *window, void *_state)
         draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
 
         Rect_Bounds viewport_bounds = get_viewport_bounds(state->window_dim, state->viewport);
+        double mouse_x, mouse_y;
+        glfwGetCursorPos(window, &mouse_x, &mouse_y);
+        Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
+        Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(mouse_window_pos, state->viewport);
+        (void)mouse_canvas_pos;
 
         snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-            "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f",
+            "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
             VEC2_ARG(viewport_bounds.min),
             VEC2_ARG(viewport_bounds.max),
-            state->viewport.zoom);
+            state->viewport.zoom,
+            VEC2_ARG(mouse_window_pos),
+            VEC2_ARG(mouse_canvas_pos));
+        printf("%d chars\n", (int)strlen(line_i_str_buf));
         draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
     }
 
@@ -658,6 +667,14 @@ Vec_2 get_viewport_dim(Vec_2 window_dim, Viewport viewport)
     Vec_2 r = {0};
     r.x = window_dim.x / viewport.zoom;
     r.y = window_dim.y / viewport.zoom;
+    return r;
+}
+
+Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport)
+{
+    Vec_2 r = {0};
+    r.x = viewport.offset.x + window_pos.x / viewport.zoom;
+    r.y = viewport.offset.y + window_pos.y / viewport.zoom;
     return r;
 }
 
