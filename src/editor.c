@@ -9,8 +9,9 @@
 #define VERT_MAX 4096
 #define CURSOR_BLINK_ON_FRAMES 30
 #define SCROLL_SENS 10.0f
+#define LINE_HEIGHT 15
 // #define FILE_PATH "src/editor.c"
-#define FILE_PATH "res/mock3.txt"
+#define FILE_PATH "res/mock.txt"
 
 const char *vs_src =
 "#version 410 core\n"
@@ -91,6 +92,7 @@ typedef struct {
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
 void framebuffer_size_callback(GLFWwindow *window, int w, int h);
 void window_size_callback(GLFWwindow *window, int w, int h);
@@ -124,6 +126,7 @@ Vec_2 get_viewport_dim(Vec_2 window_dim, Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Vec_2 window_dim, Viewport viewport);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Vec_2 window_dim, Viewport viewport);
+Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 void update_shader_mvp(Editor_State *state);
 
 void _init(GLFWwindow *window, void *_state)
@@ -195,6 +198,7 @@ void _hotreload_init(GLFWwindow *window)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetWindowSizeCallback(window, window_size_callback);
     glfwSetWindowRefreshCallback(window, refresh_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
 }
 
 void _render(GLFWwindow *window, void *_state)
@@ -210,7 +214,7 @@ void _render(GLFWwindow *window, void *_state)
 
     int x_canvas_offset = 0;
     int y_canvas_offset = 0;
-    int line_height = 15;
+    int line_height = LINE_HEIGHT;
     int x_line_num_offset = stb_easy_font_width("000: ");
 
     int lines_rendered = 0;
@@ -276,8 +280,7 @@ void _render(GLFWwindow *window, void *_state)
         double mouse_x, mouse_y;
         glfwGetCursorPos(window, &mouse_x, &mouse_y);
         Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
-        Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(mouse_window_pos, state->viewport);
-        (void)mouse_canvas_pos;
+        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
 
         snprintf(line_i_str_buf, sizeof(line_i_str_buf),
             "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
@@ -351,6 +354,16 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     } else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         state->viewport.zoom -= 0.25f;
         update_shader_mvp(state);
+    }
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
+    (void)window; (void)button; (void)action; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
+        int line_i = pos.y / (float)LINE_HEIGHT;
+        move_cursor(&state->text_buffer, &state->cursor, line_i, 0, false, state);
     }
 }
 
@@ -694,6 +707,15 @@ bool is_canvas_y_pos_in_bounds(float canvas_y, Vec_2 window_dim, Viewport viewpo
     Rect_Bounds viewport_bounds = get_viewport_bounds(window_dim, viewport);
     return (canvas_y > viewport_bounds.min.y &&
             canvas_y < viewport_bounds.max.y);
+}
+
+Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport)
+{
+    double mouse_x, mouse_y;
+    glfwGetCursorPos(window, &mouse_x, &mouse_y);
+    Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
+    Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(mouse_window_pos, viewport);
+    return mouse_canvas_pos;
 }
 
 void update_shader_mvp(Editor_State *state)
