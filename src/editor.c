@@ -10,8 +10,8 @@
 #define CURSOR_BLINK_ON_FRAMES 30
 #define SCROLL_SENS 10.0f
 #define LINE_HEIGHT 15
-// #define FILE_PATH "src/editor.c"
-#define FILE_PATH "res/mock.txt"
+#define FILE_PATH "src/editor.c"
+// #define FILE_PATH "res/mock.txt"
 
 const char *vs_src =
 "#version 410 core\n"
@@ -107,6 +107,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor, Editor_State 
 void remove_char(Text_Buffer *text_buffer, Cursor *cursor, Editor_State *state);
 
 void convert_to_debug_invis(char *string);
+void viewport_snap_to_cursor(Cursor *cursor, Vec_2 window_dim, Viewport *viewport, Editor_State *state);
 void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_i, bool char_switch_line, Editor_State *state);
 
 void insert_line(Text_Buffer *text_buffer, char *line, int insert_at);
@@ -225,12 +226,12 @@ void _render(GLFWwindow *window, void *_state)
         bool line_min_in_bounds = is_canvas_y_pos_in_bounds(line_i * line_height, state->window_dim, state->viewport);
         bool line_max_in_bounds = is_canvas_y_pos_in_bounds((line_i + 1) * line_height, state->window_dim, state->viewport);
         if (line_min_in_bounds || line_max_in_bounds) {
-            unsigned char color[] = { 240, 240, 240, 240 };
+            unsigned char color[] = { 240, 240, 240, 255 };
             if (line_i == state->cursor.line_i) {
-                color[0] = 50;
-                color[1] = 50;
-                color[2] = 255;
-                color[0] = 255;
+                color[0] = 10;
+                color[1] = 10;
+                color[2] = 240;
+                color[3] = 255;
             }
 
             char line_i_str_buf[256];
@@ -522,6 +523,14 @@ void convert_to_debug_invis(char *string)
     }
 }
 
+void viewport_snap_to_cursor(Cursor *cursor, Vec_2 window_dim, Viewport *viewport, Editor_State *state)
+{
+    Vec_2 viewport_dim = get_viewport_dim(window_dim, *viewport);
+    viewport->offset.x = 0;
+    viewport->offset.y = cursor->line_i * LINE_HEIGHT - viewport_dim.y * 0.5f;
+    update_shader_mvp(state);
+}
+
 // TODO Probably refactor into multiple functions
 void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_i, bool char_switch_line, Editor_State *state)
 {
@@ -561,6 +570,7 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
     }
     if (cursor->line_i != orig_cursor_line || cursor->char_i != prev_cursor_char) {
         state->cursor_frame_count = 0;
+        viewport_snap_to_cursor(cursor, state->window_dim, &state->viewport, state);
     }
 }
 
