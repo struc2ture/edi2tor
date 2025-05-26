@@ -196,6 +196,8 @@ void update_shader_mvp(Editor_State *state);
 
 void insert_go_to_line_char(Editor_State *state, char c);
 
+void validate_text_buffer(Text_Buffer *text_buffer);
+
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
@@ -447,6 +449,9 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         state->should_break = true;
     } else if (key ==GLFW_KEY_F9 && action == GLFW_PRESS) {
         rebuild_dl();
+    } else if (key ==GLFW_KEY_F8 && action == GLFW_PRESS) {
+        validate_text_buffer(&state->text_buffer);
+        trace_log("Validated text buffer");
     } else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
         write_file(state->text_buffer, state->file_info);
     } else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
@@ -600,7 +605,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor, Editor_State 
         text_buffer->lines[cursor->line_i].str[cursor->char_i] = '\n';
         move_cursor(text_buffer, cursor, cursor->line_i + 1, 0, false, state, true);
     } else {
-        resize_text_line(&text_buffer->lines[cursor->line_i], cursor->char_i + 1);
+        resize_text_line(&text_buffer->lines[cursor->line_i], text_buffer->lines[cursor->line_i].len + 1);
         Text_Line *line = &text_buffer->lines[cursor->line_i];
         for (int i = line->len; i >= cursor->char_i; i--) {
             line->str[i + 1] = line->str[i];
@@ -708,7 +713,7 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
 
 void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at)
 {
-    text_buffer->lines = xrealloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(char *));
+    text_buffer->lines = xrealloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(text_buffer->lines[0]));
     for (int i = text_buffer->line_count - 1; i >= insert_at ; i--) {
         text_buffer->lines[i + 1] = text_buffer->lines[i];
     }
@@ -723,7 +728,7 @@ void remove_line(Text_Buffer *text_buffer, int remove_at)
         text_buffer->lines[i - 1] = text_buffer->lines[i];
     }
     text_buffer->line_count--;
-    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(char *));
+    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
 }
 
 File_Info read_file(const char *path, Text_Buffer *text_buffer)
@@ -732,13 +737,12 @@ File_Info read_file(const char *path, Text_Buffer *text_buffer)
     file_info.path = xstrdup(path);
     FILE *f = fopen(path, "r");
     if (!f) fatal("Failed to open file for reading at %s", path);
-    int count = 0;
     char buf[1024];
     while (fgets(buf, sizeof(buf), f)) {
-        text_buffer->lines = xrealloc(text_buffer->lines, (count + 1) * sizeof(char *));
-        make_text_line_dup(buf);
+        text_buffer->line_count++;
+        text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+        text_buffer->lines[text_buffer->line_count - 1] = make_text_line_dup(buf);
     }
-    text_buffer->line_count = count;
     fclose(f);
     return file_info;
 }
@@ -864,4 +868,16 @@ void insert_go_to_line_char(Editor_State *state, char c)
 {
     bassert(state->current_go_to_line_char_i < GO_TO_LINE_CHAR_MAX);
     state->go_to_line_chars[state->current_go_to_line_char_i++] = c;
+}
+
+void validate_text_buffer(Text_Buffer *text_buffer)
+{
+    for (int i = 0; i < text_buffer->line_count; i++) {
+        int actual_len = strlen(text_buffer->lines[i].str);
+        bassert(actual_len > 0);
+        bassert(actual_len == text_buffer->lines[i].len);
+        bassert(text_buffer->lines[i].buf_len == text_buffer->lines[i].len + 1);
+        bassert(text_buffer->lines[i].str[actual_len] == '\0');
+        bassert(text_buffer->lines[i].str[actual_len - 1] == '\n');
+    }
 }
