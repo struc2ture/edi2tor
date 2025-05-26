@@ -12,6 +12,8 @@
 #define LINE_HEIGHT 15
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
 #define ENABLE_STATUS_BAR true
+#define GO_TO_LINE_CHAR_MAX 32
+
 #define FILE_PATH "src/editor.c"
 // #define FILE_PATH "res/mock.txt"
 
@@ -90,6 +92,9 @@ typedef struct {
     bool debug_invis;
     int cursor_frame_count;
     long long frame_count;
+    bool go_to_line_mode;
+    char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
+    int current_go_to_line_char_i;
 } Editor_State;
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
@@ -131,6 +136,12 @@ bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Vec_2 window_dim, Viewport viewpo
 bool is_canvas_y_pos_in_bounds(float canvas_y, Vec_2 window_dim, Viewport viewport);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 void update_shader_mvp(Editor_State *state);
+
+void insert_go_to_line_char(Editor_State *state, char c);
+
+inline static void bassert(bool condition) {
+    if (!condition) __builtin_debugtrap();
+}
 
 void _init(GLFWwindow *window, void *_state)
 {
@@ -230,15 +241,15 @@ void _render(GLFWwindow *window, void *_state)
         if (line_min_in_bounds || line_max_in_bounds) {
             unsigned char color[] = { 240, 240, 240, 255 };
             if (line_i == state->cursor.line_i) {
-                color[0] = 10;
-                color[1] = 10;
+                color[0] = 140;
+                color[1] = 140;
                 color[2] = 240;
                 color[3] = 255;
             }
 
             char line_i_str_buf[256];
             snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i + 1);
-            unsigned char line_num_color[] = { 150, 150, 150, 255 };
+            unsigned char line_num_color[] = { 140, 140, 140, 255 };
             draw_string(x_offset, y_offset, line_i_str_buf, line_num_color);
             x_offset += x_line_num_offset;
 
@@ -265,20 +276,35 @@ void _render(GLFWwindow *window, void *_state)
 
     if (ENABLE_STATUS_BAR) {
         Vec_2 viewport_dim = get_viewport_dim(state->window_dim, state->viewport);
-        unsigned char bg_color[] = { 30, 30, 70, 255 };
+        unsigned char bg_color[] = { 30, 30, 30, 255 };
         draw_quad(state->viewport.offset.x, state->viewport.offset.y + viewport_dim.y - 2 * line_height - 3, viewport_dim.x, 3 + 2 * line_height, bg_color);
 
         char line_i_str_buf[256];
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-            "STATUS: Cursor: %d, %d; Line Len: %zu; Invis: %d; Lines: %d; Rendered: %d",
-            state->cursor.line_i,
-            state->cursor.char_i,
-            strlen(state->text_buffer.lines[state->cursor.line_i]),
-            state->debug_invis,
-            state->text_buffer.line_count,
-            lines_rendered);
         unsigned char color[] = { 200, 200, 200, 255 };
-        draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+
+        // TODO Make this not ugly
+        if (!state->go_to_line_mode) {
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+                "STATUS: Cursor: %d, %d; Line Len: %zu; Invis: %d; Lines: %d; Rendered: %d",
+                state->cursor.line_i,
+                state->cursor.char_i,
+                strlen(state->text_buffer.lines[state->cursor.line_i]),
+                state->debug_invis,
+                state->text_buffer.line_count,
+                lines_rendered);
+            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+        } else {
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+                "STATUS: Cursor: %d, %d; Line Len: %zu; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
+                state->cursor.line_i,
+                state->cursor.char_i,
+                strlen(state->text_buffer.lines[state->cursor.line_i]),
+                state->debug_invis,
+                state->text_buffer.line_count,
+                lines_rendered,
+                state->go_to_line_chars);
+            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+        }
 
         Rect_Bounds viewport_bounds = get_viewport_bounds(state->window_dim, state->viewport);
         double mouse_x, mouse_y;
@@ -307,7 +333,12 @@ void char_callback(GLFWwindow *window, unsigned int codepoint)
 {
     (void)window; Editor_State *state = glfwGetWindowUserPointer(window);
     if (codepoint < 128) {
-        insert_char(&state->text_buffer, (char)codepoint, &state->cursor, state);
+        // TODO Refactor to use some kind centralized char stream into different destinations logic
+        if (!state->go_to_line_mode) {
+            insert_char(&state->text_buffer, (char)codepoint, &state->cursor, state);
+        } else {
+            insert_go_to_line_char(state, (char)codepoint);
+        }
     }
 }
 
@@ -341,9 +372,22 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
             move_cursor(&state->text_buffer, &state->cursor, state->cursor.line_i, state->cursor.char_i + 1, true, state, true);
         }
     } else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        insert_char(&state->text_buffer, '\n', &state->cursor, state);
+        if (!state->go_to_line_mode) {
+            insert_char(&state->text_buffer, '\n', &state->cursor, state);
+        } else {
+            char *end;
+            int go_to_line = strtol(state->go_to_line_chars, &end, 10);
+            if (*end == '\0') {
+                move_cursor(&state->text_buffer, &state->cursor, go_to_line - 1, 0, false, state, true);
+            }
+            state->go_to_line_mode = false;
+            memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
+            state->current_go_to_line_char_i = 0;
+        }
     } else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        remove_char(&state->text_buffer, &state->cursor, state);
+        if (!state->go_to_line_mode) {
+            remove_char(&state->text_buffer, &state->cursor, state);
+        }
     } else if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
         state->debug_invis = !state->debug_invis;
     } else if (key == GLFW_KEY_F12 && action == GLFW_PRESS) {
@@ -358,6 +402,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     } else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         state->viewport.zoom -= 0.25f;
         update_shader_mvp(state);
+    } else if (key == GLFW_KEY_G && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
+        state->go_to_line_mode = !state->go_to_line_mode;
+        if (!state->go_to_line_mode) {
+            memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
+            state->current_go_to_line_char_i = 0;
+        }
     }
 }
 
@@ -756,4 +806,10 @@ void update_shader_mvp(Editor_State *state)
     float mvp[16];
     mul_mat4(state->view_transform, state->proj_transform, mvp);
     glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+}
+
+void insert_go_to_line_char(Editor_State *state, char c)
+{
+    bassert(state->current_go_to_line_char_i < GO_TO_LINE_CHAR_MAX);
+    state->go_to_line_chars[state->current_go_to_line_char_i++] = c;
 }
