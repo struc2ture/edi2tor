@@ -177,6 +177,7 @@ void resize_text_line(Text_Line *text_line, int new_size);
 void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
 void remove_line(Text_Buffer *text_buffer, int remove_at);
 
+void open_file_for_edit(const char *path, Editor_State *state);
 File_Info read_file(const char *path, Text_Buffer *text_buffer);
 void write_file(Text_Buffer text_buffer, File_Info file_info);
 
@@ -255,7 +256,7 @@ void _init(GLFWwindow *window, void *_state)
     state->window_dim.y = window_h;
     update_shader_mvp(state);
 
-    state->file_info = read_file(FILE_PATH, &state->text_buffer);
+    open_file_for_edit(FILE_PATH, state);
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -452,6 +453,8 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     } else if (key ==GLFW_KEY_F8 && action == GLFW_PRESS) {
         validate_text_buffer(&state->text_buffer);
         trace_log("Validated text buffer");
+    } else if (key ==GLFW_KEY_F7 && action == GLFW_PRESS) {
+        open_file_for_edit(FILE_PATH, state);
     } else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
         write_file(state->text_buffer, state->file_info);
     } else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
@@ -607,7 +610,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Cursor *cursor, Editor_State 
     } else {
         resize_text_line(&text_buffer->lines[cursor->line_i], text_buffer->lines[cursor->line_i].len + 1);
         Text_Line *line = &text_buffer->lines[cursor->line_i];
-        for (int i = line->len; i >= cursor->char_i; i--) {
+        for (int i = line->len - 1; i >= cursor->char_i; i--) {
             line->str[i + 1] = line->str[i];
         }
         line->str[cursor->char_i] = c;
@@ -673,18 +676,21 @@ void move_cursor(Text_Buffer *text_buffer, Cursor *cursor, int line_i, int char_
 {
     int orig_cursor_line = cursor->line_i;
     int prev_cursor_char = cursor->char_i;
-    if (orig_cursor_line != line_i) {
-        cursor->line_i = line_i;
-        if (cursor->line_i < 0) {
-            cursor->line_i = 0;
-            cursor->char_i = 0;
-        }
-        if (cursor->line_i >= text_buffer->line_count) {
-            cursor->line_i = text_buffer->line_count - 1;
-            cursor->char_i = text_buffer->lines[cursor->line_i].len - 1;
-        }
+
+    bool char_update_from_line_change = false;
+    cursor->line_i = line_i;
+    if (cursor->line_i < 0) {
+        cursor->line_i = 0;
+        cursor->char_i = 0;
+        char_update_from_line_change = true;
     }
-    if (prev_cursor_char != char_i) {
+    if (cursor->line_i >= text_buffer->line_count) {
+        cursor->line_i = text_buffer->line_count - 1;
+        cursor->char_i = text_buffer->lines[cursor->line_i].len - 1;
+        char_update_from_line_change = true;
+    }
+
+    if (!char_update_from_line_change) {
         cursor->char_i = char_i;
         if (cursor->char_i < 0) {
             if (cursor->line_i > 0 && char_switch_line) {
@@ -731,13 +737,21 @@ void remove_line(Text_Buffer *text_buffer, int remove_at)
     text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
 }
 
+void open_file_for_edit(const char *path, Editor_State *state)
+{
+    state->file_info = read_file(path, &state->text_buffer);
+    trace_log("Read file at %s", path);
+    move_cursor(&state->text_buffer, &state->cursor, state->cursor.line_i, state->cursor.char_i, false, state, false);
+}
+
 File_Info read_file(const char *path, Text_Buffer *text_buffer)
 {
     File_Info file_info = {0};
     file_info.path = xstrdup(path);
-    FILE *f = fopen(path, "r");
+    FILE *f = fopen(file_info.path, "r");
     if (!f) fatal("Failed to open file for reading at %s", path);
     char buf[1024];
+    memset(text_buffer, 0, sizeof(*text_buffer));
     while (fgets(buf, sizeof(buf), f)) {
         text_buffer->line_count++;
         text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
