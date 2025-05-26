@@ -265,6 +265,22 @@ static int stb_easy_font_width_up_to(char *text, int up_to)
     return (int) ceil(max_len);
 }
 
+static int stb_easy_font_char_at_pos(char *text, float x_pos)
+{
+    float len = 0;
+    int char_i = 0;
+    while (*text) {
+        len += stb_easy_font_charinfo[*text-32].advance & 15;
+        len += stb_easy_font_spacing_val;
+        if (len >= x_pos) {
+            return char_i;
+        }
+        text++;
+        char_i++;
+    }
+    return char_i;
+}
+
 static int stb_easy_font_char_width(char c)
 {
     return stb_easy_font_charinfo[c - 32].advance & 15;

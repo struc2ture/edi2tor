@@ -364,7 +364,12 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
         int line_i = pos.y / (float)LINE_HEIGHT;
-        move_cursor(&state->text_buffer, &state->cursor, line_i, 0, false, state);
+        int char_i = 0;
+        if (line_i < state->text_buffer.line_count) {
+            float x_line_num_offset = stb_easy_font_width("000: ");
+            char_i = stb_easy_font_char_at_pos(state->text_buffer.lines[line_i], pos.x - x_line_num_offset);
+        }
+        move_cursor(&state->text_buffer, &state->cursor, line_i, char_i, false, state);
     }
 }
 
