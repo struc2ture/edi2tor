@@ -93,6 +93,12 @@ typedef struct {
 } Text_Cursor;
 
 typedef struct {
+    bool is_active;
+    Buf_Pos start;
+    Buf_Pos end;
+} Text_Selection;
+
+typedef struct {
     GLuint prog;
     GLuint vao;
     GLuint vbo;
@@ -103,12 +109,14 @@ typedef struct {
     File_Info file_info;
     Text_Buffer text_buffer;
     Text_Cursor cursor;
+    Text_Selection selection;
     bool should_break;
     bool debug_invis;
     long long frame_count;
     bool go_to_line_mode;
     char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
     int current_go_to_line_char_i;
+    bool left_mouse_down;
 } Editor_State;
 
 inline static void bassert(bool condition)
@@ -200,11 +208,17 @@ Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
+Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void update_shader_mvp(Editor_State *state);
 
 void insert_go_to_line_char(Editor_State *state, char c);
 
 void validate_text_buffer(Text_Buffer *text_buffer);
+
+void start_selection_at_cursor(Editor_State *state);
+void extend_selection_to_cursor(Editor_State *state);
+
+bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
 
 void _init(GLFWwindow *window, void *_state)
 {
@@ -289,15 +303,13 @@ void _render(GLFWwindow *window, void *_state)
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    int x_canvas_offset = 0;
-    int y_canvas_offset = 0;
     int line_height = LINE_HEIGHT;
     int x_line_num_offset = stb_easy_font_width("000: ");
 
     int lines_rendered = 0;
 
-    int x_offset = x_canvas_offset;
-    int y_offset = y_canvas_offset;
+    int x_offset = 0;
+    int y_offset = 0;
     for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++) {
         bool line_min_in_bounds = is_canvas_y_pos_in_bounds(line_i * line_height, state->viewport);
         bool line_max_in_bounds = is_canvas_y_pos_in_bounds((line_i + 1) * line_height, state->viewport);
@@ -318,7 +330,7 @@ void _render(GLFWwindow *window, void *_state)
 
             draw_content_string(x_offset, y_offset, state->text_buffer.lines[line_i].str, color, state);
 
-            x_offset = x_canvas_offset;
+            x_offset = 0;
             lines_rendered++;
         }
 
@@ -328,13 +340,55 @@ void _render(GLFWwindow *window, void *_state)
     if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
     {
         int cursor_x_offset = stb_easy_font_width_up_to(state->text_buffer.lines[state->cursor.pos.l].str, state->cursor.pos.c);
-        int cursor_x = x_canvas_offset + x_line_num_offset + cursor_x_offset;
-        int cursor_y = y_canvas_offset + line_height * state->cursor.pos.l;
+        int cursor_x = x_line_num_offset + cursor_x_offset;
+        int cursor_y = line_height * state->cursor.pos.l;
         int cursor_width = stb_easy_font_char_width(state->text_buffer.lines[state->cursor.pos.l].str[state->cursor.pos.c]);
         if (cursor_width == 0) cursor_width = 6;
         int cursor_height = 12;
         unsigned char color[] = { 200, 200, 200, 255 };
         draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
+    }
+
+    if (state->selection.is_active) {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l) {
+            Buf_Pos tmp = start;
+            start = end;
+            end = tmp;
+        }
+        for (int i = start.l; i <= end.l; i++) {
+            Text_Line *line = &state->text_buffer.lines[i];
+            int h_start, h_end;
+            bool extend_to_new_line_char = false;
+            if (i == start.l && i == end.l) {
+                h_start = start.c;
+                h_end = end.c;
+                if (h_start > h_end) {
+                    int tmp = h_start;
+                    h_start = h_end;
+                    h_end = tmp;
+                }
+            } else if (i == start.l) {
+                h_start = start.c;
+                h_end = line->len - 1;
+                extend_to_new_line_char = true;
+            } else if (i == end.l) {
+                h_start = 0;
+                h_end = end.c;
+            } else {
+                h_start = 0;
+                h_end = line->len - 1;
+                extend_to_new_line_char = true;
+            }
+            int sel_x = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_start);
+            int sel_y = line_height * i;
+            int sel_w = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_end) - sel_x;
+            if (extend_to_new_line_char) sel_w += 6;
+            int sel_h = 12;
+            unsigned char color[] = { 200, 200, 200, 130 };
+            draw_quad(sel_x, sel_y, sel_w, sel_h, color);
+        }
     }
 
     if (ENABLE_STATUS_BAR) {
@@ -385,6 +439,19 @@ void _render(GLFWwindow *window, void *_state)
         draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
     }
 
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        if (!state->left_mouse_down && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
+            start_selection_at_cursor(state);
+        }
+        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
+        extend_selection_to_cursor(state);
+        state->left_mouse_down = true;
+    } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
+        state->left_mouse_down = false;
+    }
+
     glfwSwapBuffers(window);
     glfwPollEvents();
 
@@ -411,30 +478,62 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods == GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+            start_selection_at_cursor(state);
+        }
+        if (mods & GLFW_MOD_SUPER) {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
         } else {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
         }
+        if (mods & GLFW_MOD_SHIFT) {
+            extend_selection_to_cursor(state);
+        } else {
+            state->selection.is_active = false;
+        }
     } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods == GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+            start_selection_at_cursor(state);
+        }
+        if (mods & GLFW_MOD_SUPER) {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
         } else {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
         }
+        if (mods & GLFW_MOD_SHIFT) {
+            extend_selection_to_cursor(state);
+        } else {
+            state->selection.is_active = false;
+        }
     } else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods == GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+            start_selection_at_cursor(state);
+        }
+        if (mods & GLFW_MOD_SUPER) {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
         } else {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c - 1, true, true);
         }
+        if (mods & GLFW_MOD_SHIFT) {
+            extend_selection_to_cursor(state);
+        } else {
+            state->selection.is_active = false;
+        }
     } else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods == GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+            start_selection_at_cursor(state);
+        }
+        if (mods & GLFW_MOD_SUPER) {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
         } else {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c + 1, true, true);
+        }
+        if (mods & GLFW_MOD_SHIFT) {
+            extend_selection_to_cursor(state);
+        } else {
+            state->selection.is_active = false;
         }
     } else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         if (!state->go_to_line_mode) {
@@ -485,15 +584,14 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     (void)window; (void)button; (void)action; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
-        int line_i = pos.y / (float)LINE_HEIGHT;
-        int char_i = 0;
-        if (line_i < state->text_buffer.line_count) {
-            float x_line_num_offset = stb_easy_font_width("000: ");
-            char_i = stb_easy_font_char_at_pos(state->text_buffer.lines[line_i].str, pos.x - x_line_num_offset);
+        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
+        if (mods & GLFW_MOD_SHIFT) {
+            extend_selection_to_cursor(state);
+        } else {
+            state->selection.is_active = false;
         }
-        move_cursor_to_line(&state->text_buffer, &state->cursor, state, line_i, false);
-        move_cursor_to_char(&state->text_buffer, &state->cursor, state, char_i, false, false);
     }
 }
 
@@ -887,6 +985,22 @@ Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport)
     return mouse_canvas_pos;
 }
 
+Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
+{
+    Buf_Pos r;
+    Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
+    r.l = pos.y / (float)LINE_HEIGHT;
+    r.c = 0;
+    if (r.l < 0) {
+        r.l = 0;
+    } else if (r.l >= state->text_buffer.line_count) {
+        r.l = state->text_buffer.line_count - 1;
+    }
+    float x_line_num_offset = stb_easy_font_width("000: ");
+    r.c = stb_easy_font_char_at_pos(state->text_buffer.lines[r.l].str, pos.x - x_line_num_offset);
+    return r;
+}
+
 void update_shader_mvp(Editor_State *state)
 {
     make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
@@ -912,4 +1026,21 @@ void validate_text_buffer(Text_Buffer *text_buffer)
         bassert(text_buffer->lines[i].str[actual_len] == '\0');
         bassert(text_buffer->lines[i].str[actual_len - 1] == '\n');
     }
+}
+
+void start_selection_at_cursor(Editor_State *state)
+{
+    state->selection.is_active = true;
+    state->selection.start = state->cursor.pos;
+    state->selection.end = state->selection.start;
+}
+
+void extend_selection_to_cursor(Editor_State *state)
+{
+    state->selection.end = state->cursor.pos;
+}
+
+bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b)
+{
+    return a.l == b.l && a.c == b.c;
 }
