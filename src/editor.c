@@ -99,6 +99,11 @@ typedef struct {
 } Text_Selection;
 
 typedef struct {
+    Text_Line *lines;
+    int line_count;
+} Copy_Buffer;
+
+typedef struct {
     GLuint prog;
     GLuint vao;
     GLuint vbo;
@@ -110,6 +115,7 @@ typedef struct {
     Text_Buffer text_buffer;
     Text_Cursor cursor;
     Text_Selection selection;
+    Copy_Buffer copy_buffer;
     bool should_break;
     bool debug_invis;
     long long frame_count;
@@ -187,6 +193,7 @@ void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
 void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
 
 Text_Line make_text_line_dup(char *line);
+Text_Line copy_text_line(Text_Line source, int start, int end);
 void resize_text_line(Text_Line *text_line, int new_size);
 
 void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
@@ -219,10 +226,12 @@ void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);
 
 bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
+void copy_at_selection(Editor_State *state);
 
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
+    bassert(sizeof(*state) < 1024);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -483,105 +492,174 @@ void char_callback(GLFWwindow *window, unsigned int codepoint)
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     (void)scancode; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window);
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    {
         glfwSetWindowShouldClose(window, 1);
-    } else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+    }
+    else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SUPER)
+        {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
-        } else {
+        }
+        else
+        {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
         }
-        if (mods & GLFW_MOD_SHIFT) {
+        if (mods & GLFW_MOD_SHIFT)
+        {
             extend_selection_to_cursor(state);
-        } else {
+        }
+        else
+        {
             state->selection.is_active = false;
         }
-    } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+    }
+    else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SUPER)
+        {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
-        } else {
+        }
+        else
+        {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
         }
-        if (mods & GLFW_MOD_SHIFT) {
+        if (mods & GLFW_MOD_SHIFT)
+        {
             extend_selection_to_cursor(state);
-        } else {
+        }
+        else
+        {
             state->selection.is_active = false;
         }
-    } else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+    }
+    else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SUPER)
+        {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
-        } else {
+        }
+        else
+        {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c - 1, true, true);
         }
-        if (mods & GLFW_MOD_SHIFT) {
+        if (mods & GLFW_MOD_SHIFT)
+        {
             extend_selection_to_cursor(state);
-        } else {
+        }
+        else
+        {
             state->selection.is_active = false;
         }
-    } else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active) {
+    }
+    else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER) {
+        if (mods & GLFW_MOD_SUPER)
+        {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
-        } else {
+        }
+        else
+        {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c + 1, true, true);
         }
-        if (mods & GLFW_MOD_SHIFT) {
+        if (mods & GLFW_MOD_SHIFT)
+        {
             extend_selection_to_cursor(state);
-        } else {
+        }
+        else
+        {
             state->selection.is_active = false;
         }
-    } else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (!state->go_to_line_mode) {
+    }
+    else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (!state->go_to_line_mode)
+        {
             insert_char(&state->text_buffer, '\n', &state->cursor, state);
-        } else {
+        }
+        else
+        {
             char *end;
             int go_to_line = strtol(state->go_to_line_chars, &end, 10);
-            if (*end == '\0') {
+            if (*end == '\0')
+            {
                 move_cursor_to_line(&state->text_buffer, &state->cursor, state, go_to_line - 1, true);
             }
             state->go_to_line_mode = false;
             memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
             state->current_go_to_line_char_i = 0;
         }
-    } else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
-        if (!state->go_to_line_mode) {
+    }
+    else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (!state->go_to_line_mode)
+        {
             remove_char(&state->text_buffer, &state->cursor, state);
         }
-    } else if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
+    }
+    else if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
+    {
         state->debug_invis = !state->debug_invis;
-    } else if (key == GLFW_KEY_F12 && action == GLFW_PRESS) {
+    }
+    else if (key == GLFW_KEY_F12 && action == GLFW_PRESS)
+    {
         state->should_break = true;
-    } else if (key ==GLFW_KEY_F9 && action == GLFW_PRESS) {
+    }
+    else if (key ==GLFW_KEY_F9 && action == GLFW_PRESS)
+    {
         rebuild_dl();
-    } else if (key ==GLFW_KEY_F8 && action == GLFW_PRESS) {
+    }
+    else if (key ==GLFW_KEY_F8 && action == GLFW_PRESS)
+    {
         validate_text_buffer(&state->text_buffer);
         trace_log("Validated text buffer");
-    } else if (key ==GLFW_KEY_F7 && action == GLFW_PRESS) {
+    }
+    else if (key ==GLFW_KEY_F7 && action == GLFW_PRESS)
+    {
         open_file_for_edit(FILE_PATH, state);
-    } else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
+    }
+    else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+    {
         write_file(state->text_buffer, state->file_info);
-    } else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+    }
+    else if (key == GLFW_KEY_C && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+    {
+        copy_at_selection(state);
+    }
+    else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
         state->viewport.zoom += 0.25f;
         update_shader_mvp(state);
-    } else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+    }
+    else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
         state->viewport.zoom -= 0.25f;
         update_shader_mvp(state);
-    } else if (key == GLFW_KEY_G && mods == GLFW_MOD_SUPER && action == GLFW_PRESS) {
+    }
+    else if (key == GLFW_KEY_G && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+    {
         state->go_to_line_mode = !state->go_to_line_mode;
-        if (!state->go_to_line_mode) {
+        if (!state->go_to_line_mode)
+        {
             memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
             state->current_go_to_line_char_i = 0;
         }
@@ -695,6 +773,18 @@ Text_Line make_text_line_dup(char *line)
     r.str = xstrdup(line);
     r.len = strlen(r.str);
     r.buf_len = r.len + 1;
+    return r;
+}
+
+Text_Line copy_text_line(Text_Line source, int start, int end)
+{
+    Text_Line r;
+    if (end < 0) end = source.len;
+    r.len = end - start;
+    r.buf_len = r.len + 1;
+    r.str = xmalloc(r.buf_len);
+    strncpy(r.str, source.str + start, r.len);
+    r.str[r.len] = '\0';
     return r;
 }
 
@@ -1041,4 +1131,52 @@ void extend_selection_to_cursor(Editor_State *state)
 bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b)
 {
     return a.l == b.l && a.c == b.c;
+}
+
+void copy_at_selection(Editor_State *state)
+{
+    if (state->selection.is_active)
+    {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l)
+        {
+            Buf_Pos temp = start;
+            start = end;
+            end = temp;
+        }
+        state->copy_buffer.line_count = end.l - start.l + 1;
+        state->copy_buffer.lines = xrealloc(state->copy_buffer.lines, state->copy_buffer.line_count * sizeof(state->copy_buffer.lines[0]));
+        int copy_buffer_i = 0;
+        for (int i = start.l; i <= end.l; i++)
+        {
+            int start_c, end_c;
+            if (i == start.l && i == end.l)
+            {
+                start_c = start.c;
+                end_c = end.c;
+            }
+            else if (i == start.l)
+            {
+                start_c = start.c;
+                end_c = -1;
+            }
+            else if (i == end.l)
+            {
+                start_c = 0;
+                end_c = end.c;
+            }
+            else
+            {
+                start_c = 0;
+                end_c = -1;
+            }
+            state->copy_buffer.lines[copy_buffer_i++] = copy_text_line(state->text_buffer.lines[i], start_c, end_c);
+        }
+        trace_log("Copied at selection");
+    }
+    else
+    {
+        trace_log("Nothing to copy");
+    }
 }
