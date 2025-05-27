@@ -440,15 +440,23 @@ void _render(GLFWwindow *window, void *_state)
     }
 
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        if (!state->left_mouse_down && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) != GLFW_PRESS) {
+        bool is_just_pressed = !state->left_mouse_down;
+        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        if (is_shift_pressed && is_just_pressed && !state->selection.is_active) {
             start_selection_at_cursor(state);
         }
         Buf_Pos bp = get_buf_pos_under_mouse(window, state);
         move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
         move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
         extend_selection_to_cursor(state);
+        if (!is_shift_pressed && is_just_pressed) {
+            start_selection_at_cursor(state);
+        }
+        if (is_shift_pressed || !is_just_pressed) {
+            extend_selection_to_cursor(state);
+        }
         state->left_mouse_down = true;
-    } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
+    } else {
         state->left_mouse_down = false;
     }
 
@@ -583,16 +591,6 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     (void)window; (void)button; (void)action; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
-        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
-        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
-        if (mods & GLFW_MOD_SHIFT) {
-            extend_selection_to_cursor(state);
-        } else {
-            state->selection.is_active = false;
-        }
-    }
 }
 
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
