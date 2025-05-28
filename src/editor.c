@@ -415,7 +415,14 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     {
         if (!state->go_to_line_mode)
         {
-            remove_char(&state->text_buffer, &state->cursor, state);
+            if (is_selection_valid(state))
+            {
+                delete_selected(state);
+            }
+            else
+            {
+                remove_char(&state->text_buffer, &state->cursor, state);
+            }
         }
     }
     else if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
@@ -861,11 +868,12 @@ void remove_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *st
         }
         Text_Line *line0 = &text_buffer->lines[cursor->pos.l - 1];
         Text_Line *line1 = &text_buffer->lines[cursor->pos.l];
-        resize_text_line(line0, line0->len - 1 + line1->len);
-        strcpy(line0->str + line0->len - 1, line1->str);
+        int line0_old_len = line0->len;
+        resize_text_line(line0, line0_old_len - 1 + line1->len);
+        strcpy(line0->str + line0_old_len - 1, line1->str);
         remove_line(text_buffer, cursor->pos.l);
         move_cursor_to_line(text_buffer, cursor, state, cursor->pos.l - 1, true);
-        move_cursor_to_char(text_buffer, cursor, state, line0->len - 1, true, false);
+        move_cursor_to_char(text_buffer, cursor, state, line0_old_len - 1, true, false);
     } else {
         Text_Line *line = &text_buffer->lines[cursor->pos.l];
         for (int i = cursor->pos.c; i <= line->len; i++) {
@@ -951,6 +959,67 @@ void cancel_selection(Editor_State *state)
     state->selection.end = (Buf_Pos){ -1, -1 };
 }
 
+int selection_char_count(Editor_State *state)
+{
+    int char_count = 0;
+    if (is_selection_valid(state))
+    {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l)
+        {
+            Buf_Pos temp = start;
+            start = end;
+            end = temp;
+        }
+        for (int i = start.l; i <= end.l; i++)
+        {
+            if (i == start.l && i == end.l)
+            {
+                int diff = end.c - start.c;
+                if (diff < 0) diff = -diff;
+                char_count += diff;
+            }
+            else if (i == start.l)
+            {
+                char_count += state->text_buffer.lines[i].len - start.c;
+            }
+            else if (i == end.l)
+            {
+                char_count += end.c;
+            }
+            else
+            {
+                char_count += state->text_buffer.lines[i].len;
+            }
+        }
+    }
+    return char_count;
+}
+
+void delete_selected(Editor_State *state)
+{
+    int char_count = selection_char_count(state);
+    if (char_count > 0)
+    {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l || (start.l == end.l && start.c > end.c))
+        {
+            Buf_Pos temp = start;
+            start = end;
+            end = temp;
+        }
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, end.l, false);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, end.c, false, false);
+        for (int i = 0; i < char_count; i++)
+        {
+            remove_char(&state->text_buffer, &state->cursor, state);
+        }
+        cancel_selection(state);
+    }
+}
+
 void copy_at_selection(Editor_State *state)
 {
     if (is_selection_valid(state))
@@ -1009,6 +1078,10 @@ void paste_from_copy_buffer(Editor_State *state)
 {
     if (state->copy_buffer.line_count > 0)
     {
+        if (is_selection_valid(state))
+        {
+            delete_selected(state);
+        }
         for (int i = 0; i < state->copy_buffer.line_count; i++)
         {
             for (int char_i = 0; char_i < state->copy_buffer.lines[i].len; char_i++)
