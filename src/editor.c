@@ -15,26 +15,31 @@
 const char *vs_src =
 "#version 410 core\n"
 "layout (location = 0) in vec2 aPos;\n"
-"layout (location = 1) in vec4 aColor;\n"
+"layout (location = 1) in vec2 aTexCoord;\n"
+"layout (location = 2) in vec4 aColor;\n"
 "uniform mat4 u_mvp;\n"
+"out vec2 TexCoord;\n"
 "out vec4 Color;\n"
 "void main() {\n"
 "    gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);\n"
+"    TexCoord = aTexCoord;\n"
 "    Color = aColor;\n"
 "}";
 
 const char *fs_src =
 "#version 410 core\n"
 "out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D u_tex;\n"
 "in vec4 Color;\n"
 "void main() {\n"
-"    FragColor = Color;\n"
+"    FragColor = vec4(vec3(Color), texture(u_tex, TexCoord).r);\n"
 "}";
 
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
-    bassert(sizeof(*state) < 1024);
+    bassert(sizeof(*state) < 4096);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -51,20 +56,29 @@ void _init(GLFWwindow *window, void *_state)
     glShaderSource(fs, 1, &fs_src, 0);
     glCompileShader(fs);
     { // TODO Move to a function
-        GLuint shader = vs;
+        GLuint shader = fs;
         GLint success = 0;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
             char log[512];
             glGetShaderInfoLog(shader, sizeof(log), NULL, log);
             fprintf(stderr, "Shader compile error:\n%s\nSource:\n", log);
-            fprintf(stderr, "%s\n", vs_src);
+            fprintf(stderr, "%s\n", fs_src);
         }
     }
     state->prog = glCreateProgram();
     glAttachShader(state->prog, vs);
     glAttachShader(state->prog, fs);
     glLinkProgram(state->prog);
+    { // TODO Move to a function
+        GLint success = 0;
+        glGetProgramiv(state->prog, GL_LINK_STATUS, &success);
+        if (!success) {
+            char log[512];
+            glGetProgramInfoLog(state->prog, sizeof(log), NULL, log);
+            fprintf(stderr, "Program link error:\n%s\n", log);
+        }
+    }
     glDeleteShader(vs);
     glDeleteShader(fs);
 
@@ -74,11 +88,13 @@ void _init(GLFWwindow *window, void *_state)
     glGenBuffers(1, &state->vbo);
     glBindVertexArray(state->vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * 4 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * sizeof(Vert), NULL, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)offsetof(Vert, u));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
+    glEnableVertexAttribArray(2);
     glfwSetWindowUserPointer(window, _state);
 
     state->shader_mvp_loc = glGetUniformLocation(state->prog, "u_mvp");
@@ -90,6 +106,8 @@ void _init(GLFWwindow *window, void *_state)
     update_shader_mvp(state);
 
     open_file_for_edit(FILE_PATH, state);
+
+    state->font = load_font(FONT_PATH);
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -115,162 +133,11 @@ void _render(GLFWwindow *window, void *_state)
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    int line_height = LINE_HEIGHT;
-    int x_line_num_offset = stb_easy_font_width("000: ");
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, state->font.texture);
 
-    int lines_rendered = 0;
-
-    int x_offset = 0;
-    int y_offset = 0;
-    for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++) {
-        bool line_min_in_bounds = is_canvas_y_pos_in_bounds(line_i * line_height, state->viewport);
-        bool line_max_in_bounds = is_canvas_y_pos_in_bounds((line_i + 1) * line_height, state->viewport);
-        if (line_min_in_bounds || line_max_in_bounds) {
-            unsigned char color[] = { 240, 240, 240, 255 };
-            if (line_i == state->cursor.pos.l) {
-                color[0] = 140;
-                color[1] = 140;
-                color[2] = 240;
-                color[3] = 255;
-            }
-
-            char line_i_str_buf[256];
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i + 1);
-            unsigned char line_num_color[] = { 140, 140, 140, 255 };
-            draw_string(x_offset, y_offset, line_i_str_buf, line_num_color);
-            x_offset += x_line_num_offset;
-
-            draw_content_string(x_offset, y_offset, state->text_buffer.lines[line_i].str, color, state);
-
-            x_offset = 0;
-            lines_rendered++;
-        }
-
-        y_offset += line_height;
-    }
-
-    if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
-    {
-        int cursor_x_offset = stb_easy_font_width_up_to(state->text_buffer.lines[state->cursor.pos.l].str, state->cursor.pos.c);
-        int cursor_x = x_line_num_offset + cursor_x_offset;
-        int cursor_y = line_height * state->cursor.pos.l;
-        int cursor_width = stb_easy_font_char_width(state->text_buffer.lines[state->cursor.pos.l].str[state->cursor.pos.c]);
-        if (cursor_width == 0) cursor_width = 6;
-        int cursor_height = 12;
-        unsigned char color[] = { 200, 200, 200, 255 };
-        draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
-    }
-
-    if (is_selection_valid(state)) {
-        Buf_Pos start = state->selection.start;
-        Buf_Pos end = state->selection.end;
-        if (start.l > end.l) {
-            Buf_Pos tmp = start;
-            start = end;
-            end = tmp;
-        }
-        for (int i = start.l; i <= end.l; i++) {
-            Text_Line *line = &state->text_buffer.lines[i];
-            int h_start, h_end;
-            bool extend_to_new_line_char = false;
-            if (i == start.l && i == end.l) {
-                h_start = start.c;
-                h_end = end.c;
-                if (h_start > h_end) {
-                    int tmp = h_start;
-                    h_start = h_end;
-                    h_end = tmp;
-                }
-            } else if (i == start.l) {
-                h_start = start.c;
-                h_end = line->len - 1;
-                extend_to_new_line_char = true;
-            } else if (i == end.l) {
-                h_start = 0;
-                h_end = end.c;
-            } else {
-                h_start = 0;
-                h_end = line->len - 1;
-                extend_to_new_line_char = true;
-            }
-            int sel_x = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_start);
-            int sel_y = line_height * i;
-            int sel_w = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_end) - sel_x;
-            if (extend_to_new_line_char) sel_w += 6;
-            int sel_h = 12;
-            unsigned char color[] = { 200, 200, 200, 130 };
-            draw_quad(sel_x, sel_y, sel_w, sel_h, color);
-        }
-    }
-
-    if (ENABLE_STATUS_BAR) {
-        Vec_2 viewport_dim = get_viewport_dim(state->viewport);
-        unsigned char bg_color[] = { 30, 30, 30, 255 };
-        draw_quad(state->viewport.offset.x, state->viewport.offset.y + viewport_dim.y - 2 * line_height - 3, viewport_dim.x, 3 + 2 * line_height, bg_color);
-
-        char line_i_str_buf[256];
-        unsigned char color[] = { 200, 200, 200, 255 };
-
-        // TODO Make this not ugly
-        if (!state->go_to_line_mode) {
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-                "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d",
-                state->cursor.pos.l,
-                state->cursor.pos.c,
-                state->text_buffer.lines[state->cursor.pos.l].len,
-                state->debug_invis,
-                state->text_buffer.line_count,
-                lines_rendered);
-            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
-        } else {
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-                "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
-                state->cursor.pos.l,
-                state->cursor.pos.c,
-                state->text_buffer.lines[state->cursor.pos.l].len,
-                state->debug_invis,
-                state->text_buffer.line_count,
-                lines_rendered,
-                state->go_to_line_chars);
-            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
-        }
-
-        Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
-        double mouse_x, mouse_y;
-        glfwGetCursorPos(window, &mouse_x, &mouse_y);
-        Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
-        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
-
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-            "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
-            VEC2_ARG(viewport_bounds.min),
-            VEC2_ARG(viewport_bounds.max),
-            state->viewport.zoom,
-            VEC2_ARG(mouse_window_pos),
-            VEC2_ARG(mouse_canvas_pos));
-        draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
-    }
-
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        bool is_just_pressed = !state->left_mouse_down;
-        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        if (is_shift_pressed && is_just_pressed && !is_selection_valid(state)) {
-            start_selection_at_cursor(state);
-        }
-        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
-        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
-        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
-        extend_selection_to_cursor(state);
-        if (!is_shift_pressed && is_just_pressed) {
-            start_selection_at_cursor(state);
-        }
-        if (is_shift_pressed || !is_just_pressed) {
-            extend_selection_to_cursor(state);
-        }
-        state->left_mouse_down = true;
-    } else {
-        state->left_mouse_down = false;
-    }
+    unsigned char color[] = { 255, 255, 255, 255 };
+    draw_texture(0, 0, 512, 512, color);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
@@ -566,6 +433,194 @@ void refresh_callback(GLFWwindow* window) {
     _render(window, state);
 }
 
+Render_Font load_font(const char *path)
+{
+    Render_Font font = {0};
+
+    FILE *f = fopen(path, "rb");
+    if (!f) fatal("Failed to open file for reading at %s", path);
+    fseek(f, 0, SEEK_END);
+    int file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    void *file_bytes = xmalloc(file_size);
+    fread(file_bytes, 1, file_size, f);
+
+    void *temp_bitmap = xcalloc(512 * 512);
+
+    stbtt_BakeFontBitmap(file_bytes, 0, 32.0, temp_bitmap, 512, 512, 32, 96, font.cdata);
+
+    free(file_bytes);
+
+    glGenTextures(1, &font.texture);
+    glBindTexture(GL_TEXTURE_2D, font.texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    free(temp_bitmap);
+
+    return font;
+}
+
+void render_old(GLFWwindow *window, Editor_State *state)
+{
+    int line_height = LINE_HEIGHT;
+    int x_line_num_offset = stb_easy_font_width("000: ");
+
+    int lines_rendered = 0;
+
+    int x_offset = 0;
+    int y_offset = 0;
+    for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++) {
+        bool line_min_in_bounds = is_canvas_y_pos_in_bounds(line_i * line_height, state->viewport);
+        bool line_max_in_bounds = is_canvas_y_pos_in_bounds((line_i + 1) * line_height, state->viewport);
+        if (line_min_in_bounds || line_max_in_bounds) {
+            unsigned char color[] = { 240, 240, 240, 255 };
+            if (line_i == state->cursor.pos.l) {
+                color[0] = 140;
+                color[1] = 140;
+                color[2] = 240;
+                color[3] = 255;
+            }
+
+            char line_i_str_buf[256];
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i + 1);
+            unsigned char line_num_color[] = { 140, 140, 140, 255 };
+            draw_string(x_offset, y_offset, line_i_str_buf, line_num_color);
+            x_offset += x_line_num_offset;
+
+            draw_content_string(x_offset, y_offset, state->text_buffer.lines[line_i].str, color, state);
+
+            x_offset = 0;
+            lines_rendered++;
+        }
+
+        y_offset += line_height;
+    }
+
+    if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
+    {
+        int cursor_x_offset = stb_easy_font_width_up_to(state->text_buffer.lines[state->cursor.pos.l].str, state->cursor.pos.c);
+        int cursor_x = x_line_num_offset + cursor_x_offset;
+        int cursor_y = line_height * state->cursor.pos.l;
+        int cursor_width = stb_easy_font_char_width(state->text_buffer.lines[state->cursor.pos.l].str[state->cursor.pos.c]);
+        if (cursor_width == 0) cursor_width = 6;
+        int cursor_height = 12;
+        unsigned char color[] = { 200, 200, 200, 255 };
+        draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
+    }
+
+    if (is_selection_valid(state)) {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l) {
+            Buf_Pos tmp = start;
+            start = end;
+            end = tmp;
+        }
+        for (int i = start.l; i <= end.l; i++) {
+            Text_Line *line = &state->text_buffer.lines[i];
+            int h_start, h_end;
+            bool extend_to_new_line_char = false;
+            if (i == start.l && i == end.l) {
+                h_start = start.c;
+                h_end = end.c;
+                if (h_start > h_end) {
+                    int tmp = h_start;
+                    h_start = h_end;
+                    h_end = tmp;
+                }
+            } else if (i == start.l) {
+                h_start = start.c;
+                h_end = line->len - 1;
+                extend_to_new_line_char = true;
+            } else if (i == end.l) {
+                h_start = 0;
+                h_end = end.c;
+            } else {
+                h_start = 0;
+                h_end = line->len - 1;
+                extend_to_new_line_char = true;
+            }
+            int sel_x = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_start);
+            int sel_y = line_height * i;
+            int sel_w = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_end) - sel_x;
+            if (extend_to_new_line_char) sel_w += 6;
+            int sel_h = 12;
+            unsigned char color[] = { 200, 200, 200, 130 };
+            draw_quad(sel_x, sel_y, sel_w, sel_h, color);
+        }
+    }
+
+    if (ENABLE_STATUS_BAR) {
+        Vec_2 viewport_dim = get_viewport_dim(state->viewport);
+        unsigned char bg_color[] = { 30, 30, 30, 255 };
+        draw_quad(state->viewport.offset.x, state->viewport.offset.y + viewport_dim.y - 2 * line_height - 3, viewport_dim.x, 3 + 2 * line_height, bg_color);
+
+        char line_i_str_buf[256];
+        unsigned char color[] = { 200, 200, 200, 255 };
+
+        // TODO Make this not ugly
+        if (!state->go_to_line_mode) {
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+                "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d",
+                state->cursor.pos.l,
+                state->cursor.pos.c,
+                state->text_buffer.lines[state->cursor.pos.l].len,
+                state->debug_invis,
+                state->text_buffer.line_count,
+                lines_rendered);
+            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+        } else {
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+                "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
+                state->cursor.pos.l,
+                state->cursor.pos.c,
+                state->text_buffer.lines[state->cursor.pos.l].len,
+                state->debug_invis,
+                state->text_buffer.line_count,
+                lines_rendered,
+                state->go_to_line_chars);
+            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+        }
+
+        Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
+        double mouse_x, mouse_y;
+        glfwGetCursorPos(window, &mouse_x, &mouse_y);
+        Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
+        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
+
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+            "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
+            VEC2_ARG(viewport_bounds.min),
+            VEC2_ARG(viewport_bounds.max),
+            state->viewport.zoom,
+            VEC2_ARG(mouse_window_pos),
+            VEC2_ARG(mouse_canvas_pos));
+        draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
+    }
+
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        bool is_just_pressed = !state->left_mouse_down;
+        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        if (is_shift_pressed && is_just_pressed && !is_selection_valid(state)) {
+            start_selection_at_cursor(state);
+        }
+        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
+        extend_selection_to_cursor(state);
+        if (!is_shift_pressed && is_just_pressed) {
+            start_selection_at_cursor(state);
+        }
+        if (is_shift_pressed || !is_just_pressed) {
+            extend_selection_to_cursor(state);
+        }
+        state->left_mouse_down = true;
+    } else {
+        state->left_mouse_down = false;
+    }
+}
+
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf)
 {
     (void)color;
@@ -614,6 +669,30 @@ void draw_quad(int x, int y, int width, int height, unsigned char color[4])
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
+
+void draw_texture(int x, int y, int width, int height, unsigned char color[4])
+{
+    Vert_Buffer vert_buf = {0};
+    vert_buf.vert_count = 6;
+    vert_buf.verts[0].x = 0;     vert_buf.verts[0].y = 0;      vert_buf.verts[0].u = 0; vert_buf.verts[0].v = 1;
+    vert_buf.verts[1].x = 0;     vert_buf.verts[1].y = height; vert_buf.verts[1].u = 0; vert_buf.verts[1].v = 0;
+    vert_buf.verts[2].x = width; vert_buf.verts[2].y = 0;      vert_buf.verts[2].u = 1; vert_buf.verts[2].v = 1;
+    vert_buf.verts[3].x = width; vert_buf.verts[3].y = 0;      vert_buf.verts[3].u = 1; vert_buf.verts[3].v = 1;
+    vert_buf.verts[4].x = 0;     vert_buf.verts[4].y = height; vert_buf.verts[4].u = 0; vert_buf.verts[4].v = 0;
+    vert_buf.verts[5].x = width; vert_buf.verts[5].y = height; vert_buf.verts[5].u = 1; vert_buf.verts[5].v = 0;
+
+    for (int i = 0; i < 6; i++) {
+        vert_buf.verts[i].x += x;
+        vert_buf.verts[i].y += y;
+        vert_buf.verts[i].r = color[0];
+        vert_buf.verts[i].g = color[1];
+        vert_buf.verts[i].b = color[2];
+        vert_buf.verts[i].a = color[3];
+    }
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+}
+
 
 void draw_string(int x, int y, char *string, unsigned char color[4])
 {

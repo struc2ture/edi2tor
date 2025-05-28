@@ -39,6 +39,13 @@ static void *xmalloc(size_t size)
     return ptr;
 }
 
+static void *xcalloc(size_t size)
+{
+    void *ptr = calloc(1, size);
+    if (!ptr) fatal("calloc failed for %zu", size);
+    return ptr;
+}
+
 static void *xrealloc(void *ptr, size_t size)
 {
     void *new_ptr = realloc(ptr, size);

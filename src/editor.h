@@ -5,6 +5,9 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <stb_truetype.h>
+
 #define VERT_MAX 4096
 #define CURSOR_BLINK_ON_FRAMES 30
 #define SCROLL_SENS 10.0f
@@ -15,6 +18,7 @@
 #define MAX_LINES 16384
 #define MAX_CHARS_PER_LINE 1024
 #define INDENT_SPACES 4
+#define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 
 #define FILE_PATH "src/editor.c"
 // #define FILE_PATH "res/mock4.txt"
@@ -32,6 +36,7 @@ typedef struct {
 
 typedef struct {
     float x, y;
+    float u, v;
     unsigned char r, g, b, a;
 } Vert;
 
@@ -82,6 +87,11 @@ typedef struct {
 } Copy_Buffer;
 
 typedef struct {
+    stbtt_bakedchar cdata[96];
+    GLuint texture;
+} Render_Font;
+
+typedef struct {
     GLuint prog;
     GLuint vao;
     GLuint vbo;
@@ -94,6 +104,7 @@ typedef struct {
     Text_Cursor cursor;
     Text_Selection selection;
     Copy_Buffer copy_buffer;
+    Render_Font font;
     bool should_break;
     bool debug_invis;
     long long frame_count;
@@ -115,8 +126,12 @@ void framebuffer_size_callback(GLFWwindow *window, int w, int h);
 void window_size_callback(GLFWwindow *window, int w, int h);
 void refresh_callback(GLFWwindow *window);
 
+Render_Font load_font(const char *path);
+
+void render_old(GLFWwindow *window, Editor_State *state);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
 void draw_quad(int x, int y, int width, int height, unsigned char color[4]);
+void draw_texture(int x, int y, int width, int height, unsigned char color[4]);
 void draw_string(int x, int y, char *string, unsigned char color[4]);
 void draw_content_string(int x, int y, char *string, unsigned char color[4], Editor_State *state);
 
