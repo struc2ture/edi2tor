@@ -7,5 +7,6 @@ CompileFlags:
         "-framework", "OpenGL",
         "-DGL_SILENCE_DEPRECATION",
         "-Wall",
-        "-Wextra"
+        "-Wextra",
+        "-Wno-unused-function"
     ]
