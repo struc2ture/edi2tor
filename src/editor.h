@@ -15,6 +15,7 @@
 #define MAX_LINES 16384
 #define MAX_CHARS_PER_LINE 1024
 #define INDENT_SPACES 4
+#define DEFAULT_ZOOM 2.0f
 
 #define FILE_PATH "src/editor.c"
 // #define FILE_PATH "res/mock4.txt"
