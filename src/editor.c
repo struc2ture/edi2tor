@@ -309,7 +309,11 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER)
+        if (mods & GLFW_MOD_ALT)
+        {
+            move_cursor_to_next_white_line(state);
+        }
+        else if (mods & GLFW_MOD_SUPER)
         {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
@@ -333,7 +337,11 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER)
+        if (mods & GLFW_MOD_ALT)
+        {
+            move_cursor_to_prev_white_line(state);
+        }
+        else if (mods & GLFW_MOD_SUPER)
         {
             move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
@@ -884,6 +892,36 @@ void move_cursor_to_prev_start_of_word(Editor_State *state)
     }
 }
 
+void move_cursor_to_next_white_line(Editor_State *state)
+{
+    for (int i = state->cursor.pos.l + 1; i < state->text_buffer.line_count; i++)
+    {
+        if (is_white_line(state->text_buffer.lines[i]))
+        {
+            move_cursor_to_line(&state->text_buffer, &state->cursor, state, i, true);
+            move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+            return;
+        }
+    }
+    move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
+    move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
+}
+
+void move_cursor_to_prev_white_line(Editor_State *state)
+{
+    for (int i = state->cursor.pos.l - 1; i >= 0; i--)
+    {
+        if (is_white_line(state->text_buffer.lines[i]))
+        {
+            move_cursor_to_line(&state->text_buffer, &state->cursor, state, i, true);
+            move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+            return;
+        }
+    }
+    move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
+    move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+}
+
 Text_Line make_text_line_dup(char *line)
 {
     Text_Line r;
@@ -1097,6 +1135,18 @@ void delete_current_line(Editor_State *state)
     remove_line(&state->text_buffer, state->cursor.pos.l);
     move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l, false);
     move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, false, false);
+}
+
+bool is_white_line(Text_Line line)
+{
+    for (int i = 0; i < line.len; i++)
+    {
+        if (!isspace(line.str[i]))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 void open_file_for_edit(const char *path, Editor_State *state)

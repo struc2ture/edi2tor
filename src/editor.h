@@ -143,6 +143,8 @@ void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
 
 void move_cursor_to_next_end_of_word(Editor_State *state);
 void move_cursor_to_prev_start_of_word(Editor_State *state);
+void move_cursor_to_next_white_line(Editor_State *state);
+void move_cursor_to_prev_white_line(Editor_State *state);
 
 Text_Line make_text_line_dup(char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);
@@ -159,6 +161,7 @@ void decrease_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor
 void increase_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
 void increase_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
 void delete_current_line(Editor_State *state);
+bool is_white_line(Text_Line line);
 
 void open_file_for_edit(const char *path, Editor_State *state);
 File_Info read_file(const char *path, Text_Buffer *text_buffer);
