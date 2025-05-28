@@ -8,6 +8,7 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
+#define PROGRAM_NAME "edi2tor"
 #define DL_PATH "./bin/editor.dylib"
 #define INITIAL_WINDOW_WIDTH 800
 #define INITIAL_WINDOW_HEIGHT 600
@@ -74,7 +75,7 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    GLFWwindow *window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, "EDITOR", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, PROGRAM_NAME, NULL, NULL);
     if (!window) return -1;
     glfwMakeContextCurrent(window);
     printf("[PLATFORM] OpenGL version: %s\n", glGetString(GL_VERSION));
