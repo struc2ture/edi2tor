@@ -141,6 +141,9 @@ void cancel_selection(Editor_State *state);
 void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
 void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
 
+void move_cursor_to_next_end_of_word(Editor_State *state);
+void move_cursor_to_prev_start_of_word(Editor_State *state);
+
 Text_Line make_text_line_dup(char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);
 void resize_text_line(Text_Line *text_line, int new_size);

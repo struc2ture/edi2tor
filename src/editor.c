@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -356,7 +357,11 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER)
+        if (mods & GLFW_MOD_ALT)
+        {
+            move_cursor_to_prev_start_of_word(state);
+        }
+        else if (mods & GLFW_MOD_SUPER)
         {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
         }
@@ -379,7 +384,11 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         {
             start_selection_at_cursor(state);
         }
-        if (mods & GLFW_MOD_SUPER)
+        if (mods & GLFW_MOD_ALT)
+        {
+            move_cursor_to_next_end_of_word(state);
+        }
+        else if (mods & GLFW_MOD_SUPER)
         {
             move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
         }
@@ -826,6 +835,52 @@ void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
         {
             viewport_snap_to_cursor(cursor, &state->viewport, state);
         }
+    }
+}
+
+void move_cursor_to_next_end_of_word(Editor_State *state)
+{
+    Text_Line *current_line = &state->text_buffer.lines[state->cursor.pos.l];
+    int end_of_word = -1;
+    for (int i = state->cursor.pos.c + 1; i < current_line->len - 1; i++)
+    {
+        if (isalnum(current_line->str[i]) && (isspace(current_line->str[i + 1]) || ispunct(current_line->str[i + 1])))
+        {
+            end_of_word = i + 1;
+            break;
+        }
+    }
+    if (end_of_word == -1)
+    {
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+    }
+    else
+    {
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, end_of_word, true, false);
+    }
+}
+
+void move_cursor_to_prev_start_of_word(Editor_State *state)
+{
+    Text_Line *current_line = &state->text_buffer.lines[state->cursor.pos.l];
+    int start_of_word = -1;
+    for (int i = state->cursor.pos.c - 1; i > 0; i--)
+    {
+        if (isalnum(current_line->str[i]) && (isspace(current_line->str[i - 1]) || ispunct(current_line->str[i - 1])))
+        {
+            start_of_word = i;
+            break;
+        }
+    }
+    if (start_of_word == -1)
+    {
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
+    }
+    else
+    {
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, start_of_word, true, false);
     }
 }
 
