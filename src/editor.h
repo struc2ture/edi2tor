@@ -14,6 +14,7 @@
 #define GO_TO_LINE_CHAR_MAX 32
 #define MAX_LINES 16384
 #define MAX_CHARS_PER_LINE 1024
+#define INDENT_SPACES 4
 
 #define FILE_PATH "src/editor.c"
 // #define FILE_PATH "res/mock4.txt"
@@ -148,6 +149,7 @@ void remove_line(Text_Buffer *text_buffer, int remove_at);
 
 void insert_char(Text_Buffer *text_buffer, char c, Text_Cursor *cursor, Editor_State *state);
 void remove_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
+void insert_indent(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
 
 void open_file_for_edit(const char *path, Editor_State *state);
 File_Info read_file(const char *path, Text_Buffer *text_buffer);

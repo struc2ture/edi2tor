@@ -425,6 +425,13 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
             }
         }
     }
+    else if (key == GLFW_KEY_TAB && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (!state->go_to_line_mode)
+        {
+            insert_indent(&state->text_buffer, &state->cursor, state);
+        }
+    }
     else if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
     {
         state->debug_invis = !state->debug_invis;
@@ -881,6 +888,15 @@ void remove_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *st
         }
         resize_text_line(&text_buffer->lines[cursor->pos.l], line->len - 1);
         move_cursor_to_char(text_buffer, cursor, state, cursor->pos.c - 1, true, false);
+    }
+}
+
+void insert_indent(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+{
+    int spaces_to_insert = INDENT_SPACES - cursor->pos.c % INDENT_SPACES;
+    for (int i = 0; i < spaces_to_insert; i++)
+    {
+        insert_char(text_buffer, ' ', cursor, state);
     }
 }
 
