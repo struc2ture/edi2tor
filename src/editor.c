@@ -284,7 +284,11 @@ void char_callback(GLFWwindow *window, unsigned int codepoint)
     if (codepoint < 128) {
         // TODO Refactor to use some kind centralized char stream into different destinations logic
         if (!state->go_to_line_mode) {
-            insert_char(&state->text_buffer, (char)codepoint, &state->cursor, state);
+            if (is_selection_valid(state))
+            {
+                delete_selected(state);
+            }
+            insert_char(&state->text_buffer, (char)codepoint, &state->cursor, state, false);
         } else {
             insert_go_to_line_char(state, (char)codepoint);
         }
@@ -396,7 +400,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     {
         if (!state->go_to_line_mode)
         {
-            insert_char(&state->text_buffer, '\n', &state->cursor, state);
+            insert_char(&state->text_buffer, '\n', &state->cursor, state, true);
         }
         else
         {
@@ -429,7 +433,29 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     {
         if (!state->go_to_line_mode)
         {
-            insert_indent(&state->text_buffer, &state->cursor, state);
+            if (mods == GLFW_MOD_ALT)
+            {
+                int indent_i = get_line_indent(state->text_buffer.lines[state->cursor.pos.l]);
+                move_cursor_to_char(&state->text_buffer, &state->cursor, state, indent_i, true, false);
+            }
+            else
+            {
+                insert_indent(&state->text_buffer, &state->cursor, state);
+            }
+        }
+    }
+    else if (key == GLFW_KEY_LEFT_BRACKET && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (!state->go_to_line_mode)
+        {
+            decrease_indent_level(&state->text_buffer, &state->cursor, state);
+        }
+    }
+    else if (key == GLFW_KEY_RIGHT_BRACKET && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        if (!state->go_to_line_mode)
+        {
+            increase_indent_level(&state->text_buffer, &state->cursor, state);
         }
     }
     else if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
@@ -847,7 +873,7 @@ void remove_line(Text_Buffer *text_buffer, int remove_at)
     text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
 }
 
-void insert_char(Text_Buffer *text_buffer, char c, Text_Cursor *cursor, Editor_State *state)
+void insert_char(Text_Buffer *text_buffer, char c, Text_Cursor *cursor, Editor_State *state, bool auto_indent)
 {
     if (c == '\n') {
         Text_Line new_line = make_text_line_dup(text_buffer->lines[cursor->pos.l].str + cursor->pos.c);
@@ -856,6 +882,15 @@ void insert_char(Text_Buffer *text_buffer, char c, Text_Cursor *cursor, Editor_S
         text_buffer->lines[cursor->pos.l].str[cursor->pos.c] = '\n';
         move_cursor_to_line(text_buffer, cursor, state, cursor->pos.l + 1, true);
         move_cursor_to_char(text_buffer, cursor, state, 0, true, false);
+        if (auto_indent)
+        {
+            int indent_spaces = get_line_indent(text_buffer->lines[cursor->pos.l - 1]);
+            for (int i = 0; i < indent_spaces; i++)
+            {
+                insert_char(&state->text_buffer, ' ', &state->cursor, state, false);
+            }
+        }
+
     } else {
         resize_text_line(&text_buffer->lines[cursor->pos.l], text_buffer->lines[cursor->pos.l].len + 1);
         Text_Line *line = &text_buffer->lines[cursor->pos.l];
@@ -893,10 +928,107 @@ void remove_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *st
 
 void insert_indent(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
 {
+    if (is_selection_valid(state))
+    {
+        delete_selected(state);
+    }
     int spaces_to_insert = INDENT_SPACES - cursor->pos.c % INDENT_SPACES;
     for (int i = 0; i < spaces_to_insert; i++)
     {
-        insert_char(text_buffer, ' ', cursor, state);
+        insert_char(text_buffer, ' ', cursor, state, false);
+    }
+}
+
+int get_line_indent(Text_Line line)
+{
+    int spaces = 0;
+    char *str = line.str;
+    while (*str)
+    {
+        if (*str == ' ') spaces++;
+        else return spaces;
+        str++;
+    }
+    return 0;
+}
+
+void decrease_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+{
+    int indent = get_line_indent(text_buffer->lines[cursor->pos.l]);
+    int chars_to_remove = indent % INDENT_SPACES;
+    if (indent >= INDENT_SPACES && chars_to_remove == 0)
+    {
+        chars_to_remove = 4;
+    }
+    move_cursor_to_char(text_buffer, cursor, state, indent, false, false);
+    for (int i = 0; i < chars_to_remove; i++)
+    {
+        remove_char(text_buffer, cursor, state);
+    }
+}
+
+void decrease_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+{
+    if (is_selection_valid(state))
+    {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l)
+        {
+            Buf_Pos temp = start;
+            start = end;
+            end = temp;
+        }
+        for (int i = start.l; i <= end.l; i++)
+        {
+            move_cursor_to_line(text_buffer, cursor, state, i, false);
+            decrease_indent_level_line(text_buffer, cursor, state);
+        }
+        move_cursor_to_line(text_buffer, cursor, state, start.l, false);
+        int indent = get_line_indent(text_buffer->lines[cursor->pos.l]);
+        move_cursor_to_char(text_buffer, cursor, state, indent, false, false);
+    }
+    else
+    {
+        decrease_indent_level_line(text_buffer, cursor, state);
+    }
+}
+
+void increase_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+{
+    int indent = get_line_indent(text_buffer->lines[cursor->pos.l]);
+    int chars_to_add = INDENT_SPACES - (indent % INDENT_SPACES);
+    move_cursor_to_char(text_buffer, cursor, state, indent, false, false);
+    for (int i = 0; i < chars_to_add; i++)
+    {
+        insert_char(text_buffer, ' ', cursor, state, false);
+    }
+}
+
+void increase_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+{
+    if (is_selection_valid(state))
+    {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l)
+        {
+            Buf_Pos temp = start;
+            start = end;
+            end = temp;
+        }
+        for (int i = start.l; i <= end.l; i++)
+        {
+            move_cursor_to_line(text_buffer, cursor, state, i, false);
+            increase_indent_level_line(text_buffer, cursor, state);
+        }
+        move_cursor_to_line(text_buffer, cursor, state, start.l, false);
+        int indent = get_line_indent(text_buffer->lines[cursor->pos.l]);
+        move_cursor_to_char(text_buffer, cursor, state, indent, false, false);
+    }
+    else
+    {
+        increase_indent_level_line(text_buffer, cursor, state);
     }
 }
 
@@ -1102,7 +1234,7 @@ void paste_from_copy_buffer(Editor_State *state)
         {
             for (int char_i = 0; char_i < state->copy_buffer.lines[i].len; char_i++)
             {
-                insert_char(&state->text_buffer, state->copy_buffer.lines[i].str[char_i], &state->cursor, state);
+                insert_char(&state->text_buffer, state->copy_buffer.lines[i].str[char_i], &state->cursor, state, false);
             }
         }
     }
