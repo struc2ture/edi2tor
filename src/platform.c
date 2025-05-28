@@ -10,8 +10,8 @@
 
 #define PROGRAM_NAME "edi2tor"
 #define DL_PATH "./bin/editor.dylib"
-#define INITIAL_WINDOW_WIDTH 800
-#define INITIAL_WINDOW_HEIGHT 600
+#define INITIAL_WINDOW_WIDTH 1000
+#define INITIAL_WINDOW_HEIGHT 900
 
 typedef void (*_init_t)(GLFWwindow *window, void *_state);
 typedef void (*_hotreload_init_t)(GLFWwindow *window);

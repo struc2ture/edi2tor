@@ -98,7 +98,7 @@ void _init(GLFWwindow *window, void *_state)
     glfwSetWindowUserPointer(window, _state);
 
     state->shader_mvp_loc = glGetUniformLocation(state->prog, "u_mvp");
-    state->viewport.zoom = 1.0f;
+    state->viewport.zoom = DEFAULT_ZOOM;
     int window_w, window_h;
     glfwGetWindowSize(window, &window_w, &window_h);
     state->viewport.window_dim.x = window_w;
