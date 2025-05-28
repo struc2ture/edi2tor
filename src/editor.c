@@ -458,6 +458,19 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
             increase_indent_level(&state->text_buffer, &state->cursor, state);
         }
     }
+    else if (key == GLFW_KEY_C && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+    {
+        copy_at_selection(state);
+    }
+    else if (key == GLFW_KEY_V && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+    {
+        paste_from_copy_buffer(state);
+    }
+    else if (key == GLFW_KEY_X && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+    {
+        delete_current_line(state);
+    }
+
     else if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
     {
         state->debug_invis = !state->debug_invis;
@@ -482,14 +495,6 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
     {
         write_file(state->text_buffer, state->file_info);
-    }
-    else if (key == GLFW_KEY_C && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-    {
-        copy_at_selection(state);
-    }
-    else if (key == GLFW_KEY_V && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-    {
-        paste_from_copy_buffer(state);
     }
     else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
@@ -1030,6 +1035,13 @@ void increase_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor
     {
         increase_indent_level_line(text_buffer, cursor, state);
     }
+}
+
+void delete_current_line(Editor_State *state)
+{
+    remove_line(&state->text_buffer, state->cursor.pos.l);
+    move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l, false);
+    move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, false, false);
 }
 
 void open_file_for_edit(const char *path, Editor_State *state)

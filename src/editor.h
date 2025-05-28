@@ -155,6 +155,7 @@ void decrease_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, E
 void decrease_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
 void increase_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
 void increase_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state);
+void delete_current_line(Editor_State *state);
 
 void open_file_for_edit(const char *path, Editor_State *state);
 File_Info read_file(const char *path, Text_Buffer *text_buffer);
