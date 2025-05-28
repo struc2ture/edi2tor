@@ -8,6 +8,7 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
+#define DL_PATH "./bin/editor.dylib"
 #define INITIAL_WINDOW_WIDTH 800
 #define INITIAL_WINDOW_HEIGHT 600
 
@@ -78,7 +79,7 @@ int main()
     glfwMakeContextCurrent(window);
     printf("[PLATFORM] OpenGL version: %s\n", glGetString(GL_VERSION));
 
-    Dl_Info dl_info = load_dl("./bin/editor.dylib");
+    Dl_Info dl_info = load_dl(DL_PATH);
     void *_state = calloc(1, 4096);
     dl_info._init(window, _state);
     dl_info._hotreload_init(window);
@@ -87,7 +88,7 @@ int main()
         time_t dl_current_timestamp = get_file_timestamp(dl_info.dl_path);
         if (dl_current_timestamp != dl_info.dl_timestamp) {
             dlclose(dl_info.dl_handle);
-            dl_info = load_dl(dl_info.dl_path);
+            dl_info = load_dl(DL_PATH);
             dl_info._hotreload_init(window);
             printf("[PLATFORM] Reloaded dl\n");
         }

@@ -19,7 +19,7 @@
 #define MAX_CHARS_PER_LINE 1024
 
 #define FILE_PATH "src/editor.c"
-// #define FILE_PATH "res/mock.txt"
+// #define FILE_PATH "res/mock4.txt"
 
 const char *vs_src =
 "#version 410 core\n"
@@ -147,13 +147,14 @@ void fatal(const char *fmt, ...)
     vfprintf(stderr, fmt, args);
     va_end(args);
     fputc('\n', stderr);
+    bassert(false);
     exit(1);
 }
 
 void *xmalloc(size_t size)
 {
     void *ptr = malloc(size);
-    if (!ptr) fatal("malloc failed");
+    if (!ptr) fatal("malloc failed for %zu", size);
     return ptr;
 }
 
@@ -227,6 +228,7 @@ void extend_selection_to_cursor(Editor_State *state);
 
 bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
 void copy_at_selection(Editor_State *state);
+void paste_from_copy_buffer(Editor_State *state);
 
 void _init(GLFWwindow *window, void *_state)
 {
@@ -645,6 +647,10 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     {
         copy_at_selection(state);
     }
+    else if (key == GLFW_KEY_V && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+    {
+        paste_from_copy_buffer(state);
+    }
     else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
         state->viewport.zoom += 0.25f;
@@ -874,17 +880,25 @@ void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
 {
     int orig_cursor_line = cursor->pos.l;
     cursor->pos.l = to_line;
-    if (cursor->pos.l < 0) {
+    if (cursor->pos.l < 0)
+    {
         cursor->pos.l = 0;
         cursor->pos.c = 0;
     }
-    if (cursor->pos.l >= text_buffer->line_count) {
+    if (cursor->pos.l >= text_buffer->line_count)
+    {
         cursor->pos.l = text_buffer->line_count - 1;
         cursor->pos.c = text_buffer->lines[cursor->pos.l].len - 1;
     }
-    if (cursor->pos.l != orig_cursor_line) {
+    if (cursor->pos.l != orig_cursor_line)
+    {
+        if (cursor->pos.c >= text_buffer->lines[cursor->pos.l].len)
+        {
+            cursor->pos.c = text_buffer->lines[cursor->pos.l].len - 1;
+        }
         cursor->frame_count = 0;
-        if (snap_viewport) {
+        if (snap_viewport)
+        {
             viewport_snap_to_cursor(cursor, &state->viewport, state);
         }
     }
@@ -895,25 +909,35 @@ void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
     int prev_cursor_char = cursor->pos.c;
     (void)state;
     cursor->pos.c = to_char;
-    if (cursor->pos.c < 0) {
-        if (cursor->pos.l > 0 && can_switch_line) {
+    if (cursor->pos.c < 0)
+    {
+        if (cursor->pos.l > 0 && can_switch_line)
+        {
             cursor->pos.l--;
             cursor->pos.c = text_buffer->lines[cursor->pos.l].len - 1;
-        } else {
+        }
+        else
+        {
             cursor->pos.c = 0;
         }
     }
-    if (cursor->pos.c >= text_buffer->lines[cursor->pos.l].len) {
-        if (cursor->pos.l < text_buffer->line_count - 1 && can_switch_line) {
+    if (cursor->pos.c >= text_buffer->lines[cursor->pos.l].len)
+    {
+        if (cursor->pos.l < text_buffer->line_count - 1 && can_switch_line)
+        {
             cursor->pos.l++;
             cursor->pos.c = 0;
-        } else {
+        }
+        else
+        {
             cursor->pos.c = text_buffer->lines[cursor->pos.l].len - 1;
         }
     }
-    if (cursor->pos.c != prev_cursor_char) {
+    if (cursor->pos.c != prev_cursor_char)
+    {
         cursor->frame_count = 0;
-        if (snap_viewport) {
+        if (snap_viewport)
+        {
             viewport_snap_to_cursor(cursor, &state->viewport, state);
         }
     }
@@ -1155,6 +1179,12 @@ void copy_at_selection(Editor_State *state)
             {
                 start_c = start.c;
                 end_c = end.c;
+                if (start_c > end_c)
+                {
+                    int temp = start_c;
+                    start_c = end_c;
+                    end_c = temp;
+                }
             }
             else if (i == start.l)
             {
@@ -1178,5 +1208,23 @@ void copy_at_selection(Editor_State *state)
     else
     {
         trace_log("Nothing to copy");
+    }
+}
+
+void paste_from_copy_buffer(Editor_State *state)
+{
+    if (state->copy_buffer.line_count > 0)
+    {
+        for (int i = 0; i < state->copy_buffer.line_count; i++)
+        {
+            for (int char_i = 0; char_i < state->copy_buffer.lines[i].len; char_i++)
+            {
+                insert_char(&state->text_buffer, state->copy_buffer.lines[i].str[char_i], &state->cursor, state);
+            }
+        }
+    }
+    else
+    {
+        trace_log("Nothing to paste");
     }
 }
