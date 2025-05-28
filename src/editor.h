@@ -71,7 +71,6 @@ typedef struct {
 } Text_Cursor;
 
 typedef struct {
-    bool is_active;
     Buf_Pos start;
     Buf_Pos end;
 } Text_Selection;
@@ -134,6 +133,10 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void update_shader_mvp(Editor_State *state);
 void viewport_snap_to_cursor(Text_Cursor *cursor, Viewport *viewport, Editor_State *state);
 
+bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp);
+bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
+void cancel_selection(Editor_State *state);
+
 void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
 void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
 
@@ -152,6 +155,7 @@ void write_file(Text_Buffer text_buffer, File_Info file_info);
 
 void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);
+bool is_selection_valid(const Editor_State *state);
 
 void copy_at_selection(Editor_State *state);
 void paste_from_copy_buffer(Editor_State *state);
@@ -159,6 +163,5 @@ void paste_from_copy_buffer(Editor_State *state);
 void validate_text_buffer(Text_Buffer *text_buffer);
 
 void rebuild_dl();
-bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
 void insert_go_to_line_char(Editor_State *state, char c);
 void convert_to_debug_invis(char *string);

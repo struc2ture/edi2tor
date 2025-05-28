@@ -160,7 +160,7 @@ void _render(GLFWwindow *window, void *_state)
         draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
     }
 
-    if (state->selection.is_active) {
+    if (is_selection_valid(state)) {
         Buf_Pos start = state->selection.start;
         Buf_Pos end = state->selection.end;
         if (start.l > end.l) {
@@ -253,7 +253,7 @@ void _render(GLFWwindow *window, void *_state)
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
         bool is_just_pressed = !state->left_mouse_down;
         bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        if (is_shift_pressed && is_just_pressed && !state->selection.is_active) {
+        if (is_shift_pressed && is_just_pressed && !is_selection_valid(state)) {
             start_selection_at_cursor(state);
         }
         Buf_Pos bp = get_buf_pos_under_mouse(window, state);
@@ -300,7 +300,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     }
     else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
         {
             start_selection_at_cursor(state);
         }
@@ -319,12 +319,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
         else
         {
-            state->selection.is_active = false;
+            cancel_selection(state);
         }
     }
     else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
         {
             start_selection_at_cursor(state);
         }
@@ -343,12 +343,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
         else
         {
-            state->selection.is_active = false;
+            cancel_selection(state);
         }
     }
     else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
         {
             start_selection_at_cursor(state);
         }
@@ -366,12 +366,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
         else
         {
-            state->selection.is_active = false;
+            cancel_selection(state);
         }
     }
     else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
-        if (mods & GLFW_MOD_SHIFT && !state->selection.is_active)
+        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
         {
             start_selection_at_cursor(state);
         }
@@ -389,7 +389,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
         else
         {
-            state->selection.is_active = false;
+            cancel_selection(state);
         }
     }
     else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
@@ -705,6 +705,17 @@ void viewport_snap_to_cursor(Text_Cursor *cursor, Viewport *viewport, Editor_Sta
     }
 }
 
+bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp)
+{
+    bool is_valid = bp.l >= 0 && bp.l < tb->line_count &&
+        bp.c >= 0 && bp.c < tb->lines[bp.l].len;
+    return is_valid;
+}
+
+bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b)
+{
+    return a.l == b.l && a.c == b.c;
+}
 
 void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport)
 {
@@ -916,7 +927,6 @@ void validate_text_buffer(Text_Buffer *text_buffer)
 
 void start_selection_at_cursor(Editor_State *state)
 {
-    state->selection.is_active = true;
     state->selection.start = state->cursor.pos;
     state->selection.end = state->selection.start;
 }
@@ -926,9 +936,24 @@ void extend_selection_to_cursor(Editor_State *state)
     state->selection.end = state->cursor.pos;
 }
 
+bool is_selection_valid(const Editor_State *state)
+{
+    const Text_Selection *sel = &state->selection;
+    bool is_valid = is_buf_pos_valid(&state->text_buffer, sel->start) &&
+        is_buf_pos_valid(&state->text_buffer, sel->end) &&
+        !is_buf_pos_equal(sel->start, sel->end);
+    return is_valid;
+}
+
+void cancel_selection(Editor_State *state)
+{
+    state->selection.start = (Buf_Pos){ -1, -1 };
+    state->selection.end = (Buf_Pos){ -1, -1 };
+}
+
 void copy_at_selection(Editor_State *state)
 {
-    if (state->selection.is_active)
+    if (is_selection_valid(state))
     {
         Buf_Pos start = state->selection.start;
         Buf_Pos end = state->selection.end;
@@ -1005,11 +1030,6 @@ void rebuild_dl()
         fprintf(stderr, "Build failed with code %d\n", result);
     }
     trace_log("Rebuilt dl");
-}
-
-bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b)
-{
-    return a.l == b.l && a.c == b.c;
 }
 
 void insert_go_to_line_char(Editor_State *state, char c)
