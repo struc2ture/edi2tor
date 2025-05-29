@@ -448,6 +448,7 @@ Render_Font load_font(const char *path)
     void *temp_bitmap = xcalloc(512 * 512);
 
     stbtt_BakeFontBitmap(file_bytes, 0, 32.0, temp_bitmap, 512, 512, 32, 96, font.cdata);
+    flip_bitmap(temp_bitmap, 512, 512);
 
     free(file_bytes);
 
