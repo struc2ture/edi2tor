@@ -137,8 +137,10 @@ void _render(GLFWwindow *window, void *_state)
     float line_height = get_font_line_height(&state->font);
     for (int i = 0; i < state->text_buffer.line_count; i++)
     {
+        Rect_Bounds bounds = get_string_bounds(state->text_buffer.lines[i].str, &state->font, 0, y);
+        draw_quad(bounds.min.x, bounds.min.y, bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, (unsigned char[]){255, 255, 255, 255});
         draw_string_ttf(state->text_buffer.lines[i].str, &state->font, 0, y, (unsigned char[]){255, 0, 0, 255});
-        y += line_height;
+        y += line_height + 3;
     }
 
     draw_quad(0, 0, 512, 512, (unsigned char[]){0, 255, 255, 50});
@@ -477,45 +479,64 @@ Render_Font load_font(const char *path)
 
 float get_font_line_height(Render_Font *font)
 {
-    float height = font->ascent - font->descent + font->line_gap;
+    float height = font->ascent - font->descent;
     return height;
 }
 
-void draw_string_ttf(const char *str, Render_Font *font, float x, float y, unsigned char color[4])
+Rect_Bounds get_string_bounds(const char *str, Render_Font *font, float x, float y)
 {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font->texture);
+    Rect_Bounds r;
+    r.min.x = x;
+    r.min.y = y;
 
-    y += font->ascent;
     while (*str)
     {
         stbtt_aligned_quad q;
         stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str-32, &x, &y ,&q, 1);
-
-        Vert_Buffer vert_buf = {0};
-        vert_buf.vert_count = 6;
-        vert_buf.verts[0].x = q.x0; vert_buf.verts[0].y = q.y0; vert_buf.verts[0].u = q.s0; vert_buf.verts[0].v = q.t0;
-        vert_buf.verts[1].x = q.x0; vert_buf.verts[1].y = q.y1; vert_buf.verts[1].u = q.s0; vert_buf.verts[1].v = q.t1;
-        vert_buf.verts[2].x = q.x1; vert_buf.verts[2].y = q.y0; vert_buf.verts[2].u = q.s1; vert_buf.verts[2].v = q.t0;
-        vert_buf.verts[3].x = q.x1; vert_buf.verts[3].y = q.y0; vert_buf.verts[3].u = q.s1; vert_buf.verts[3].v = q.t0;
-        vert_buf.verts[4].x = q.x0; vert_buf.verts[4].y = q.y1; vert_buf.verts[4].u = q.s0; vert_buf.verts[4].v = q.t1;
-        vert_buf.verts[5].x = q.x1; vert_buf.verts[5].y = q.y1; vert_buf.verts[5].u = q.s1; vert_buf.verts[5].v = q.t1;
-        for (int i = 0; i < 6; i++) {
-            vert_buf.verts[i].r = color[0];
-            vert_buf.verts[i].g = color[1];
-            vert_buf.verts[i].b = color[2];
-            vert_buf.verts[i].a = color[3];
-        }
-        glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-        glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-
         str++;
     }
 
+    r.max.x = x;
+    r.max.y = r.min.y + get_font_line_height(font);
+    return r;
+}
+
+Vert make_vert(float x, float y, float u, float v, unsigned char color[4])
+{
+    Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
+    return vert;
+}
+
+void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert)
+{
+    bassert(vert_buffer->vert_count < VERT_MAX);
+    vert_buffer->verts[vert_buffer->vert_count++] = vert;
+}
+
+void draw_string_ttf(const char *str, Render_Font *font, float x, float y, unsigned char color[4])
+{
+    y += font->ascent;
+    Vert_Buffer vert_buf = {0};
+    while (*str)
+    {
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str-32, &x, &y ,&q, 1);
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
+        str++;
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, font->texture);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
     glBindTexture(GL_TEXTURE_2D, font->white_texture);
 }
 
-void draw_quad(int x, int y, int width, int height, unsigned char color[4])
+void draw_quad(float x, float y, float width, float height, unsigned char color[4])
 {
     Vert_Buffer vert_buf = {0};
     vert_buf.vert_count = 6;
