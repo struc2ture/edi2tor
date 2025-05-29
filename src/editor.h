@@ -21,8 +21,8 @@
 #define DEFAULT_ZOOM 1.0f
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 
-#define FILE_PATH "src/editor.c"
-// #define FILE_PATH "res/mock4.txt"
+// #define FILE_PATH "src/editor.c"
+#define FILE_PATH "res/mock4.txt"
 
 typedef struct {
     float x, y;
@@ -88,8 +88,13 @@ typedef struct {
 } Copy_Buffer;
 
 typedef struct {
-    stbtt_bakedchar cdata[96];
+    stbtt_bakedchar *char_data;
+    int char_count;
     GLuint texture;
+    GLuint white_texture;
+    float size;
+    float ascent, descent, line_gap;
+    int atlas_w, atlas_h;
 } Render_Font;
 
 typedef struct {
@@ -128,11 +133,12 @@ void window_size_callback(GLFWwindow *window, int w, int h);
 void refresh_callback(GLFWwindow *window);
 
 Render_Font load_font(const char *path);
+float get_font_line_height(Render_Font *font);
+void draw_string_ttf(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
 
 void render_old(GLFWwindow *window, Editor_State *state);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
 void draw_quad(int x, int y, int width, int height, unsigned char color[4]);
-void draw_texture(int x, int y, int width, int height, unsigned char color[4]);
 void draw_string(int x, int y, char *string, unsigned char color[4]);
 void draw_content_string(int x, int y, char *string, unsigned char color[4], Editor_State *state);
 
