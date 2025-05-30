@@ -133,17 +133,8 @@ void _render(GLFWwindow *window, void *_state)
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    float y = 0;
-    float line_height = get_font_line_height(&state->font);
-    for (int i = 0; i < state->text_buffer.line_count; i++)
-    {
-        Rect_Bounds bounds = get_string_bounds(state->text_buffer.lines[i].str, &state->font, 0, y);
-        draw_quad(bounds.min.x, bounds.min.y, bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, (unsigned char[]){255, 255, 255, 255});
-        draw_string_ttf(state->text_buffer.lines[i].str, &state->font, 0, y, (unsigned char[]){255, 0, 0, 255});
-        y += line_height + 3;
-    }
-
-    draw_quad(0, 0, 512, 512, (unsigned char[]){0, 255, 255, 50});
+    draw_text_buffer(state);
+    draw_cursor(state);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
@@ -439,6 +430,18 @@ void refresh_callback(GLFWwindow* window) {
     _render(window, state);
 }
 
+Vert make_vert(float x, float y, float u, float v, unsigned char color[4])
+{
+    Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
+    return vert;
+}
+
+void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert)
+{
+    bassert(vert_buffer->vert_count < VERT_MAX);
+    vert_buffer->verts[vert_buffer->vert_count++] = vert;
+}
+
 Render_Font load_font(const char *path)
 {
     Render_Font font = {0};
@@ -483,7 +486,7 @@ float get_font_line_height(Render_Font *font)
     return height;
 }
 
-Rect_Bounds get_string_bounds(const char *str, Render_Font *font, float x, float y)
+Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y)
 {
     Rect_Bounds r;
     r.min.x = x;
@@ -501,19 +504,42 @@ Rect_Bounds get_string_bounds(const char *str, Render_Font *font, float x, float
     return r;
 }
 
-Vert make_vert(float x, float y, float u, float v, unsigned char color[4])
+Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
 {
-    Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
-    return vert;
+    Rect_Bounds r = {0};
+    r.max.y = get_font_line_height(font);
+    float x = 0, y = 0;
+    int i = 0;
+    bool found_max = false;
+    while (*str)
+    {
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str-32, &x, &y ,&q, 1);
+        if (i == char_i)
+        {
+            r.max.x = x;
+            found_max = true;
+            break;
+        } else
+        {
+            r.min.x = x;
+        }
+        str++;
+        i++;
+    }
+    if (!found_max)
+    {
+        // If reached the end of the string without reaching the desired char_i,
+        // return rect of one char after the string
+        // use ' ' char to advance x
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, ' '-32, &x, &y ,&q, 1);
+        r.max.x = x;
+    }
+    return r;
 }
 
-void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert)
-{
-    bassert(vert_buffer->vert_count < VERT_MAX);
-    vert_buffer->verts[vert_buffer->vert_count++] = vert;
-}
-
-void draw_string_ttf(const char *str, Render_Font *font, float x, float y, unsigned char color[4])
+void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4])
 {
     y += font->ascent;
     Vert_Buffer vert_buf = {0};
@@ -536,6 +562,7 @@ void draw_string_ttf(const char *str, Render_Font *font, float x, float y, unsig
     glBindTexture(GL_TEXTURE_2D, font->white_texture);
 }
 
+
 void draw_quad(float x, float y, float width, float height, unsigned char color[4])
 {
     Vert_Buffer vert_buf = {0};
@@ -556,6 +583,49 @@ void draw_quad(float x, float y, float width, float height, unsigned char color[
     }
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+}
+
+void draw_text_buffer(Editor_State *state)
+{
+    float y = 0;
+    float line_height = get_font_line_height(&state->font);
+
+    for (int i = 0; i < state->text_buffer.line_count; i++)
+    {
+        Rect_Bounds string_rect = get_string_rect(state->text_buffer.lines[i].str, &state->font, 0, y);
+        bool is_seen = is_canvas_rect_in_viewport(state->viewport, string_rect);
+        if (is_seen)
+        {
+            draw_quad(string_rect.min.x,
+                string_rect.min.y,
+                string_rect.max.x - string_rect.min.x,
+                string_rect.max.y - string_rect.min.y,
+                (unsigned char[]){255, 255, 255, 255});
+            draw_string(state->text_buffer.lines[i].str, &state->font, 0, y, (unsigned char[]){255, 0, 0, 255});
+        }
+        y += line_height;
+    }
+}
+
+void draw_cursor(Editor_State *state)
+{
+    if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
+    {
+        Rect_Bounds cursor_rect = get_string_char_rect(state->text_buffer.lines[state->cursor.pos.l].str, &state->font, state->cursor.pos.c);
+        bool is_seen = is_canvas_rect_in_viewport(state->viewport, cursor_rect);
+        if (is_seen)
+        {
+            float line_height = get_font_line_height(&state->font);
+            float y = state->cursor.pos.l * line_height;
+            cursor_rect.min.y += y;
+            cursor_rect.max.y += y;
+            draw_quad(cursor_rect.min.x,
+                cursor_rect.min.y,
+                cursor_rect.max.x - cursor_rect.min.x,
+                cursor_rect.max.y - cursor_rect.min.y,
+                (unsigned char[]){0, 0, 255, 255});
+        }
+    }
 }
 
 void render_old(GLFWwindow *window, Editor_State *state)
@@ -582,7 +652,7 @@ void render_old(GLFWwindow *window, Editor_State *state)
             char line_i_str_buf[256];
             snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i + 1);
             unsigned char line_num_color[] = { 140, 140, 140, 255 };
-            draw_string(x_offset, y_offset, line_i_str_buf, line_num_color);
+            draw_string_old(x_offset, y_offset, line_i_str_buf, line_num_color);
             x_offset += x_line_num_offset;
 
             draw_content_string(x_offset, y_offset, state->text_buffer.lines[line_i].str, color, state);
@@ -666,7 +736,7 @@ void render_old(GLFWwindow *window, Editor_State *state)
                 state->debug_invis,
                 state->text_buffer.line_count,
                 lines_rendered);
-            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+            draw_string_old(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
         } else {
             snprintf(line_i_str_buf, sizeof(line_i_str_buf),
                 "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
@@ -677,7 +747,7 @@ void render_old(GLFWwindow *window, Editor_State *state)
                 state->text_buffer.line_count,
                 lines_rendered,
                 state->go_to_line_chars);
-            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
+            draw_string_old(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
         }
 
         Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
@@ -693,7 +763,7 @@ void render_old(GLFWwindow *window, Editor_State *state)
             state->viewport.zoom,
             VEC2_ARG(mouse_window_pos),
             VEC2_ARG(mouse_canvas_pos));
-        draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
+        draw_string_old(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
     }
 
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
@@ -746,7 +816,7 @@ void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer
 }
 
 
-void draw_string(int x, int y, char *string, unsigned char color[4])
+void draw_string_old(int x, int y, char *string, unsigned char color[4])
 {
     Vert_Buffer vert_buf = {0};
     render_string(x, y, string, color, &vert_buf);
@@ -760,7 +830,7 @@ void draw_content_string(int x, int y, char *string, unsigned char color[4], Edi
         string = xstrdup(string);
         convert_to_debug_invis(string);
     }
-    draw_string(x, y, string, color);
+    draw_string_old(x, y, string, color);
     if (state->debug_invis) {
         free(string);
     }
@@ -896,6 +966,14 @@ void viewport_snap_to_cursor(Text_Cursor *cursor, Viewport *viewport, Editor_Sta
         }
         update_shader_mvp(state);
     }
+}
+
+bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect)
+{
+    Rect_Bounds viewport_bounds = get_viewport_bounds(viewport);
+    bool intersect = rect.min.x < viewport_bounds.max.x && rect.max.x > viewport_bounds.min.x &&
+        rect.min.y < viewport_bounds.max.y && rect.max.y > viewport_bounds.min.y;
+    return intersect;
 }
 
 bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp)

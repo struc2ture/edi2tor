@@ -21,8 +21,8 @@
 #define DEFAULT_ZOOM 1.0f
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 
-// #define FILE_PATH "src/editor.c"
-#define FILE_PATH "res/mock5.txt"
+#define FILE_PATH "src/editor.c"
+// #define FILE_PATH "res/mock5.txt"
 
 typedef struct {
     float x, y;
@@ -137,13 +137,16 @@ void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 
 Render_Font load_font(const char *path);
 float get_font_line_height(Render_Font *font);
-Rect_Bounds get_string_bounds(const char *str, Render_Font *font, float x, float y);
-void draw_string_ttf(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
+Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y);
+Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i);
+void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
+void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
+void draw_text_buffer(Editor_State *state);
+void draw_cursor(Editor_State *state);
 
 void render_old(GLFWwindow *window, Editor_State *state);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
-void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
-void draw_string(int x, int y, char *string, unsigned char color[4]);
+void draw_string_old(int x, int y, char *string, unsigned char color[4]);
 void draw_content_string(int x, int y, char *string, unsigned char color[4], Editor_State *state);
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
@@ -159,6 +162,7 @@ Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void update_shader_mvp(Editor_State *state);
 void viewport_snap_to_cursor(Text_Cursor *cursor, Viewport *viewport, Editor_State *state);
+bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect);
 
 bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp);
 bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
