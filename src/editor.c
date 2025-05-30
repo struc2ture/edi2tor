@@ -527,7 +527,7 @@ Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_
             c = ' ';
         }
         stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c-32, &x, &y, &q, 1);
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c - 32, &x, &y, &q, 1);
     }
 
     // If reached end_char index, x will be max_x (end_char itself is not included)
@@ -546,8 +546,13 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
     bool found_max = false;
     while (*str)
     {
+        char c = *str;
+        if (c == '\n')
+        {
+            c = ' ';
+        }
         stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str-32, &x, &y ,&q, 1);
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c - 32, &x, &y ,&q, 1);
         if (i == char_i)
         {
             r.max.x = x;
@@ -560,16 +565,7 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
         str++;
         i++;
     }
-    // TODO: Debug this
-    if (!found_max)
-    {
-        // If reached the end of the string without reaching the desired char_i,
-        // return rect of one char after the string
-        // use ' ' char to advance x
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, ' '-32, &x, &y ,&q, 1);
-        r.max.x = x;
-    }
+    bassert(found_max);
     return r;
 }
 
