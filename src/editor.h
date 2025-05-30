@@ -132,6 +132,7 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
 void framebuffer_size_callback(GLFWwindow *window, int w, int h);
 void window_size_callback(GLFWwindow *window, int w, int h);
 void refresh_callback(GLFWwindow *window);
+void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
 Vert make_vert(float x, float y, float u, float v, unsigned char color[4]);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
@@ -141,6 +142,7 @@ float get_font_line_height(Render_Font *font);
 Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y);
 Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char, bool include_new_line_char);
 Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i);
+int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x);
 void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
 void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
 void draw_text_buffer(Editor_State *state);

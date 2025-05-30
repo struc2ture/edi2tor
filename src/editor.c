@@ -137,6 +137,8 @@ void _render(GLFWwindow *window, void *_state)
     draw_cursor(state);
     draw_selection(state);
 
+    handle_mouse_input(window, state);
+
     glfwSwapBuffers(window);
     glfwPollEvents();
 
@@ -431,6 +433,30 @@ void refresh_callback(GLFWwindow* window) {
     _render(window, state);
 }
 
+void handle_mouse_input(GLFWwindow *window, Editor_State *state)
+{
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        bool is_just_pressed = !state->left_mouse_down;
+        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        if (is_shift_pressed && is_just_pressed && !is_selection_valid(state)) {
+            start_selection_at_cursor(state);
+        }
+        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
+        extend_selection_to_cursor(state);
+        if (!is_shift_pressed && is_just_pressed) {
+            start_selection_at_cursor(state);
+        }
+        if (is_shift_pressed || !is_just_pressed) {
+            extend_selection_to_cursor(state);
+        }
+        state->left_mouse_down = true;
+    } else {
+        state->left_mouse_down = false;
+    }
+}
+
 Vert make_vert(float x, float y, float u, float v, unsigned char color[4])
 {
     Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
@@ -569,6 +595,24 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
     return r;
 }
 
+int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x)
+{
+    int char_i = 0;
+    float str_x = 0, str_y = 0;
+    while (*str)
+    {
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str - 32, &str_x, &str_y ,&q, 1);
+        if (str_x > x)
+        {
+            return char_i;
+        }
+        char_i++;
+        str++;
+    }
+    return char_i;
+}
+
 void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4])
 {
     y += font->ascent;
@@ -642,13 +686,14 @@ void draw_cursor(Editor_State *state)
     if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
     {
         Rect_Bounds cursor_rect = get_string_char_rect(state->text_buffer.lines[state->cursor.pos.l].str, &state->font, state->cursor.pos.c);
+        float line_height = get_font_line_height(&state->font);
+        float y = state->cursor.pos.l * line_height;
+        cursor_rect.min.y += y;
+        cursor_rect.max.y += y;
+
         bool is_seen = is_canvas_rect_in_viewport(state->viewport, cursor_rect);
         if (is_seen)
         {
-            float line_height = get_font_line_height(&state->font);
-            float y = state->cursor.pos.l * line_height;
-            cursor_rect.min.y += y;
-            cursor_rect.max.y += y;
             draw_quad(cursor_rect.min.x,
                 cursor_rect.min.y,
                 cursor_rect.max.x - cursor_rect.min.x,
@@ -1007,15 +1052,14 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
 {
     Buf_Pos r;
     Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
-    r.l = pos.y / (float)LINE_HEIGHT;
+    r.l = pos.y / (float)get_font_line_height(&state->font);
     r.c = 0;
     if (r.l < 0) {
         r.l = 0;
     } else if (r.l >= state->text_buffer.line_count) {
         r.l = state->text_buffer.line_count - 1;
     }
-    float x_line_num_offset = stb_easy_font_width("000: ");
-    r.c = stb_easy_font_char_at_pos(state->text_buffer.lines[r.l].str, pos.x - x_line_num_offset);
+    r.c = get_char_i_at_pos_in_string(state->text_buffer.lines[r.l].str, &state->font, pos.x);
     return r;
 }
 
