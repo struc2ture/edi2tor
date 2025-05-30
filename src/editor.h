@@ -13,6 +13,7 @@
 #define SCROLL_SENS 10.0f
 #define LINE_HEIGHT 15
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
+#define VIEWPORT_CURSOR_BOUNDARY_COLUMNS 5
 #define ENABLE_STATUS_BAR true
 #define GO_TO_LINE_CHAR_MAX 32
 #define MAX_LINES 16384
@@ -139,10 +140,12 @@ void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 
 Render_Font load_font(const char *path);
 float get_font_line_height(Render_Font *font);
+float get_char_width(char c, Render_Font *font);
 Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y);
 Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char, bool include_new_line_char);
 Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x);
+Rect_Bounds get_cursor_rect(Editor_State *state);
 void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
 void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
 void draw_text_buffer(Editor_State *state);
@@ -159,6 +162,7 @@ void make_view(float offset_x, float offset_y, float scale, float *out);
 void mul_mat4(const float *a, const float *b, float *out);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);
+Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font);
 Vec_2 get_viewport_dim(Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
@@ -166,7 +170,7 @@ bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void update_shader_mvp(Editor_State *state);
-void viewport_snap_to_cursor(Text_Cursor *cursor, Viewport *viewport, Editor_State *state);
+void viewport_snap_to_cursor(Editor_State *state);
 bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect);
 
 bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp);
