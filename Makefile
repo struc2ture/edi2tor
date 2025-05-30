@@ -12,7 +12,7 @@ bin:
 run: bin/platform
 	bin/platform
 
-debug:
+debug: bin/platform
 	lldb -s .lldb
 
 dl: bin/editor.dylib

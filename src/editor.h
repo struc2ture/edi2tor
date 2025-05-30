@@ -20,6 +20,7 @@
 #define INDENT_SPACES 4
 #define DEFAULT_ZOOM 1.0f
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
+#define FONT_SIZE 20.0f
 
 #define FILE_PATH "src/editor.c"
 // #define FILE_PATH "res/mock5.txt"
@@ -138,11 +139,13 @@ void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 Render_Font load_font(const char *path);
 float get_font_line_height(Render_Font *font);
 Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y);
+Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char, bool include_new_line_char);
 Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i);
 void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
 void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
 void draw_text_buffer(Editor_State *state);
 void draw_cursor(Editor_State *state);
+void draw_selection(Editor_State *state);
 
 void render_old(GLFWwindow *window, Editor_State *state);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);

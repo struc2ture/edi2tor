@@ -135,6 +135,7 @@ void _render(GLFWwindow *window, void *_state)
 
     draw_text_buffer(state);
     draw_cursor(state);
+    draw_selection(state);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
@@ -456,7 +457,7 @@ Render_Font load_font(const char *path)
 
     void *atlas_bitmap = xcalloc(512 * 512);
 
-    font.size = 32.0f;
+    font.size = FONT_SIZE;
     font.atlas_w = 512;
     font.atlas_h = 512;
     font.char_count = 96;
@@ -504,6 +505,38 @@ Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y
     return r;
 }
 
+Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char, bool include_new_line_char)
+{
+    bassert(start_char >= 0);
+    bassert(start_char < end_char);
+    Rect_Bounds r = {0};
+    r.min.y = 0;
+    r.max.y = get_font_line_height(font);
+    float x = 0, y = 0;
+    for (int i = 0; i < end_char && str[i]; i++)
+    {
+        // Capture the x before stbtt_GetBakedQuad advances x past the starting char
+        if (i == start_char)
+        {
+            r.min.x = x;
+        }
+
+        char c = str[i];
+        if (include_new_line_char && c == '\n')
+        {
+            c = ' ';
+        }
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c-32, &x, &y, &q, 1);
+    }
+
+    // If reached end_char index, x will be max_x (end_char itself is not included)
+    // If reached null terminator, it will still be valid, highlighting the whole string,
+    // stbtt_GetBakedQuad setting x past the advance of the last char
+    r.max.x = x;
+    return r;
+}
+
 Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
 {
     Rect_Bounds r = {0};
@@ -527,6 +560,7 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
         str++;
         i++;
     }
+    // TODO: Debug this
     if (!found_max)
     {
         // If reached the end of the string without reaching the desired char_i,
@@ -596,12 +630,12 @@ void draw_text_buffer(Editor_State *state)
         bool is_seen = is_canvas_rect_in_viewport(state->viewport, string_rect);
         if (is_seen)
         {
-            draw_quad(string_rect.min.x,
-                string_rect.min.y,
-                string_rect.max.x - string_rect.min.x,
-                string_rect.max.y - string_rect.min.y,
-                (unsigned char[]){255, 255, 255, 255});
-            draw_string(state->text_buffer.lines[i].str, &state->font, 0, y, (unsigned char[]){255, 0, 0, 255});
+            // draw_quad(string_rect.min.x,
+            //     string_rect.min.y,
+            //     string_rect.max.x - string_rect.min.x,
+            //     string_rect.max.y - string_rect.min.y,
+            //     (unsigned char[]){255, 255, 255, 255});
+            draw_string(state->text_buffer.lines[i].str, &state->font, 0, y, (unsigned char[]){255, 255, 255, 255});
         }
         y += line_height;
     }
@@ -624,6 +658,55 @@ void draw_cursor(Editor_State *state)
                 cursor_rect.max.x - cursor_rect.min.x,
                 cursor_rect.max.y - cursor_rect.min.y,
                 (unsigned char[]){0, 0, 255, 255});
+        }
+    }
+}
+
+void draw_selection(Editor_State *state)
+{
+    if (is_selection_valid(state)) {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l || (start.l == end.l && start.c > end.c)) {
+            Buf_Pos tmp = start;
+            start = end;
+            end = tmp;
+        }
+        for (int i = start.l; i <= end.l; i++)
+        {
+            Text_Line *line = &state->text_buffer.lines[i];
+            int h_start, h_end;
+            bool extend_to_new_line_char = false;
+            if (i == start.l && i == end.l) {
+                h_start = start.c;
+                h_end = end.c;
+            } else if (i == start.l) {
+                h_start = start.c;
+                h_end = line->len;
+                extend_to_new_line_char = true;
+            } else if (i == end.l) {
+                h_start = 0;
+                h_end = end.c;
+            } else {
+                h_start = 0;
+                h_end = line->len;
+                extend_to_new_line_char = true;
+            }
+            if (h_end > h_start)
+            {
+                Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end, true);
+
+                rect.min.y += i * get_font_line_height(&state->font);
+                rect.max.y += i * get_font_line_height(&state->font);
+
+                (void)extend_to_new_line_char;
+
+                if (is_canvas_rect_in_viewport(state->viewport, rect))
+                {
+                    unsigned char color[] = { 200, 200, 200, 130 };
+                    draw_quad(rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y, color);
+                }
+            }
         }
     }
 }
