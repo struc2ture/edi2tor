@@ -515,58 +515,48 @@ float get_font_line_height(Render_Font *font)
 
 float get_char_width(char c, Render_Font *font)
 {
-    float x = 0, y = 0;
-    stbtt_aligned_quad q;
-    stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c-32, &x, &y ,&q, 1);
-    return x;
+    float char_width = font->char_data[c - 32].xadvance;
+    return char_width;
 }
 
 Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y)
 {
     Rect_Bounds r;
     r.min.x = x;
+    r.max.x = r.min.x;
     r.min.y = y;
-
+    r.max.y = r.min.y + get_font_line_height(font);
     while (*str)
     {
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str-32, &x, &y ,&q, 1);
+        r.max.x += get_char_width(*str, font);
         str++;
     }
-
-    r.max.x = x;
-    r.max.y = r.min.y + get_font_line_height(font);
     return r;
 }
 
-Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char, bool include_new_line_char)
+Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char)
 {
     bassert(start_char >= 0);
     bassert(start_char < end_char);
     Rect_Bounds r = {0};
-    r.min.y = 0;
     r.max.y = get_font_line_height(font);
-    float x = 0, y = 0;
+    float x = 0;
     for (int i = 0; i < end_char && str[i]; i++)
     {
-        // Capture the x before stbtt_GetBakedQuad advances x past the starting char
         if (i == start_char)
         {
             r.min.x = x;
         }
 
         char c = str[i];
-        if (include_new_line_char && c == '\n')
+        if (str[i + 1 == '\0'] && c == '\n')
         {
             c = ' ';
         }
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c - 32, &x, &y, &q, 1);
+        x += get_char_width(c, font);
     }
-
     // If reached end_char index, x will be max_x (end_char itself is not included)
-    // If reached null terminator, it will still be valid, highlighting the whole string,
-    // stbtt_GetBakedQuad setting x past the advance of the last char
+    // If reached null terminator, it will still be valid, highlighting the whole string.
     r.max.x = x;
     return r;
 }
@@ -575,7 +565,7 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
 {
     Rect_Bounds r = {0};
     r.max.y = get_font_line_height(font);
-    float x = 0, y = 0;
+    float x = 0;
     int i = 0;
     bool found_max = false;
     while (*str)
@@ -585,14 +575,14 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
         {
             c = ' ';
         }
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, c - 32, &x, &y ,&q, 1);
+        x += get_char_width(c, font);
         if (i == char_i)
         {
             r.max.x = x;
             found_max = true;
             break;
-        } else
+        }
+        else
         {
             r.min.x = x;
         }
@@ -606,11 +596,10 @@ Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
 int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x)
 {
     int char_i = 0;
-    float str_x = 0, str_y = 0;
+    float str_x = 0;
     while (*str)
     {
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str - 32, &str_x, &str_y ,&q, 1);
+        str_x += get_char_width(*str, font);
         if (str_x > x)
         {
             return char_i;
@@ -749,7 +738,7 @@ void draw_selection(Editor_State *state)
             }
             if (h_end > h_start)
             {
-                Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end, true);
+                Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end);
 
                 rect.min.y += i * get_font_line_height(&state->font);
                 rect.max.y += i * get_font_line_height(&state->font);

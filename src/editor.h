@@ -142,7 +142,7 @@ Render_Font load_font(const char *path);
 float get_font_line_height(Render_Font *font);
 float get_char_width(char c, Render_Font *font);
 Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y);
-Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char, bool include_new_line_char);
+Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char);
 Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x);
 Rect_Bounds get_cursor_rect(Editor_State *state);
