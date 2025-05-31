@@ -120,6 +120,7 @@ typedef struct {
     char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
     int current_go_to_line_char_i;
     bool left_mouse_down;
+    float line_num_field_width;
 } Editor_State;
 
 void _init(GLFWwindow *window, void *_state);
@@ -168,7 +169,7 @@ void update_mvp_vertical_canvas_space(Editor_State *state);
 void update_mvp_screen_space(Editor_State *state);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);
-Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font);
+Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font, float line_num_field_width);
 Vec_2 get_viewport_dim(Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);

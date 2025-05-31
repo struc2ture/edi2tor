@@ -108,6 +108,8 @@ void _init(GLFWwindow *window, void *_state)
     open_file_for_edit(FILE_PATH, state);
 
     state->font = load_font(FONT_PATH);
+
+    state->line_num_field_width = get_string_rect("0000 ", &state->font, 0, 0).max.x;
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -137,9 +139,9 @@ void _render(GLFWwindow *window, void *_state)
     draw_cursor(state);
     draw_selection(state);
 
-    draw_status_bar(window, state);
-
     draw_line_numbers(state);
+
+    draw_status_bar(window, state);
 
     handle_mouse_input(window, state);
 
@@ -618,7 +620,10 @@ Rect_Bounds get_cursor_rect(Editor_State *state)
 {
     Rect_Bounds cursor_rect = get_string_char_rect(state->text_buffer.lines[state->cursor.pos.l].str, &state->font, state->cursor.pos.c);
     float line_height = get_font_line_height(&state->font);
+    float x = state->line_num_field_width;
     float y = state->cursor.pos.l * line_height;
+    cursor_rect.min.x += x;
+    cursor_rect.max.x += x;
     cursor_rect.min.y += y;
     cursor_rect.max.y += y;
     return cursor_rect;
@@ -686,7 +691,7 @@ void draw_text_buffer(Editor_State *state)
             //     string_rect.max.x - string_rect.min.x,
             //     string_rect.max.y - string_rect.min.y,
             //     (unsigned char[]){255, 255, 255, 255});
-            draw_string(state->text_buffer.lines[i].str, &state->font, 0, y, (unsigned char[]){255, 255, 255, 255});
+            draw_string(state->text_buffer.lines[i].str, &state->font, state->line_num_field_width, y, (unsigned char[]){255, 255, 255, 255});
         }
         y += line_height;
     }
@@ -744,6 +749,8 @@ void draw_selection(Editor_State *state)
             {
                 Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end);
 
+                rect.min.x += state->line_num_field_width;
+                rect.max.x += state->line_num_field_width;
                 rect.min.y += i * get_font_line_height(&state->font);
                 rect.max.y += i * get_font_line_height(&state->font);
 
@@ -839,7 +846,7 @@ void draw_line_numbers(Editor_State *state)
     float canvas_height = state->text_buffer.line_count * font_line_height;
     Rect_Bounds line_num_rect = {
         .min = {.x = 0, .y = 0},
-        .max = {.x = 100, .y = canvas_height}
+        .max = {.x = state->line_num_field_width, .y = canvas_height}
     };
 
     draw_quad(line_num_rect.min.x,
@@ -852,7 +859,7 @@ void draw_line_numbers(Editor_State *state)
     for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++)
     {
         float y = line_num_rect.min.y + font_line_height * line_i;
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%03d", line_i);
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d", line_i);
 
         Rect_Bounds string_rect = get_string_rect(line_i_str_buf, &state->font, 0, y);
 
@@ -1153,13 +1160,13 @@ Rect_Bounds get_viewport_bounds(Viewport viewport)
     return r;
 }
 
-Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font)
+Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font, float line_num_field_width)
 {
     Rect_Bounds viewport_bounds = get_viewport_bounds(viewport);
     float space_width = get_char_width(' ', font);
     float font_line_height = get_font_line_height(font);
     Rect_Bounds viewport_cursor_bounds = {0};
-    viewport_cursor_bounds.min.x = viewport_bounds.min.x + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * space_width;
+    viewport_cursor_bounds.min.x = viewport_bounds.min.x + line_num_field_width + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * space_width;
     viewport_cursor_bounds.max.x = viewport_bounds.max.x - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * space_width;
     viewport_cursor_bounds.min.y = viewport_bounds.min.y + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
     viewport_cursor_bounds.max.y = viewport_bounds.max.y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
@@ -1211,6 +1218,7 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
 {
     Buf_Pos r;
     Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
+    pos.x -= state->line_num_field_width;
     r.l = pos.y / (float)get_font_line_height(&state->font);
     r.c = 0;
     if (r.l < 0) {
@@ -1225,7 +1233,7 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
 void viewport_snap_to_cursor(Editor_State *state)
 {
     Viewport *viewport = &state->viewport;
-    Rect_Bounds viewport_cursor_bounds = get_viewport_cursor_bounds(*viewport, &state->font);
+    Rect_Bounds viewport_cursor_bounds = get_viewport_cursor_bounds(*viewport, &state->font, state->line_num_field_width);
     Rect_Bounds cursor_rect = get_cursor_rect(state);
     float font_space_width = get_char_width(' ', &state->font);
     float font_line_height = get_font_line_height(&state->font);
@@ -1248,7 +1256,7 @@ void viewport_snap_to_cursor(Editor_State *state)
         Vec_2 viewport_dim = get_viewport_dim(*viewport);
         if (cursor_rect.max.x <= viewport_cursor_bounds.min.x)
         {
-            viewport->offset.x = cursor_rect.min.x - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            viewport->offset.x = cursor_rect.min.x - state->line_num_field_width - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
             if (viewport->offset.x < 0.0f)
             {
                 viewport->offset.x = 0.0f;
