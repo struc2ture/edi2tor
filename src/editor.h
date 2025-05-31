@@ -151,6 +151,7 @@ void draw_quad(float x, float y, float width, float height, unsigned char color[
 void draw_text_buffer(Editor_State *state);
 void draw_cursor(Editor_State *state);
 void draw_selection(Editor_State *state);
+void draw_status_bar(GLFWwindow *window, Editor_State *state);
 
 void render_old(GLFWwindow *window, Editor_State *state);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
@@ -159,7 +160,10 @@ void draw_content_string(int x, int y, char *string, unsigned char color[4], Edi
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
 void make_view(float offset_x, float offset_y, float scale, float *out);
+void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
+void update_mvp_canvas_space(Editor_State *state);
+void update_mvp_screen_space(Editor_State *state);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);
 Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font);
@@ -169,7 +173,6 @@ bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
-void update_shader_mvp(Editor_State *state);
 void viewport_snap_to_cursor(Editor_State *state);
 bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect);
 

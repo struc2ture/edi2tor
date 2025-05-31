@@ -103,7 +103,7 @@ void _init(GLFWwindow *window, void *_state)
     glfwGetWindowSize(window, &window_w, &window_h);
     state->viewport.window_dim.x = window_w;
     state->viewport.window_dim.y = window_h;
-    update_shader_mvp(state);
+    update_mvp_canvas_space(state);
 
     open_file_for_edit(FILE_PATH, state);
 
@@ -136,6 +136,8 @@ void _render(GLFWwindow *window, void *_state)
     draw_text_buffer(state);
     draw_cursor(state);
     draw_selection(state);
+
+    draw_status_bar(window, state);
 
     handle_mouse_input(window, state);
 
@@ -383,12 +385,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
         state->viewport.zoom += 0.25f;
-        update_shader_mvp(state);
+        update_mvp_canvas_space(state);
     }
     else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
         state->viewport.zoom -= 0.25f;
-        update_shader_mvp(state);
+        update_mvp_canvas_space(state);
     }
     else if (key == GLFW_KEY_G && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
     {
@@ -411,7 +413,7 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     state->viewport.offset.x -= x_offset * SCROLL_SENS;
     state->viewport.offset.y -= y_offset * SCROLL_SENS;
-    update_shader_mvp(state);
+    update_mvp_canvas_space(state);
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
@@ -425,7 +427,7 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     state->viewport.window_dim.x = w;
     state->viewport.window_dim.y = h;
-    update_shader_mvp(state);
+    update_mvp_canvas_space(state);
 }
 
 void refresh_callback(GLFWwindow* window) {
@@ -704,6 +706,78 @@ void draw_cursor(Editor_State *state)
                 (unsigned char[]){0, 0, 255, 255});
         }
     }
+}
+
+void draw_status_bar(GLFWwindow *window, Editor_State *state)
+{
+    update_mvp_screen_space(state);
+
+    float font_line_height = get_font_line_height(&state->font);
+    const float x_padding = 10;
+    const float y_padding = 2;
+    float status_bar_height = 2 * font_line_height + 2 * y_padding;
+
+    Rect_Bounds status_bar_rect = {
+        .min = {.x = 0, .y = state->viewport.window_dim.y - status_bar_height},
+        .max = {.x = state->viewport.window_dim.x, .y = state->viewport.window_dim.y}
+    };
+
+    draw_quad(status_bar_rect.min.x,
+        status_bar_rect.min.y,
+        status_bar_rect.max.x - status_bar_rect.min.x,
+        status_bar_rect.max.y - status_bar_rect.min.y,
+        (unsigned char[4]){ 30, 30, 30, 255 });
+
+    char line_i_str_buf[256];
+    unsigned char color[] = { 200, 200, 200, 255 };
+
+    float status_str_x = status_bar_rect.min.x + x_padding;
+    float status_str_y = status_bar_rect.min.y + y_padding;
+
+    // TODO Make this not ugly
+    if (!state->go_to_line_mode)
+    {
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+            "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d",
+            state->cursor.pos.l,
+            state->cursor.pos.c,
+            state->text_buffer.lines[state->cursor.pos.l].len,
+            state->debug_invis,
+            state->text_buffer.line_count,
+            0); // TODO Populate this
+        draw_string(line_i_str_buf, &state->font, status_str_x, status_str_y, color);
+    }
+    else
+    {
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+            "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
+            state->cursor.pos.l,
+            state->cursor.pos.c,
+            state->text_buffer.lines[state->cursor.pos.l].len,
+            state->debug_invis,
+            state->text_buffer.line_count,
+            0, // TODO Populate this
+            state->go_to_line_chars);
+        draw_string(line_i_str_buf, &state->font, status_str_x, status_str_y, color);
+    }
+    status_str_y += font_line_height;
+
+    Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
+    double mouse_x, mouse_y;
+    glfwGetCursorPos(window, &mouse_x, &mouse_y);
+    Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
+
+    snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+        "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
+        VEC2_ARG(viewport_bounds.min),
+        VEC2_ARG(viewport_bounds.max),
+        state->viewport.zoom,
+        VEC2_ARG(mouse_window_pos),
+        VEC2_ARG(mouse_canvas_pos));
+    draw_string(line_i_str_buf, &state->font, status_str_x, status_str_y, color);
+
+    update_mvp_canvas_space(state);
 }
 
 void draw_selection(Editor_State *state)
@@ -989,6 +1063,14 @@ void make_view(float offset_x, float offset_y, float scale, float *out)
     out[15] = 1;
 }
 
+void make_mat4_identity(float *out)
+{
+    out[0]  = 1;  out[1]  = 0;  out[2]  = 0;  out[3]  = 0;
+    out[4]  = 0;  out[5]  = 1;  out[6]  = 0;  out[7]  = 0;
+    out[8]  = 0;  out[9]  = 0;  out[10] = 1;  out[11] = 0;
+    out[12] = 0;  out[13] = 0;  out[14] = 0;  out[15] = 1;
+}
+
 void mul_mat4(const float *a, const float *b, float *out) // row-major
 {
     for (int row = 0; row < 4; row++)
@@ -998,6 +1080,21 @@ void mul_mat4(const float *a, const float *b, float *out) // row-major
             out[col + row * 4] += a[k + row * 4] * b[col + k * 4];
         }
     }
+}
+
+void update_mvp_canvas_space(Editor_State *state)
+{
+    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
+    make_view(state->viewport.offset.x, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
+    float mvp[16];
+    mul_mat4(state->view_transform, state->proj_transform, mvp);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+}
+
+void update_mvp_screen_space(Editor_State *state)
+{
+    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, state->proj_transform);
 }
 
 Rect_Bounds get_viewport_bounds(Viewport viewport)
@@ -1079,15 +1176,6 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
     return r;
 }
 
-void update_shader_mvp(Editor_State *state)
-{
-    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
-    make_view(state->viewport.offset.x, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
-    float mvp[16];
-    mul_mat4(state->view_transform, state->proj_transform, mvp);
-    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
-}
-
 void viewport_snap_to_cursor(Editor_State *state)
 {
     Viewport *viewport = &state->viewport;
@@ -1128,7 +1216,7 @@ void viewport_snap_to_cursor(Editor_State *state)
     }
     if (will_update_shader)
     {
-        update_shader_mvp(state);
+        update_mvp_canvas_space(state);
     }
 }
 
