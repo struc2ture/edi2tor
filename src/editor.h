@@ -152,6 +152,7 @@ void draw_text_buffer(Editor_State *state);
 void draw_cursor(Editor_State *state);
 void draw_selection(Editor_State *state);
 void draw_status_bar(GLFWwindow *window, Editor_State *state);
+void draw_line_numbers(Editor_State *state);
 
 void render_old(GLFWwindow *window, Editor_State *state);
 void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
@@ -163,6 +164,7 @@ void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
 void update_mvp_canvas_space(Editor_State *state);
+void update_mvp_vertical_canvas_space(Editor_State *state);
 void update_mvp_screen_space(Editor_State *state);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);

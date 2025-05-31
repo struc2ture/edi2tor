@@ -139,6 +139,8 @@ void _render(GLFWwindow *window, void *_state)
 
     draw_status_bar(window, state);
 
+    draw_line_numbers(state);
+
     handle_mouse_input(window, state);
 
     glfwSwapBuffers(window);
@@ -708,6 +710,55 @@ void draw_cursor(Editor_State *state)
     }
 }
 
+void draw_selection(Editor_State *state)
+{
+    if (is_selection_valid(state)) {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l || (start.l == end.l && start.c > end.c)) {
+            Buf_Pos tmp = start;
+            start = end;
+            end = tmp;
+        }
+        for (int i = start.l; i <= end.l; i++)
+        {
+            Text_Line *line = &state->text_buffer.lines[i];
+            int h_start, h_end;
+            bool extend_to_new_line_char = false;
+            if (i == start.l && i == end.l) {
+                h_start = start.c;
+                h_end = end.c;
+            } else if (i == start.l) {
+                h_start = start.c;
+                h_end = line->len;
+                extend_to_new_line_char = true;
+            } else if (i == end.l) {
+                h_start = 0;
+                h_end = end.c;
+            } else {
+                h_start = 0;
+                h_end = line->len;
+                extend_to_new_line_char = true;
+            }
+            if (h_end > h_start)
+            {
+                Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end);
+
+                rect.min.y += i * get_font_line_height(&state->font);
+                rect.max.y += i * get_font_line_height(&state->font);
+
+                (void)extend_to_new_line_char;
+
+                if (is_canvas_rect_in_viewport(state->viewport, rect))
+                {
+                    unsigned char color[] = { 200, 200, 200, 130 };
+                    draw_quad(rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y, color);
+                }
+            }
+        }
+    }
+}
+
 void draw_status_bar(GLFWwindow *window, Editor_State *state)
 {
     update_mvp_screen_space(state);
@@ -780,53 +831,38 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
     update_mvp_canvas_space(state);
 }
 
-void draw_selection(Editor_State *state)
+void draw_line_numbers(Editor_State *state)
 {
-    if (is_selection_valid(state)) {
-        Buf_Pos start = state->selection.start;
-        Buf_Pos end = state->selection.end;
-        if (start.l > end.l || (start.l == end.l && start.c > end.c)) {
-            Buf_Pos tmp = start;
-            start = end;
-            end = tmp;
-        }
-        for (int i = start.l; i <= end.l; i++)
+    update_mvp_vertical_canvas_space(state);
+
+    float font_line_height = get_font_line_height(&state->font);
+    float canvas_height = state->text_buffer.line_count * font_line_height;
+    Rect_Bounds line_num_rect = {
+        .min = {.x = 0, .y = 0},
+        .max = {.x = 100, .y = canvas_height}
+    };
+
+    draw_quad(line_num_rect.min.x,
+        line_num_rect.min.y,
+        line_num_rect.max.x - line_num_rect.min.x,
+        line_num_rect.max.y - line_num_rect.min.y,
+        (unsigned char[4]){ 80, 80, 80, 255 });
+
+    char line_i_str_buf[256];
+    for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++)
+    {
+        float y = line_num_rect.min.y + font_line_height * line_i;
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%03d", line_i);
+
+        Rect_Bounds string_rect = get_string_rect(line_i_str_buf, &state->font, 0, y);
+
+        if (is_canvas_rect_in_viewport(state->viewport, string_rect))
         {
-            Text_Line *line = &state->text_buffer.lines[i];
-            int h_start, h_end;
-            bool extend_to_new_line_char = false;
-            if (i == start.l && i == end.l) {
-                h_start = start.c;
-                h_end = end.c;
-            } else if (i == start.l) {
-                h_start = start.c;
-                h_end = line->len;
-                extend_to_new_line_char = true;
-            } else if (i == end.l) {
-                h_start = 0;
-                h_end = end.c;
-            } else {
-                h_start = 0;
-                h_end = line->len;
-                extend_to_new_line_char = true;
-            }
-            if (h_end > h_start)
-            {
-                Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end);
-
-                rect.min.y += i * get_font_line_height(&state->font);
-                rect.max.y += i * get_font_line_height(&state->font);
-
-                (void)extend_to_new_line_char;
-
-                if (is_canvas_rect_in_viewport(state->viewport, rect))
-                {
-                    unsigned char color[] = { 200, 200, 200, 130 };
-                    draw_quad(rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y, color);
-                }
-            }
+            draw_string(line_i_str_buf, &state->font, line_num_rect.min.x, y, (unsigned char[4]){ 150, 150, 150, 255 });
         }
     }
+
+    update_mvp_canvas_space(state);
 }
 
 void render_old(GLFWwindow *window, Editor_State *state)
@@ -1090,6 +1126,16 @@ void update_mvp_canvas_space(Editor_State *state)
     mul_mat4(state->view_transform, state->proj_transform, mvp);
     glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
 }
+
+void update_mvp_vertical_canvas_space(Editor_State *state)
+{
+    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
+    make_view(0, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
+    float mvp[16];
+    mul_mat4(state->view_transform, state->proj_transform, mvp);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+}
+
 
 void update_mvp_screen_space(Editor_State *state)
 {
