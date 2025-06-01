@@ -162,11 +162,6 @@ void draw_selection(Editor_State *state);
 void draw_status_bar(GLFWwindow *window, Editor_State *state);
 void draw_line_numbers(Editor_State *state);
 
-void render_old(GLFWwindow *window, Editor_State *state);
-void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf);
-void draw_string_old(int x, int y, char *string, unsigned char color[4]);
-void draw_content_string(int x, int y, char *string, unsigned char color[4], Editor_State *state);
-
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
 void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_mat4_identity(float *out);
@@ -233,4 +228,3 @@ void validate_text_buffer(Text_Buffer *text_buffer);
 
 void rebuild_dl();
 void insert_go_to_line_char(Editor_State *state, char c);
-void convert_to_debug_invis(char *string);
