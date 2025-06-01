@@ -76,7 +76,7 @@ typedef struct {
 
 typedef struct {
     Buf_Pos pos;
-    int frame_count;
+    float blink_time;
 } Text_Cursor;
 
 typedef struct {

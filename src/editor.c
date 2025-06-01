@@ -152,7 +152,6 @@ void _render(GLFWwindow *window, void *_state)
 
     state->frame_count++;
     state->fps_frame_count++;
-    state->cursor.frame_count++;
 }
 
 void char_callback(GLFWwindow *window, unsigned int codepoint)
@@ -714,7 +713,8 @@ void draw_text_buffer(Editor_State *state)
 
 void draw_cursor(Editor_State *state)
 {
-    if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
+    state->cursor.blink_time += state->delta_time;
+    if (state->cursor.blink_time < 0.5f)
     {
         Rect_Bounds cursor_rect = get_cursor_rect(state);
 
@@ -727,6 +727,9 @@ void draw_cursor(Editor_State *state)
                 cursor_rect.max.y - cursor_rect.min.y,
                 (unsigned char[]){0, 0, 255, 255});
         }
+    } else if (state->cursor.blink_time > 1.0f)
+    {
+        state->cursor.blink_time -= 1.0f;
     }
 }
 
@@ -929,17 +932,17 @@ void render_old(GLFWwindow *window, Editor_State *state)
         y_offset += line_height;
     }
 
-    if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
-    {
-        int cursor_x_offset = stb_easy_font_width_up_to(state->text_buffer.lines[state->cursor.pos.l].str, state->cursor.pos.c);
-        int cursor_x = x_line_num_offset + cursor_x_offset;
-        int cursor_y = line_height * state->cursor.pos.l;
-        int cursor_width = stb_easy_font_char_width(state->text_buffer.lines[state->cursor.pos.l].str[state->cursor.pos.c]);
-        if (cursor_width == 0) cursor_width = 6;
-        int cursor_height = 12;
-        unsigned char color[] = { 200, 200, 200, 255 };
-        draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
-    }
+    // if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
+    // {
+    //     int cursor_x_offset = stb_easy_font_width_up_to(state->text_buffer.lines[state->cursor.pos.l].str, state->cursor.pos.c);
+    //     int cursor_x = x_line_num_offset + cursor_x_offset;
+    //     int cursor_y = line_height * state->cursor.pos.l;
+    //     int cursor_width = stb_easy_font_char_width(state->text_buffer.lines[state->cursor.pos.l].str[state->cursor.pos.c]);
+    //     if (cursor_width == 0) cursor_width = 6;
+    //     int cursor_height = 12;
+    //     unsigned char color[] = { 200, 200, 200, 255 };
+    //     draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
+    // }
 
     if (is_selection_valid(state)) {
         Buf_Pos start = state->selection.start;
@@ -1335,7 +1338,7 @@ void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
         {
             cursor->pos.c = text_buffer->lines[cursor->pos.l].len - 1;
         }
-        cursor->frame_count = 0;
+        cursor->blink_time = 0.0f;
         if (snap_viewport)
         {
             viewport_snap_to_cursor(state);
@@ -1374,7 +1377,7 @@ void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
     }
     if (cursor->pos.c != prev_cursor_char)
     {
-        cursor->frame_count = 0;
+        cursor->blink_time = 0.0f;
         if (snap_viewport)
         {
             viewport_snap_to_cursor(state);
