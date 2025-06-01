@@ -157,255 +157,14 @@ void char_callback(GLFWwindow *window, unsigned int codepoint)
 {
     (void)window; Editor_State *state = glfwGetWindowUserPointer(window);
     if (codepoint < 128) {
-        // TODO Refactor to use some kind centralized char stream into different destinations logic
-        if (!state->go_to_line_mode) {
-            if (is_selection_valid(state))
-            {
-                delete_selected(state);
-            }
-            insert_char(&state->text_buffer, (char)codepoint, &state->cursor, state, false);
-        } else {
-            insert_go_to_line_char(state, (char)codepoint);
-        }
+        handle_char_input(state, (char)codepoint);
     }
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     (void)scancode; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window);
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-    {
-        glfwSetWindowShouldClose(window, 1);
-    }
-    else if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
-        {
-            start_selection_at_cursor(state);
-        }
-        if (mods & GLFW_MOD_ALT)
-        {
-            move_cursor_to_next_white_line(state);
-        }
-        else if (mods & GLFW_MOD_SUPER)
-        {
-            move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
-            move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
-        }
-        else
-        {
-            move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
-        }
-        if (mods & GLFW_MOD_SHIFT)
-        {
-            extend_selection_to_cursor(state);
-        }
-        else
-        {
-            cancel_selection(state);
-        }
-    }
-    else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
-        {
-            start_selection_at_cursor(state);
-        }
-        if (mods & GLFW_MOD_ALT)
-        {
-            move_cursor_to_prev_white_line(state);
-        }
-        else if (mods & GLFW_MOD_SUPER)
-        {
-            move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
-            move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
-        }
-        else
-        {
-            move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
-        }
-        if (mods & GLFW_MOD_SHIFT)
-        {
-            extend_selection_to_cursor(state);
-        }
-        else
-        {
-            cancel_selection(state);
-        }
-    }
-    else if (key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
-        {
-            start_selection_at_cursor(state);
-        }
-        if (mods & GLFW_MOD_ALT)
-        {
-            move_cursor_to_prev_start_of_word(state);
-        }
-        else if (mods & GLFW_MOD_SUPER)
-        {
-            move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
-        }
-        else
-        {
-            move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c - 1, true, true);
-        }
-        if (mods & GLFW_MOD_SHIFT)
-        {
-            extend_selection_to_cursor(state);
-        }
-        else
-        {
-            cancel_selection(state);
-        }
-    }
-    else if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state))
-        {
-            start_selection_at_cursor(state);
-        }
-        if (mods & GLFW_MOD_ALT)
-        {
-            move_cursor_to_next_end_of_word(state);
-        }
-        else if (mods & GLFW_MOD_SUPER)
-        {
-            move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
-        }
-        else
-        {
-            move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c + 1, true, true);
-        }
-        if (mods & GLFW_MOD_SHIFT)
-        {
-            extend_selection_to_cursor(state);
-        }
-        else
-        {
-            cancel_selection(state);
-        }
-    }
-    else if (key == GLFW_KEY_ENTER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (!state->go_to_line_mode)
-        {
-            insert_char(&state->text_buffer, '\n', &state->cursor, state, true);
-        }
-        else
-        {
-            char *end;
-            int go_to_line = strtol(state->go_to_line_chars, &end, 10);
-            if (*end == '\0')
-            {
-                move_cursor_to_line(&state->text_buffer, &state->cursor, state, go_to_line - 1, true);
-            }
-            state->go_to_line_mode = false;
-            memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
-            state->current_go_to_line_char_i = 0;
-        }
-    }
-    else if (key == GLFW_KEY_BACKSPACE && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (!state->go_to_line_mode)
-        {
-            if (is_selection_valid(state))
-            {
-                delete_selected(state);
-            }
-            else
-            {
-                remove_char(&state->text_buffer, &state->cursor, state);
-            }
-        }
-    }
-    else if (key == GLFW_KEY_TAB && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (!state->go_to_line_mode)
-        {
-            if (mods == GLFW_MOD_ALT)
-            {
-                int indent_i = get_line_indent(state->text_buffer.lines[state->cursor.pos.l]);
-                move_cursor_to_char(&state->text_buffer, &state->cursor, state, indent_i, true, false);
-            }
-            else
-            {
-                insert_indent(&state->text_buffer, &state->cursor, state);
-            }
-        }
-    }
-    else if (key == GLFW_KEY_LEFT_BRACKET && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (!state->go_to_line_mode)
-        {
-            decrease_indent_level(&state->text_buffer, &state->cursor, state);
-        }
-    }
-    else if (key == GLFW_KEY_RIGHT_BRACKET && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        if (!state->go_to_line_mode)
-        {
-            increase_indent_level(&state->text_buffer, &state->cursor, state);
-        }
-    }
-    else if (key == GLFW_KEY_C && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-    {
-        copy_at_selection(state);
-    }
-    else if (key == GLFW_KEY_V && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-    {
-        paste_from_copy_buffer(state);
-    }
-    else if (key == GLFW_KEY_X && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        delete_current_line(state);
-    }
-
-    else if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
-    {
-        state->debug_invis = !state->debug_invis;
-    }
-    else if (key == GLFW_KEY_F12 && action == GLFW_PRESS)
-    {
-        state->should_break = true;
-    }
-    else if (key ==GLFW_KEY_F9 && action == GLFW_PRESS)
-    {
-        rebuild_dl();
-    }
-    else if (key ==GLFW_KEY_F8 && action == GLFW_PRESS)
-    {
-        validate_text_buffer(&state->text_buffer);
-        trace_log("Validated text buffer");
-    }
-    else if (key ==GLFW_KEY_F7 && action == GLFW_PRESS)
-    {
-        open_file_for_edit(FILE_PATH, state);
-    }
-    else if (key == GLFW_KEY_S && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-    {
-        write_file(state->text_buffer, state->file_info);
-    }
-    else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        state->viewport.zoom += 0.25f;
-        update_mvp_canvas_space(state);
-    }
-    else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-    {
-        state->viewport.zoom -= 0.25f;
-        update_mvp_canvas_space(state);
-    }
-    else if (key == GLFW_KEY_G && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-    {
-        state->go_to_line_mode = !state->go_to_line_mode;
-        if (!state->go_to_line_mode)
-        {
-            memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
-            state->current_go_to_line_char_i = 0;
-        }
-    }
+    handle_key_input(window, state, key, action, mods);
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
@@ -438,6 +197,170 @@ void window_size_callback(GLFWwindow *window, int w, int h)
 void refresh_callback(GLFWwindow* window) {
     (void)window; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     _render(window, state);
+}
+
+void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+{
+    switch(key)
+    {
+        case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
+        {
+            glfwSetWindowShouldClose(window, 1);
+        } break;
+        // TODO: Handle up/down/left/right cursor movement + selection centrally?
+        case GLFW_KEY_DOWN: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
+            if (mods & GLFW_MOD_ALT) move_cursor_to_next_white_line(state);
+            else if (mods & GLFW_MOD_SUPER) {
+                move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
+                move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            }
+            else move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
+            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
+            else cancel_selection(state);
+        } break;
+        case GLFW_KEY_UP: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
+            if (mods & GLFW_MOD_ALT) move_cursor_to_prev_white_line(state);
+            else if (mods & GLFW_MOD_SUPER) {
+                move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
+                move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+            }
+            else move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
+            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
+            else cancel_selection(state);
+        } break;
+        case GLFW_KEY_LEFT: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
+            if (mods & GLFW_MOD_ALT) move_cursor_to_prev_start_of_word(state);
+            else if (mods & GLFW_MOD_SUPER) move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+            else move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c - 1, true, true);
+            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
+            else cancel_selection(state);
+        } break;
+        case GLFW_KEY_RIGHT: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
+            if (mods & GLFW_MOD_ALT) move_cursor_to_next_end_of_word(state);
+            else if (mods & GLFW_MOD_SUPER) move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            else move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c + 1, true, true);
+            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
+            else cancel_selection(state);
+        } break;
+        case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (!state->go_to_line_mode) insert_char(&state->text_buffer, '\n', &state->cursor, state, true);
+            else
+            {
+                char *end;
+                int go_to_line = strtol(state->go_to_line_chars, &end, 10);
+                if (*end == '\0') move_cursor_to_line(&state->text_buffer, &state->cursor, state, go_to_line - 1, true);
+                state->go_to_line_mode = false;
+                memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
+                state->current_go_to_line_char_i = 0;
+            }
+        } break;
+        case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (!state->go_to_line_mode)
+            {
+                if (is_selection_valid(state)) delete_selected(state);
+                else remove_char(&state->text_buffer, &state->cursor, state);
+            }
+        } break;
+        case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (!state->go_to_line_mode)
+            {
+                if (mods == GLFW_MOD_ALT)
+                {
+                    int indent_i = get_line_indent(state->text_buffer.lines[state->cursor.pos.l]);
+                    move_cursor_to_char(&state->text_buffer, &state->cursor, state, indent_i, true, false);
+                }
+                else insert_indent(&state->text_buffer, &state->cursor, state);
+            }
+        } break;
+        case GLFW_KEY_LEFT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            if (!state->go_to_line_mode) decrease_indent_level(&state->text_buffer, &state->cursor, state);
+        } break;
+        case GLFW_KEY_RIGHT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            if (!state->go_to_line_mode) increase_indent_level(&state->text_buffer, &state->cursor, state);
+        } break;
+        case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            copy_at_selection(state);
+        } break;
+        case GLFW_KEY_V: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            paste_from_copy_buffer(state);
+        } break;
+        case GLFW_KEY_X: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            delete_current_line(state);
+        } break;
+        case GLFW_KEY_F1: if (action == GLFW_PRESS)
+        {
+            state->debug_invis = !state->debug_invis;
+        } break;
+        case GLFW_KEY_F12: if (action == GLFW_PRESS)
+        {
+            state->should_break = true;
+        } break;
+        case GLFW_KEY_F9: if (action == GLFW_PRESS)
+        {
+            rebuild_dl();
+        } break;
+        case GLFW_KEY_F8: if (action == GLFW_PRESS)
+        {
+            validate_text_buffer(&state->text_buffer);
+            trace_log("Validated text buffer");
+        } break;
+        case GLFW_KEY_F7: if (action == GLFW_PRESS)
+        {
+            open_file_for_edit(FILE_PATH, state);
+        } break;
+        case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            write_file(state->text_buffer, state->file_info);
+        } break;
+        case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            state->viewport.zoom += 0.25f;
+            update_mvp_canvas_space(state);
+        } break;
+        case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            state->viewport.zoom -= 0.25f;
+            update_mvp_canvas_space(state);
+        } break;
+        case GLFW_KEY_G: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            state->go_to_line_mode = !state->go_to_line_mode;
+            if (!state->go_to_line_mode)
+            {
+                memset(state->go_to_line_chars, 0, GO_TO_LINE_CHAR_MAX);
+                state->current_go_to_line_char_i = 0;
+            }
+        } break;
+    }
+}
+
+void handle_char_input(Editor_State *state, char c)
+{
+    if (!state->go_to_line_mode) {
+        if (is_selection_valid(state))
+        {
+            delete_selected(state);
+        }
+        insert_char(&state->text_buffer, c, &state->cursor, state, false);
+    } else {
+        insert_go_to_line_char(state, c);
+    }
 }
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state)

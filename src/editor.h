@@ -139,6 +139,9 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
 void framebuffer_size_callback(GLFWwindow *window, int w, int h);
 void window_size_callback(GLFWwindow *window, int w, int h);
 void refresh_callback(GLFWwindow *window);
+
+void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void handle_char_input(Editor_State *state, char c);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
 void perform_timing_calculations(Editor_State *state);
