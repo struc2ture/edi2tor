@@ -47,7 +47,7 @@ typedef struct {
 
 typedef struct {
     Vec_2 offset;
-    Vec_2 window_dim;
+    Vec_2 outer_dim;
     float zoom;
 } Viewport;
 
@@ -97,21 +97,27 @@ typedef struct {
 } Render_Font;
 
 typedef struct {
+    File_Info file_info;
+    Text_Buffer text_buffer;
+    Viewport viewport;
+    Text_Cursor cursor;
+    Text_Selection selection;
+} Buffer_View;
+
+typedef struct {
     GLuint prog;
     GLuint vao;
     GLuint vbo;
     GLuint shader_mvp_loc;
     float view_transform[16];
     float proj_transform[16];
-    Viewport viewport;
-    File_Info file_info;
-    Text_Buffer text_buffer;
-    Text_Cursor cursor;
-    Text_Selection selection;
+    Vec_2 window_dim;
+    Buffer_View *buffer_views;
+    int buffer_view_count;
+    Buffer_View *active_buffer_view;
     Copy_Buffer copy_buffer;
     Render_Font font;
     bool should_break;
-    bool debug_invis;
     float delta_time;
     float last_frame_time;
     float last_fps_time;
