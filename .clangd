@@ -8,5 +8,7 @@ CompileFlags:
         "-DGL_SILENCE_DEPRECATION",
         "-Wall",
         "-Wextra",
-        "-Wno-unused-function"
+        "-Wno-unused-function",
+        "-xc",
+        "-std=c99"
     ]

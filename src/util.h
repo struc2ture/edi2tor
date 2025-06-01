@@ -39,6 +39,13 @@ static void *xmalloc(size_t size)
     return ptr;
 }
 
+static void *xcalloc(size_t size)
+{
+    void *ptr = calloc(1, size);
+    if (!ptr) fatal("calloc failed for %zu", size);
+    return ptr;
+}
+
 static void *xrealloc(void *ptr, size_t size)
 {
     void *new_ptr = realloc(ptr, size);
@@ -51,4 +58,17 @@ static char *xstrdup(const char *str)
     char *new_str = strdup(str);
     if (!new_str) fatal("strdup failed");
     return new_str;
+}
+
+static void flip_bitmap(void *bitmap_bytes, int pitch, int height)
+{
+    unsigned char *b = bitmap_bytes;
+    unsigned char *temp_row = xmalloc(pitch);
+    for (int row_a = 0, row_b = height - 1; row_a < height / 2; row_a++, row_b--)
+    {
+        memcpy(temp_row, &b[row_a * pitch], pitch);
+        memcpy(&b[row_a * pitch], &b[row_b * pitch], pitch);
+        memcpy(&b[row_b * pitch], temp_row, pitch);
+    }
+    free(temp_row);
 }

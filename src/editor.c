@@ -6,7 +6,6 @@
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
-#include <stb_easy_font.h>
 
 #include "editor.h"
 
@@ -15,26 +14,31 @@
 const char *vs_src =
 "#version 410 core\n"
 "layout (location = 0) in vec2 aPos;\n"
-"layout (location = 1) in vec4 aColor;\n"
+"layout (location = 1) in vec2 aTexCoord;\n"
+"layout (location = 2) in vec4 aColor;\n"
 "uniform mat4 u_mvp;\n"
+"out vec2 TexCoord;\n"
 "out vec4 Color;\n"
 "void main() {\n"
 "    gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);\n"
+"    TexCoord = aTexCoord;\n"
 "    Color = aColor;\n"
 "}";
 
 const char *fs_src =
 "#version 410 core\n"
 "out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D u_tex;\n"
 "in vec4 Color;\n"
 "void main() {\n"
-"    FragColor = Color;\n"
+"    FragColor = vec4(vec3(Color), Color.a * texture(u_tex, TexCoord).r);\n"
 "}";
 
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
-    bassert(sizeof(*state) < 1024);
+    bassert(sizeof(*state) < 4096);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -51,20 +55,29 @@ void _init(GLFWwindow *window, void *_state)
     glShaderSource(fs, 1, &fs_src, 0);
     glCompileShader(fs);
     { // TODO Move to a function
-        GLuint shader = vs;
+        GLuint shader = fs;
         GLint success = 0;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
             char log[512];
             glGetShaderInfoLog(shader, sizeof(log), NULL, log);
             fprintf(stderr, "Shader compile error:\n%s\nSource:\n", log);
-            fprintf(stderr, "%s\n", vs_src);
+            fprintf(stderr, "%s\n", fs_src);
         }
     }
     state->prog = glCreateProgram();
     glAttachShader(state->prog, vs);
     glAttachShader(state->prog, fs);
     glLinkProgram(state->prog);
+    { // TODO Move to a function
+        GLint success = 0;
+        glGetProgramiv(state->prog, GL_LINK_STATUS, &success);
+        if (!success) {
+            char log[512];
+            glGetProgramInfoLog(state->prog, sizeof(log), NULL, log);
+            fprintf(stderr, "Program link error:\n%s\n", log);
+        }
+    }
     glDeleteShader(vs);
     glDeleteShader(fs);
 
@@ -74,11 +87,13 @@ void _init(GLFWwindow *window, void *_state)
     glGenBuffers(1, &state->vbo);
     glBindVertexArray(state->vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->vbo);
-    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * 4 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,  VERT_MAX * sizeof(Vert), NULL, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)offsetof(Vert, u));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
+    glEnableVertexAttribArray(2);
     glfwSetWindowUserPointer(window, _state);
 
     state->shader_mvp_loc = glGetUniformLocation(state->prog, "u_mvp");
@@ -87,9 +102,13 @@ void _init(GLFWwindow *window, void *_state)
     glfwGetWindowSize(window, &window_w, &window_h);
     state->viewport.window_dim.x = window_w;
     state->viewport.window_dim.y = window_h;
-    update_shader_mvp(state);
+    update_mvp_canvas_space(state);
 
     open_file_for_edit(FILE_PATH, state);
+
+    state->font = load_font(FONT_PATH);
+
+    state->line_num_field_width = get_string_rect("0000 ", &state->font, 0, 0).max.x;
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -115,168 +134,23 @@ void _render(GLFWwindow *window, void *_state)
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    int line_height = LINE_HEIGHT;
-    int x_line_num_offset = stb_easy_font_width("000: ");
+    perform_timing_calculations(state);
 
-    int lines_rendered = 0;
+    draw_text_buffer(state);
+    draw_cursor(state);
+    draw_selection(state);
 
-    int x_offset = 0;
-    int y_offset = 0;
-    for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++) {
-        bool line_min_in_bounds = is_canvas_y_pos_in_bounds(line_i * line_height, state->viewport);
-        bool line_max_in_bounds = is_canvas_y_pos_in_bounds((line_i + 1) * line_height, state->viewport);
-        if (line_min_in_bounds || line_max_in_bounds) {
-            unsigned char color[] = { 240, 240, 240, 255 };
-            if (line_i == state->cursor.pos.l) {
-                color[0] = 140;
-                color[1] = 140;
-                color[2] = 240;
-                color[3] = 255;
-            }
+    draw_line_numbers(state);
 
-            char line_i_str_buf[256];
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d: ", line_i + 1);
-            unsigned char line_num_color[] = { 140, 140, 140, 255 };
-            draw_string(x_offset, y_offset, line_i_str_buf, line_num_color);
-            x_offset += x_line_num_offset;
+    draw_status_bar(window, state);
 
-            draw_content_string(x_offset, y_offset, state->text_buffer.lines[line_i].str, color, state);
-
-            x_offset = 0;
-            lines_rendered++;
-        }
-
-        y_offset += line_height;
-    }
-
-    if (!((state->cursor.frame_count % (CURSOR_BLINK_ON_FRAMES * 2)) / CURSOR_BLINK_ON_FRAMES))
-    {
-        int cursor_x_offset = stb_easy_font_width_up_to(state->text_buffer.lines[state->cursor.pos.l].str, state->cursor.pos.c);
-        int cursor_x = x_line_num_offset + cursor_x_offset;
-        int cursor_y = line_height * state->cursor.pos.l;
-        int cursor_width = stb_easy_font_char_width(state->text_buffer.lines[state->cursor.pos.l].str[state->cursor.pos.c]);
-        if (cursor_width == 0) cursor_width = 6;
-        int cursor_height = 12;
-        unsigned char color[] = { 200, 200, 200, 255 };
-        draw_quad(cursor_x, cursor_y, cursor_width, cursor_height, color);
-    }
-
-    if (is_selection_valid(state)) {
-        Buf_Pos start = state->selection.start;
-        Buf_Pos end = state->selection.end;
-        if (start.l > end.l) {
-            Buf_Pos tmp = start;
-            start = end;
-            end = tmp;
-        }
-        for (int i = start.l; i <= end.l; i++) {
-            Text_Line *line = &state->text_buffer.lines[i];
-            int h_start, h_end;
-            bool extend_to_new_line_char = false;
-            if (i == start.l && i == end.l) {
-                h_start = start.c;
-                h_end = end.c;
-                if (h_start > h_end) {
-                    int tmp = h_start;
-                    h_start = h_end;
-                    h_end = tmp;
-                }
-            } else if (i == start.l) {
-                h_start = start.c;
-                h_end = line->len - 1;
-                extend_to_new_line_char = true;
-            } else if (i == end.l) {
-                h_start = 0;
-                h_end = end.c;
-            } else {
-                h_start = 0;
-                h_end = line->len - 1;
-                extend_to_new_line_char = true;
-            }
-            int sel_x = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_start);
-            int sel_y = line_height * i;
-            int sel_w = x_line_num_offset + stb_easy_font_width_up_to(line->str, h_end) - sel_x;
-            if (extend_to_new_line_char) sel_w += 6;
-            int sel_h = 12;
-            unsigned char color[] = { 200, 200, 200, 130 };
-            draw_quad(sel_x, sel_y, sel_w, sel_h, color);
-        }
-    }
-
-    if (ENABLE_STATUS_BAR) {
-        Vec_2 viewport_dim = get_viewport_dim(state->viewport);
-        unsigned char bg_color[] = { 30, 30, 30, 255 };
-        draw_quad(state->viewport.offset.x, state->viewport.offset.y + viewport_dim.y - 2 * line_height - 3, viewport_dim.x, 3 + 2 * line_height, bg_color);
-
-        char line_i_str_buf[256];
-        unsigned char color[] = { 200, 200, 200, 255 };
-
-        // TODO Make this not ugly
-        if (!state->go_to_line_mode) {
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-                "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d",
-                state->cursor.pos.l,
-                state->cursor.pos.c,
-                state->text_buffer.lines[state->cursor.pos.l].len,
-                state->debug_invis,
-                state->text_buffer.line_count,
-                lines_rendered);
-            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
-        } else {
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-                "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
-                state->cursor.pos.l,
-                state->cursor.pos.c,
-                state->text_buffer.lines[state->cursor.pos.l].len,
-                state->debug_invis,
-                state->text_buffer.line_count,
-                lines_rendered,
-                state->go_to_line_chars);
-            draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - 2 * line_height, line_i_str_buf, color);
-        }
-
-        Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
-        double mouse_x, mouse_y;
-        glfwGetCursorPos(window, &mouse_x, &mouse_y);
-        Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
-        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
-
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
-            "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
-            VEC2_ARG(viewport_bounds.min),
-            VEC2_ARG(viewport_bounds.max),
-            state->viewport.zoom,
-            VEC2_ARG(mouse_window_pos),
-            VEC2_ARG(mouse_canvas_pos));
-        draw_string(state->viewport.offset.x + 10, state->viewport.offset.y + viewport_dim.y - line_height, line_i_str_buf, color);
-    }
-
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        bool is_just_pressed = !state->left_mouse_down;
-        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        if (is_shift_pressed && is_just_pressed && !is_selection_valid(state)) {
-            start_selection_at_cursor(state);
-        }
-        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
-        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
-        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
-        extend_selection_to_cursor(state);
-        if (!is_shift_pressed && is_just_pressed) {
-            start_selection_at_cursor(state);
-        }
-        if (is_shift_pressed || !is_just_pressed) {
-            extend_selection_to_cursor(state);
-        }
-        state->left_mouse_down = true;
-    } else {
-        state->left_mouse_down = false;
-    }
+    handle_mouse_input(window, state);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
 
     state->frame_count++;
-    state->cursor.frame_count++;
+    state->fps_frame_count++;
 }
 
 void char_callback(GLFWwindow *window, unsigned int codepoint)
@@ -516,12 +390,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     else if (key == GLFW_KEY_EQUAL && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
         state->viewport.zoom += 0.25f;
-        update_shader_mvp(state);
+        update_mvp_canvas_space(state);
     }
     else if (key == GLFW_KEY_MINUS && mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
         state->viewport.zoom -= 0.25f;
-        update_shader_mvp(state);
+        update_mvp_canvas_space(state);
     }
     else if (key == GLFW_KEY_G && mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
     {
@@ -544,7 +418,7 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     state->viewport.offset.x -= x_offset * SCROLL_SENS;
     state->viewport.offset.y -= y_offset * SCROLL_SENS;
-    update_shader_mvp(state);
+    update_mvp_canvas_space(state);
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
@@ -558,7 +432,7 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     state->viewport.window_dim.x = w;
     state->viewport.window_dim.y = h;
-    update_shader_mvp(state);
+    update_mvp_canvas_space(state);
 }
 
 void refresh_callback(GLFWwindow* window) {
@@ -566,34 +440,233 @@ void refresh_callback(GLFWwindow* window) {
     _render(window, state);
 }
 
-void render_string(int x, int y, char *line, unsigned char color[4], Vert_Buffer *out_vert_buf)
+void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
-    (void)color;
-    char quad_buf[99999];
-    int quad_count = stb_easy_font_print(x, y, line, NULL, quad_buf, sizeof(quad_buf));
-    out_vert_buf->vert_count = quad_count * 6;
-    {
-        float *src = (float *)quad_buf;
-        for (int i = 0; i < quad_count; ++i) {
-            float *q = &src[i * 4 * 4];
-            Vert *dst = &out_vert_buf->verts[i * 6];
-            dst[0].x = q[0];  dst[0].y = q[1];
-            dst[1].x = q[4];  dst[1].y = q[5];
-            dst[2].x = q[8];  dst[2].y = q[9];
-            dst[3].x = q[0];  dst[3].y = q[1];
-            dst[4].x = q[8];  dst[4].y = q[9];
-            dst[5].x = q[12]; dst[5].y = q[13];
-            for (int i = 0; i < 6; i++) {
-                dst[i].r = color[0];
-                dst[i].g = color[1];
-                dst[i].b = color[2];
-                dst[i].a = color[3];
-            }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        bool is_just_pressed = !state->left_mouse_down;
+        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        if (is_shift_pressed && is_just_pressed && !is_selection_valid(state)) {
+            start_selection_at_cursor(state);
         }
+        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
+        move_cursor_to_line(&state->text_buffer, &state->cursor, state, bp.l, false);
+        move_cursor_to_char(&state->text_buffer, &state->cursor, state, bp.c, false, false);
+        extend_selection_to_cursor(state);
+        if (!is_shift_pressed && is_just_pressed) {
+            start_selection_at_cursor(state);
+        }
+        if (is_shift_pressed || !is_just_pressed) {
+            extend_selection_to_cursor(state);
+        }
+        state->left_mouse_down = true;
+    } else {
+        state->left_mouse_down = false;
     }
 }
 
-void draw_quad(int x, int y, int width, int height, unsigned char color[4])
+void perform_timing_calculations(Editor_State *state)
+{
+    float current_time = (float)glfwGetTime();
+    state->delta_time = current_time - state->last_frame_time;
+    state->last_frame_time = current_time;
+
+    if (current_time - state->last_fps_time > 0.1f)
+    {
+        state->fps = (float)state->fps_frame_count / (current_time - state->last_fps_time);
+    }
+}
+
+Vert make_vert(float x, float y, float u, float v, unsigned char color[4])
+{
+    Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
+    return vert;
+}
+
+void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert)
+{
+    bassert(vert_buffer->vert_count < VERT_MAX);
+    vert_buffer->verts[vert_buffer->vert_count++] = vert;
+}
+
+Render_Font load_font(const char *path)
+{
+    Render_Font font = {0};
+
+    FILE *f = fopen(path, "rb");
+    if (!f) fatal("Failed to open file for reading at %s", path);
+    fseek(f, 0, SEEK_END);
+    int file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    void *file_bytes = xmalloc(file_size);
+    fread(file_bytes, 1, file_size, f);
+
+    void *atlas_bitmap = xcalloc(512 * 512);
+
+    font.size = FONT_SIZE;
+    font.atlas_w = 512;
+    font.atlas_h = 512;
+    font.char_count = 96;
+    font.char_data = xcalloc(font.char_count * sizeof(font.char_data[0]));
+    stbtt_BakeFontBitmap(file_bytes, 0, font.size, atlas_bitmap, font.atlas_w, font.atlas_h, 32, font.char_count, font.char_data);
+    stbtt_GetScaledFontVMetrics(file_bytes, 0, font.size, &font.ascent, &font.descent, &font.line_gap);
+    free(file_bytes);
+
+    glGenTextures(1, &font.white_texture);
+    glBindTexture(GL_TEXTURE_2D, font.white_texture);
+    unsigned char white_texture_bytes[] = { 255 };
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, white_texture_bytes);
+
+    glGenTextures(1, &font.texture);
+    glBindTexture(GL_TEXTURE_2D, font.texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, font.atlas_w, font.atlas_h, 0, GL_RED, GL_UNSIGNED_BYTE, atlas_bitmap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    free(atlas_bitmap);
+
+    return font;
+}
+
+float get_font_line_height(Render_Font *font)
+{
+    float height = font->ascent - font->descent;
+    return height;
+}
+
+float get_char_width(char c, Render_Font *font)
+{
+    float char_width = font->char_data[c - 32].xadvance;
+    return char_width;
+}
+
+Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y)
+{
+    Rect_Bounds r;
+    r.min.x = x;
+    r.max.x = r.min.x;
+    r.min.y = y;
+    r.max.y = r.min.y + get_font_line_height(font);
+    while (*str)
+    {
+        r.max.x += get_char_width(*str, font);
+        str++;
+    }
+    return r;
+}
+
+Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char)
+{
+    bassert(start_char >= 0);
+    bassert(start_char < end_char);
+    Rect_Bounds r = {0};
+    r.max.y = get_font_line_height(font);
+    float x = 0;
+    for (int i = 0; i < end_char && str[i]; i++)
+    {
+        if (i == start_char)
+        {
+            r.min.x = x;
+        }
+
+        char c = str[i];
+        if (str[i + 1 == '\0'] && c == '\n')
+        {
+            c = ' ';
+        }
+        x += get_char_width(c, font);
+    }
+    // If reached end_char index, x will be max_x (end_char itself is not included)
+    // If reached null terminator, it will still be valid, highlighting the whole string.
+    r.max.x = x;
+    return r;
+}
+
+Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i)
+{
+    Rect_Bounds r = {0};
+    r.max.y = get_font_line_height(font);
+    float x = 0;
+    int i = 0;
+    bool found_max = false;
+    while (*str)
+    {
+        char c = *str;
+        if (c == '\n')
+        {
+            c = ' ';
+        }
+        x += get_char_width(c, font);
+        if (i == char_i)
+        {
+            r.max.x = x;
+            found_max = true;
+            break;
+        }
+        else
+        {
+            r.min.x = x;
+        }
+        str++;
+        i++;
+    }
+    bassert(found_max);
+    return r;
+}
+
+int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x)
+{
+    int char_i = 0;
+    float str_x = 0;
+    while (*str)
+    {
+        str_x += get_char_width(*str, font);
+        if (str_x > x)
+        {
+            return char_i;
+        }
+        char_i++;
+        str++;
+    }
+    return char_i;
+}
+
+Rect_Bounds get_cursor_rect(Editor_State *state)
+{
+    Rect_Bounds cursor_rect = get_string_char_rect(state->text_buffer.lines[state->cursor.pos.l].str, &state->font, state->cursor.pos.c);
+    float line_height = get_font_line_height(&state->font);
+    float x = state->line_num_field_width;
+    float y = state->cursor.pos.l * line_height;
+    cursor_rect.min.x += x;
+    cursor_rect.max.x += x;
+    cursor_rect.min.y += y;
+    cursor_rect.max.y += y;
+    return cursor_rect;
+}
+
+void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4])
+{
+    y += font->ascent;
+    Vert_Buffer vert_buf = {0};
+    while (*str)
+    {
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font->char_data, font->atlas_w, font->atlas_h, *str-32, &x, &y ,&q, 1);
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
+        str++;
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, font->texture);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+    glBindTexture(GL_TEXTURE_2D, font->white_texture);
+}
+
+
+void draw_quad(float x, float y, float width, float height, unsigned char color[4])
 {
     Vert_Buffer vert_buf = {0};
     vert_buf.vert_count = 6;
@@ -615,24 +688,211 @@ void draw_quad(int x, int y, int width, int height, unsigned char color[4])
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
-void draw_string(int x, int y, char *string, unsigned char color[4])
+void draw_text_buffer(Editor_State *state)
 {
-    Vert_Buffer vert_buf = {0};
-    render_string(x, y, string, color, &vert_buf);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+    float y = 0;
+    float line_height = get_font_line_height(&state->font);
+
+    for (int i = 0; i < state->text_buffer.line_count; i++)
+    {
+        Rect_Bounds string_rect = get_string_rect(state->text_buffer.lines[i].str, &state->font, 0, y);
+        bool is_seen = is_canvas_rect_in_viewport(state->viewport, string_rect);
+        if (is_seen)
+        {
+            // draw_quad(string_rect.min.x,
+            //     string_rect.min.y,
+            //     string_rect.max.x - string_rect.min.x,
+            //     string_rect.max.y - string_rect.min.y,
+            //     (unsigned char[]){255, 255, 255, 255});
+            draw_string(state->text_buffer.lines[i].str, &state->font, state->line_num_field_width, y, (unsigned char[]){255, 255, 255, 255});
+        }
+        y += line_height;
+    }
 }
 
-void draw_content_string(int x, int y, char *string, unsigned char color[4], Editor_State *state)
+void draw_cursor(Editor_State *state)
 {
-    if (state->debug_invis) {
-        string = xstrdup(string);
-        convert_to_debug_invis(string);
+    state->cursor.blink_time += state->delta_time;
+    if (state->cursor.blink_time < 0.5f)
+    {
+        Rect_Bounds cursor_rect = get_cursor_rect(state);
+
+        bool is_seen = is_canvas_rect_in_viewport(state->viewport, cursor_rect);
+        if (is_seen)
+        {
+            draw_quad(cursor_rect.min.x,
+                cursor_rect.min.y,
+                cursor_rect.max.x - cursor_rect.min.x,
+                cursor_rect.max.y - cursor_rect.min.y,
+                (unsigned char[]){0, 0, 255, 255});
+        }
+    } else if (state->cursor.blink_time > 1.0f)
+    {
+        state->cursor.blink_time -= 1.0f;
     }
-    draw_string(x, y, string, color);
-    if (state->debug_invis) {
-        free(string);
+}
+
+void draw_selection(Editor_State *state)
+{
+    if (is_selection_valid(state)) {
+        Buf_Pos start = state->selection.start;
+        Buf_Pos end = state->selection.end;
+        if (start.l > end.l || (start.l == end.l && start.c > end.c)) {
+            Buf_Pos tmp = start;
+            start = end;
+            end = tmp;
+        }
+        for (int i = start.l; i <= end.l; i++)
+        {
+            Text_Line *line = &state->text_buffer.lines[i];
+            int h_start, h_end;
+            bool extend_to_new_line_char = false;
+            if (i == start.l && i == end.l) {
+                h_start = start.c;
+                h_end = end.c;
+            } else if (i == start.l) {
+                h_start = start.c;
+                h_end = line->len;
+                extend_to_new_line_char = true;
+            } else if (i == end.l) {
+                h_start = 0;
+                h_end = end.c;
+            } else {
+                h_start = 0;
+                h_end = line->len;
+                extend_to_new_line_char = true;
+            }
+            if (h_end > h_start)
+            {
+                Rect_Bounds rect = get_string_range_rect(line->str, &state->font, h_start, h_end);
+
+                rect.min.x += state->line_num_field_width;
+                rect.max.x += state->line_num_field_width;
+                rect.min.y += i * get_font_line_height(&state->font);
+                rect.max.y += i * get_font_line_height(&state->font);
+
+                (void)extend_to_new_line_char;
+
+                if (is_canvas_rect_in_viewport(state->viewport, rect))
+                {
+                    unsigned char color[] = { 200, 200, 200, 130 };
+                    draw_quad(rect.min.x, rect.min.y, rect.max.x - rect.min.x, rect.max.y - rect.min.y, color);
+                }
+            }
+        }
     }
+}
+
+void draw_status_bar(GLFWwindow *window, Editor_State *state)
+{
+    (void)window;
+    update_mvp_screen_space(state);
+
+    float font_line_height = get_font_line_height(&state->font);
+    const float x_padding = 10;
+    const float y_padding = 2;
+    float status_bar_height = 2 * font_line_height + 2 * y_padding;
+
+    Rect_Bounds status_bar_rect = {
+        .min = {.x = 0, .y = state->viewport.window_dim.y - status_bar_height},
+        .max = {.x = state->viewport.window_dim.x, .y = state->viewport.window_dim.y}
+    };
+
+    draw_quad(status_bar_rect.min.x,
+        status_bar_rect.min.y,
+        status_bar_rect.max.x - status_bar_rect.min.x,
+        status_bar_rect.max.y - status_bar_rect.min.y,
+        (unsigned char[4]){ 30, 30, 30, 255 });
+
+    char status_str_buf[256];
+    unsigned char color[] = { 200, 200, 200, 255 };
+
+    float status_str_x = status_bar_rect.min.x + x_padding;
+    float status_str_y = status_bar_rect.min.y + y_padding;
+
+    // TODO Make this not ugly
+    if (!state->go_to_line_mode)
+    {
+        snprintf(status_str_buf, sizeof(status_str_buf),
+            "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d",
+            state->cursor.pos.l,
+            state->cursor.pos.c,
+            state->text_buffer.lines[state->cursor.pos.l].len,
+            state->debug_invis,
+            state->text_buffer.line_count,
+            0); // TODO Populate this
+        draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
+    }
+    else
+    {
+        snprintf(status_str_buf, sizeof(status_str_buf),
+            "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
+            state->cursor.pos.l,
+            state->cursor.pos.c,
+            state->text_buffer.lines[state->cursor.pos.l].len,
+            state->debug_invis,
+            state->text_buffer.line_count,
+            0, // TODO Populate this
+            state->go_to_line_chars);
+        draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
+    }
+    status_str_y += font_line_height;
+
+    #if 0
+    Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
+    double mouse_x, mouse_y;
+    glfwGetCursorPos(window, &mouse_x, &mouse_y);
+    Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
+
+    snprintf(status_str_buf, sizeof(status_str_buf),
+        "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
+        VEC2_ARG(viewport_bounds.min),
+        VEC2_ARG(viewport_bounds.max),
+        state->viewport.zoom,
+        VEC2_ARG(mouse_window_pos),
+        VEC2_ARG(mouse_canvas_pos));
+    draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
+    #endif
+
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f", state->fps);
+    draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
+
+    update_mvp_canvas_space(state);
+}
+
+void draw_line_numbers(Editor_State *state)
+{
+    update_mvp_vertical_canvas_space(state);
+
+    float font_line_height = get_font_line_height(&state->font);
+    float canvas_height = state->text_buffer.line_count * font_line_height;
+    Rect_Bounds line_num_rect = {
+        .min = {.x = 0, .y = 0},
+        .max = {.x = state->line_num_field_width, .y = canvas_height}
+    };
+
+    draw_quad(line_num_rect.min.x,
+        line_num_rect.min.y,
+        line_num_rect.max.x - line_num_rect.min.x,
+        line_num_rect.max.y - line_num_rect.min.y,
+        (unsigned char[4]){ 80, 80, 80, 255 });
+
+    char line_i_str_buf[256];
+    for (int line_i = 0; line_i < state->text_buffer.line_count; line_i++)
+    {
+        float y = line_num_rect.min.y + font_line_height * line_i;
+        snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d", line_i);
+
+        Rect_Bounds string_rect = get_string_rect(line_i_str_buf, &state->font, 0, y);
+
+        if (is_canvas_rect_in_viewport(state->viewport, string_rect))
+        {
+            draw_string(line_i_str_buf, &state->font, line_num_rect.min.x, y, (unsigned char[4]){ 150, 150, 150, 255 });
+        }
+    }
+
+    update_mvp_canvas_space(state);
 }
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out)
@@ -661,6 +921,14 @@ void make_view(float offset_x, float offset_y, float scale, float *out)
     out[15] = 1;
 }
 
+void make_mat4_identity(float *out)
+{
+    out[0]  = 1;  out[1]  = 0;  out[2]  = 0;  out[3]  = 0;
+    out[4]  = 0;  out[5]  = 1;  out[6]  = 0;  out[7]  = 0;
+    out[8]  = 0;  out[9]  = 0;  out[10] = 1;  out[11] = 0;
+    out[12] = 0;  out[13] = 0;  out[14] = 0;  out[15] = 1;
+}
+
 void mul_mat4(const float *a, const float *b, float *out) // row-major
 {
     for (int row = 0; row < 4; row++)
@@ -672,6 +940,31 @@ void mul_mat4(const float *a, const float *b, float *out) // row-major
     }
 }
 
+void update_mvp_canvas_space(Editor_State *state)
+{
+    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
+    make_view(state->viewport.offset.x, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
+    float mvp[16];
+    mul_mat4(state->view_transform, state->proj_transform, mvp);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+}
+
+void update_mvp_vertical_canvas_space(Editor_State *state)
+{
+    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
+    make_view(0, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
+    float mvp[16];
+    mul_mat4(state->view_transform, state->proj_transform, mvp);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+}
+
+
+void update_mvp_screen_space(Editor_State *state)
+{
+    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
+    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, state->proj_transform);
+}
+
 Rect_Bounds get_viewport_bounds(Viewport viewport)
 {
     Rect_Bounds r = {0};
@@ -680,6 +973,19 @@ Rect_Bounds get_viewport_bounds(Viewport viewport)
     r.max.x = r.min.x + viewport.window_dim.x / viewport.zoom;
     r.max.y = r.min.y + viewport.window_dim.y / viewport.zoom;
     return r;
+}
+
+Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font, float line_num_field_width)
+{
+    Rect_Bounds viewport_bounds = get_viewport_bounds(viewport);
+    float space_width = get_char_width(' ', font);
+    float font_line_height = get_font_line_height(font);
+    Rect_Bounds viewport_cursor_bounds = {0};
+    viewport_cursor_bounds.min.x = viewport_bounds.min.x + line_num_field_width + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * space_width;
+    viewport_cursor_bounds.max.x = viewport_bounds.max.x - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * space_width;
+    viewport_cursor_bounds.min.y = viewport_bounds.min.y + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+    viewport_cursor_bounds.max.y = viewport_bounds.max.y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+    return viewport_cursor_bounds;
 }
 
 Vec_2 get_viewport_dim(Viewport viewport)
@@ -727,44 +1033,68 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
 {
     Buf_Pos r;
     Vec_2 pos = get_mouse_canvas_pos(window, state->viewport);
-    r.l = pos.y / (float)LINE_HEIGHT;
+    pos.x -= state->line_num_field_width;
+    r.l = pos.y / (float)get_font_line_height(&state->font);
     r.c = 0;
     if (r.l < 0) {
         r.l = 0;
     } else if (r.l >= state->text_buffer.line_count) {
         r.l = state->text_buffer.line_count - 1;
     }
-    float x_line_num_offset = stb_easy_font_width("000: ");
-    r.c = stb_easy_font_char_at_pos(state->text_buffer.lines[r.l].str, pos.x - x_line_num_offset);
+    r.c = get_char_i_at_pos_in_string(state->text_buffer.lines[r.l].str, &state->font, pos.x);
     return r;
 }
 
-void update_shader_mvp(Editor_State *state)
+void viewport_snap_to_cursor(Editor_State *state)
 {
-    make_ortho(0, state->viewport.window_dim.x, state->viewport.window_dim.y, 0, -1, 1, state->proj_transform);
-    make_view(state->viewport.offset.x, state->viewport.offset.y, state->viewport.zoom, state->view_transform);
-    float mvp[16];
-    mul_mat4(state->view_transform, state->proj_transform, mvp);
-    glUniformMatrix4fv(state->shader_mvp_loc, 1, GL_FALSE, mvp);
+    Viewport *viewport = &state->viewport;
+    Rect_Bounds viewport_cursor_bounds = get_viewport_cursor_bounds(*viewport, &state->font, state->line_num_field_width);
+    Rect_Bounds cursor_rect = get_cursor_rect(state);
+    float font_space_width = get_char_width(' ', &state->font);
+    float font_line_height = get_font_line_height(&state->font);
+    bool will_update_shader = false;
+    if (cursor_rect.max.y <= viewport_cursor_bounds.min.y || cursor_rect.min.y >= viewport_cursor_bounds.max.y)
+    {
+        Vec_2 viewport_dim = get_viewport_dim(*viewport);
+        if (cursor_rect.max.y <= viewport_cursor_bounds.min.y)
+        {
+            viewport->offset.y = cursor_rect.min.y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+        }
+        else
+        {
+            viewport->offset.y = cursor_rect.max.y - viewport_dim.y + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+        }
+        will_update_shader = true;
+    }
+    if (cursor_rect.max.x <= viewport_cursor_bounds.min.x || cursor_rect.min.x >= viewport_cursor_bounds.max.x)
+    {
+        Vec_2 viewport_dim = get_viewport_dim(*viewport);
+        if (cursor_rect.max.x <= viewport_cursor_bounds.min.x)
+        {
+            viewport->offset.x = cursor_rect.min.x - state->line_num_field_width - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            if (viewport->offset.x < 0.0f)
+            {
+                viewport->offset.x = 0.0f;
+            }
+        }
+        else
+        {
+            viewport->offset.x = cursor_rect.max.x - viewport_dim.x + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+        }
+        will_update_shader = true;
+    }
+    if (will_update_shader)
+    {
+        update_mvp_canvas_space(state);
+    }
 }
 
-void viewport_snap_to_cursor(Text_Cursor *cursor, Viewport *viewport, Editor_State *state)
+bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect)
 {
-    Rect_Bounds viewport_bounds = get_viewport_bounds(*viewport);
-    float viewport_cursor_boundary_min = viewport_bounds.min.y + VIEWPORT_CURSOR_BOUNDARY_LINES * LINE_HEIGHT;
-    float viewport_cursor_boundary_max = viewport_bounds.max.y - VIEWPORT_CURSOR_BOUNDARY_LINES * LINE_HEIGHT;
-    float line_min = cursor->pos.l * LINE_HEIGHT;
-    float line_max = (cursor->pos.l + 1) * LINE_HEIGHT;
-    if (line_max <= viewport_cursor_boundary_min || line_min >= viewport_cursor_boundary_max) {
-        Vec_2 viewport_dim = get_viewport_dim(*viewport);
-        viewport->offset.x = 0;
-        if (line_min <= viewport_cursor_boundary_min) {
-            viewport->offset.y = cursor->pos.l * LINE_HEIGHT - VIEWPORT_CURSOR_BOUNDARY_LINES * LINE_HEIGHT;
-        } else {
-            viewport->offset.y = (cursor->pos.l + 1) * LINE_HEIGHT - viewport_dim.y + VIEWPORT_CURSOR_BOUNDARY_LINES * LINE_HEIGHT;
-        }
-        update_shader_mvp(state);
-    }
+    Rect_Bounds viewport_bounds = get_viewport_bounds(viewport);
+    bool intersect = rect.min.x < viewport_bounds.max.x && rect.max.x > viewport_bounds.min.x &&
+        rect.min.y < viewport_bounds.max.y && rect.max.y > viewport_bounds.min.y;
+    return intersect;
 }
 
 bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp)
@@ -799,10 +1129,10 @@ void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
         {
             cursor->pos.c = text_buffer->lines[cursor->pos.l].len - 1;
         }
-        cursor->frame_count = 0;
+        cursor->blink_time = 0.0f;
         if (snap_viewport)
         {
-            viewport_snap_to_cursor(cursor, &state->viewport, state);
+            viewport_snap_to_cursor(state);
         }
     }
 }
@@ -838,10 +1168,10 @@ void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
     }
     if (cursor->pos.c != prev_cursor_char)
     {
-        cursor->frame_count = 0;
+        cursor->blink_time = 0.0f;
         if (snap_viewport)
         {
-            viewport_snap_to_cursor(cursor, &state->viewport, state);
+            viewport_snap_to_cursor(state);
         }
     }
 }
@@ -1374,16 +1704,4 @@ void insert_go_to_line_char(Editor_State *state, char c)
 {
     bassert(state->current_go_to_line_char_i < GO_TO_LINE_CHAR_MAX);
     state->go_to_line_chars[state->current_go_to_line_char_i++] = c;
-}
-
-void convert_to_debug_invis(char *string)
-{
-    while (*string) {
-        if (*string == ' ') {
-            *string = '.';
-        } else if (*string == '\n') {
-            *string = '-';
-        }
-        string++;
-    }
 }
