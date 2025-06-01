@@ -207,48 +207,14 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         {
             glfwSetWindowShouldClose(window, 1);
         } break;
-        // TODO: Handle up/down/left/right cursor movement + selection centrally?
-        case GLFW_KEY_DOWN: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        case GLFW_KEY_LEFT:
+        case GLFW_KEY_RIGHT:
+        case GLFW_KEY_UP:
+        case GLFW_KEY_DOWN:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
-            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
-            if (mods & GLFW_MOD_ALT) move_cursor_to_next_white_line(state);
-            else if (mods & GLFW_MOD_SUPER) {
-                move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
-                move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            }
-            else move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
-            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
-            else cancel_selection(state);
-        } break;
-        case GLFW_KEY_UP: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
-            if (mods & GLFW_MOD_ALT) move_cursor_to_prev_white_line(state);
-            else if (mods & GLFW_MOD_SUPER) {
-                move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
-                move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
-            }
-            else move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
-            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
-            else cancel_selection(state);
-        } break;
-        case GLFW_KEY_LEFT: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
-            if (mods & GLFW_MOD_ALT) move_cursor_to_prev_start_of_word(state);
-            else if (mods & GLFW_MOD_SUPER) move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
-            else move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c - 1, true, true);
-            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
-            else cancel_selection(state);
-        } break;
-        case GLFW_KEY_RIGHT: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            if (mods & GLFW_MOD_SHIFT && !is_selection_valid(state)) start_selection_at_cursor(state);
-            if (mods & GLFW_MOD_ALT) move_cursor_to_next_end_of_word(state);
-            else if (mods & GLFW_MOD_SUPER) move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            else move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c + 1, true, true);
-            if (mods & GLFW_MOD_SHIFT) extend_selection_to_cursor(state);
-            else cancel_selection(state);
+            Cursor_Movement_Dir dir = get_cursor_movement_dir_by_key(key);
+            handle_cursor_movement_keys(state, dir, mods & GLFW_MOD_SHIFT, mods & GLFW_MOD_ALT, mods & GLFW_MOD_SUPER);
         } break;
         case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
@@ -385,6 +351,60 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
     } else {
         state->left_mouse_down = false;
     }
+}
+
+Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key)
+{
+    switch (key)
+    {
+        case GLFW_KEY_LEFT: return CURSOR_MOVE_LEFT;
+        case GLFW_KEY_RIGHT: return CURSOR_MOVE_RIGHT;
+        case GLFW_KEY_UP: return CURSOR_MOVE_UP;
+        case GLFW_KEY_DOWN: return CURSOR_MOVE_DOWN;
+        default: return CURSOR_MOVE_UP;
+    }
+}
+
+void handle_cursor_movement_keys(Editor_State *state, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end)
+{
+    if (with_selection && !is_selection_valid(state)) start_selection_at_cursor(state);
+
+    switch (dir)
+    {
+        case CURSOR_MOVE_LEFT:
+        {
+            if (big_steps) move_cursor_to_prev_start_of_word(state);
+            else if (start_end) move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+            else move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c - 1, true, true);
+        } break;
+        case CURSOR_MOVE_RIGHT:
+        {
+            if (big_steps) move_cursor_to_next_end_of_word(state);
+            else if (start_end) move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            else move_cursor_to_char(&state->text_buffer, &state->cursor, state, state->cursor.pos.c + 1, true, true);
+        } break;
+        case CURSOR_MOVE_UP:
+        {
+            if (big_steps) move_cursor_to_prev_white_line(state);
+            else if (start_end) {
+                move_cursor_to_line(&state->text_buffer, &state->cursor, state, 0, true);
+                move_cursor_to_char(&state->text_buffer, &state->cursor, state, 0, true, false);
+            }
+            else move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l - 1, true);
+        } break;
+        case CURSOR_MOVE_DOWN:
+        {
+            if (big_steps) move_cursor_to_next_white_line(state);
+            else if (start_end) {
+                move_cursor_to_line(&state->text_buffer, &state->cursor, state, MAX_LINES, true);
+                move_cursor_to_char(&state->text_buffer, &state->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            }
+            else move_cursor_to_line(&state->text_buffer, &state->cursor, state, state->cursor.pos.l + 1, true);
+        } break;
+    }
+
+    if (with_selection) extend_selection_to_cursor(state);
+    else cancel_selection(state);
 }
 
 void perform_timing_calculations(Editor_State *state)

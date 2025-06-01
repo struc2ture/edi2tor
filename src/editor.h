@@ -128,6 +128,13 @@ typedef struct {
     float line_num_field_width;
 } Editor_State;
 
+typedef enum {
+    CURSOR_MOVE_LEFT,
+    CURSOR_MOVE_RIGHT,
+    CURSOR_MOVE_UP,
+    CURSOR_MOVE_DOWN
+} Cursor_Movement_Dir;
+
 void _init(GLFWwindow *window, void *_state);
 void _hotreload_init(GLFWwindow *window);
 void _render(GLFWwindow *window, void *_state);
@@ -143,6 +150,9 @@ void refresh_callback(GLFWwindow *window);
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 void handle_char_input(Editor_State *state, char c);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
+
+Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
+void handle_cursor_movement_keys(Editor_State *state, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end);
 
 void perform_timing_calculations(Editor_State *state);
 
