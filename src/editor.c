@@ -135,6 +135,8 @@ void _render(GLFWwindow *window, void *_state)
 
     glClear(GL_COLOR_BUFFER_BIT);
 
+    perform_timing_calculations(state);
+
     draw_text_buffer(state);
     draw_cursor(state);
     draw_selection(state);
@@ -149,6 +151,7 @@ void _render(GLFWwindow *window, void *_state)
     glfwPollEvents();
 
     state->frame_count++;
+    state->fps_frame_count++;
     state->cursor.frame_count++;
 }
 
@@ -463,6 +466,18 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
     }
 }
 
+void perform_timing_calculations(Editor_State *state)
+{
+    float current_time = (float)glfwGetTime();
+    state->delta_time = current_time - state->last_frame_time;
+    state->last_frame_time = current_time;
+
+    if (current_time - state->last_fps_time > 0.1f)
+    {
+        state->fps = (float)state->fps_frame_count / (current_time - state->last_fps_time);
+    }
+}
+
 Vert make_vert(float x, float y, float u, float v, unsigned char color[4])
 {
     Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
@@ -768,6 +783,7 @@ void draw_selection(Editor_State *state)
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state)
 {
+    (void)window;
     update_mvp_screen_space(state);
 
     float font_line_height = get_font_line_height(&state->font);
@@ -786,7 +802,7 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
         status_bar_rect.max.y - status_bar_rect.min.y,
         (unsigned char[4]){ 30, 30, 30, 255 });
 
-    char line_i_str_buf[256];
+    char status_str_buf[256];
     unsigned char color[] = { 200, 200, 200, 255 };
 
     float status_str_x = status_bar_rect.min.x + x_padding;
@@ -795,7 +811,7 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
     // TODO Make this not ugly
     if (!state->go_to_line_mode)
     {
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+        snprintf(status_str_buf, sizeof(status_str_buf),
             "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d",
             state->cursor.pos.l,
             state->cursor.pos.c,
@@ -803,11 +819,11 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
             state->debug_invis,
             state->text_buffer.line_count,
             0); // TODO Populate this
-        draw_string(line_i_str_buf, &state->font, status_str_x, status_str_y, color);
+        draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
     }
     else
     {
-        snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+        snprintf(status_str_buf, sizeof(status_str_buf),
             "STATUS: Cursor: %d, %d; Line Len: %d; Invis: %d; Lines: %d; Rendered: %d; Go to: %s",
             state->cursor.pos.l,
             state->cursor.pos.c,
@@ -816,24 +832,29 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
             state->text_buffer.line_count,
             0, // TODO Populate this
             state->go_to_line_chars);
-        draw_string(line_i_str_buf, &state->font, status_str_x, status_str_y, color);
+        draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
     }
     status_str_y += font_line_height;
 
+    #if 0
     Rect_Bounds viewport_bounds = get_viewport_bounds(state->viewport);
     double mouse_x, mouse_y;
     glfwGetCursorPos(window, &mouse_x, &mouse_y);
     Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state->viewport);
 
-    snprintf(line_i_str_buf, sizeof(line_i_str_buf),
+    snprintf(status_str_buf, sizeof(status_str_buf),
         "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
         VEC2_ARG(viewport_bounds.min),
         VEC2_ARG(viewport_bounds.max),
         state->viewport.zoom,
         VEC2_ARG(mouse_window_pos),
         VEC2_ARG(mouse_canvas_pos));
-    draw_string(line_i_str_buf, &state->font, status_str_x, status_str_y, color);
+    draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
+    #endif
+
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f", state->fps);
+    draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
 
     update_mvp_canvas_space(state);
 }

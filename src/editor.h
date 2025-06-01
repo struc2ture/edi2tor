@@ -115,6 +115,11 @@ typedef struct {
     Render_Font font;
     bool should_break;
     bool debug_invis;
+    float delta_time;
+    float last_frame_time;
+    float last_fps_time;
+    int fps_frame_count;
+    float fps;
     long long frame_count;
     bool go_to_line_mode;
     char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
@@ -135,6 +140,8 @@ void framebuffer_size_callback(GLFWwindow *window, int w, int h);
 void window_size_callback(GLFWwindow *window, int w, int h);
 void refresh_callback(GLFWwindow *window);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
+
+void perform_timing_calculations(Editor_State *state);
 
 Vert make_vert(float x, float y, float u, float v, unsigned char color[4]);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
