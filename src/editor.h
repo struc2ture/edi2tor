@@ -97,6 +97,18 @@ typedef struct {
 } Render_Font;
 
 typedef struct {
+    GLuint prog;
+    GLuint vao;
+    GLuint vbo;
+    GLuint shader_mvp_loc;
+    Vec_2 window_dim;
+    float view_transform[16];
+    float proj_transform[16];
+    Render_Font font;
+    float line_num_field_width;
+} Render_State;
+
+typedef struct {
     File_Info file_info;
     Text_Buffer text_buffer;
     Viewport viewport;
@@ -105,18 +117,11 @@ typedef struct {
 } Buffer_View;
 
 typedef struct {
-    GLuint prog;
-    GLuint vao;
-    GLuint vbo;
-    GLuint shader_mvp_loc;
-    float view_transform[16];
-    float proj_transform[16];
-    Vec_2 window_dim;
+    Render_State render_state;
     Buffer_View *buffer_views;
     int buffer_view_count;
     Buffer_View *active_buffer_view;
     Copy_Buffer copy_buffer;
-    Render_Font font;
     bool should_break;
     float delta_time;
     float last_frame_time;
@@ -128,7 +133,6 @@ typedef struct {
     char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
     int current_go_to_line_char_i;
     bool left_mouse_down;
-    float line_num_field_width;
 } Editor_State;
 
 typedef enum {
@@ -157,47 +161,52 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
 void handle_cursor_movement_keys(Editor_State *state, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end);
 
+void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
 Vert make_vert(float x, float y, float u, float v, unsigned char color[4]);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 
 Render_Font load_font(const char *path);
-float get_font_line_height(Render_Font *font);
-float get_char_width(char c, Render_Font *font);
-Rect_Bounds get_string_rect(const char *str, Render_Font *font, float x, float y);
-Rect_Bounds get_string_range_rect(const char *str, Render_Font *font, int start_char, int end_char);
-Rect_Bounds get_string_char_rect(const char *str, Render_Font *font, int char_i);
-int get_char_i_at_pos_in_string(const char *str, Render_Font *font, float x);
-Rect_Bounds get_cursor_rect(Editor_State *state);
-void draw_string(const char *str, Render_Font *font, float x, float y, unsigned char color[4]);
+float get_font_line_height(Render_Font font);
+float get_char_width(char c, Render_Font font);
+Rect_Bounds get_string_rect(const char *str, Render_Font font, float x, float y);
+Rect_Bounds get_string_range_rect(const char *str, Render_Font font, int start_char, int end_char);
+Rect_Bounds get_string_char_rect(const char *str, Render_Font font, int char_i);
+int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
+Rect_Bounds get_cursor_rect(Text_Buffer text_buffer, Text_Cursor cursor, Render_State *render_state);
+
+void draw_string(const char *str, Render_Font font, float x, float y, unsigned char color[4]);
 void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
-void draw_text_buffer(Editor_State *state);
-void draw_cursor(Editor_State *state);
-void draw_selection(Editor_State *state);
-void draw_status_bar(GLFWwindow *window, Editor_State *state);
-void draw_line_numbers(Editor_State *state);
+
+void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
+void draw_cursor(Text_Buffer text_buffer, Text_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
+void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
+void draw_line_numbers(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
+void draw_buffer_view(Buffer_View *buffer_view, Render_State *render_state, float delta_time);
+
+void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
 void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
-void update_mvp_canvas_space(Editor_State *state);
-void update_mvp_vertical_canvas_space(Editor_State *state);
-void update_mvp_screen_space(Editor_State *state);
+void update_mvp_canvas_space(Render_State *render_state, Viewport viewport);
+void update_mvp_vertical_canvas_space(Render_State *render_state, Viewport viewport);
+void update_mvp_screen_space(Render_State *render_state);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);
-Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font *font, float line_num_field_width);
+Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font, float line_num_field_width);
 Vec_2 get_viewport_dim(Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
-void viewport_snap_to_cursor(Editor_State *state);
+void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state);
 bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect);
 
-bool is_buf_pos_valid(const Text_Buffer *tb, Buf_Pos bp);
+bool is_buf_pos_valid(Text_Buffer tb, Buf_Pos bp);
 bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
 void cancel_selection(Editor_State *state);
 
@@ -233,7 +242,7 @@ void write_file(Text_Buffer text_buffer, File_Info file_info);
 void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);
 void cancel_selection(Editor_State *state);
-bool is_selection_valid(const Editor_State *state);
+bool is_selection_valid(Text_Buffer text_buffer, Text_Selection selection);
 int selection_char_count(Editor_State *state);
 void delete_selected(Editor_State *state);
 
