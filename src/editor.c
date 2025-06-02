@@ -424,6 +424,8 @@ void perform_timing_calculations(Editor_State *state)
     if (current_time - state->last_fps_time > 0.1f)
     {
         state->fps = (float)state->fps_frame_count / (current_time - state->last_fps_time);
+        state->last_fps_time = current_time;
+        state->fps_frame_count = 0;
     }
 }
 
@@ -769,23 +771,21 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
     if (!state->go_to_line_mode)
     {
         snprintf(status_str_buf, sizeof(status_str_buf),
-            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d; Rendered: %d",
+            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d",
             active_view->cursor.pos.l,
             active_view->cursor.pos.c,
             active_view->text_buffer.lines[active_view->cursor.pos.l].len,
-            active_view->text_buffer.line_count,
-            0); // TODO Populate this
+            active_view->text_buffer.line_count);
         draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
     }
     else
     {
         snprintf(status_str_buf, sizeof(status_str_buf),
-            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d; Rendered: %d; Go to: %s",
+            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d; Go to: %s",
             active_view->cursor.pos.l,
             active_view->cursor.pos.c,
             active_view->text_buffer.lines[active_view->cursor.pos.l].len,
             active_view->text_buffer.line_count,
-            0, // TODO Populate this
             state->go_to_line_chars);
         draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
     }
@@ -808,7 +808,7 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state)
     draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
     #endif
 
-    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f", state->fps);
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f", state->fps, state->delta_time);
     draw_string(status_str_buf, &state->font, status_str_x, status_str_y, color);
 
     update_mvp_canvas_space(state);
