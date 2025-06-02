@@ -30,8 +30,13 @@ typedef struct {
 #define VEC2_ARG(v) (v).x, (v).y
 
 typedef struct {
-    Vec_2 min;
-    Vec_2 max;
+    float x, y;
+    float w, h;
+} Rect;
+
+typedef struct {
+    float min_x, min_y;
+    float max_x, max_y;
 } Rect_Bounds;
 
 typedef struct {
@@ -47,7 +52,7 @@ typedef struct {
 
 typedef struct {
     Vec_2 offset;
-    Vec_2 outer_dim;
+    Rect outer_dim;
     float zoom;
 } Viewport;
 
@@ -67,8 +72,8 @@ typedef struct {
 } Text_Buffer;
 
 typedef struct {
-    int l;
-    int c;
+    int line;
+    int col;
 } Buf_Pos;
 
 typedef struct {
@@ -164,20 +169,20 @@ void handle_cursor_movement_keys(Editor_State *state, Cursor_Movement_Dir dir, b
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
-Vert make_vert(float x, float y, float u, float v, unsigned char color[4]);
+Vert make_vert(float x, float y, float u, float v, const unsigned char color[4]);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 
 Render_Font load_font(const char *path);
 float get_font_line_height(Render_Font font);
 float get_char_width(char c, Render_Font font);
-Rect_Bounds get_string_rect(const char *str, Render_Font font, float x, float y);
-Rect_Bounds get_string_range_rect(const char *str, Render_Font font, int start_char, int end_char);
-Rect_Bounds get_string_char_rect(const char *str, Render_Font font, int char_i);
+Rect get_string_rect(const char *str, Render_Font font, float x, float y);
+Rect get_string_range_rect(const char *str, Render_Font font, int start_char, int end_char);
+Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
-Rect_Bounds get_cursor_rect(Text_Buffer text_buffer, Text_Cursor cursor, Render_State *render_state);
+Rect get_cursor_rect(Text_Buffer text_buffer, Text_Cursor cursor, Render_State *render_state);
 
-void draw_string(const char *str, Render_Font font, float x, float y, unsigned char color[4]);
-void draw_quad(float x, float y, float width, float height, unsigned char color[4]);
+void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4]);
+void draw_quad(Rect q, const unsigned char color[4]);
 
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Text_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
@@ -204,14 +209,14 @@ bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state);
-bool is_canvas_rect_in_viewport(Viewport viewport, Rect_Bounds rect);
+bool is_canvas_rect_in_viewport(Viewport viewport, Rect rect);
 
 bool is_buf_pos_valid(Text_Buffer tb, Buf_Pos bp);
 bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b);
 void cancel_selection(Editor_State *state);
 
 void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
-void move_cursor_to_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
+void move_cursor_to_col(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
 
 void move_cursor_to_next_end_of_word(Editor_State *state);
 void move_cursor_to_prev_start_of_word(Editor_State *state);

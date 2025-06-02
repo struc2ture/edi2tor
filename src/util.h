@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "editor.h"
+
 inline static void bassert(bool condition)
 {
     if (!condition) __builtin_debugtrap();
@@ -71,4 +73,14 @@ static void flip_bitmap(void *bitmap_bytes, int pitch, int height)
         memcpy(&b[row_b * pitch], temp_row, pitch);
     }
     free(temp_row);
+}
+
+inline static Rect_Bounds rect_get_bounds(Rect r)
+{
+    Rect_Bounds b;
+    b.min_x = r.x;
+    b.min_y = r.y;
+    b.max_x = r.x + r.w;
+    b.max_y = r.y + r.h;
+    return b;
 }
