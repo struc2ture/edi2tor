@@ -20,7 +20,8 @@
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 #define FONT_SIZE 20.0f
 
-#define FILE_PATH1 "src/editor.c"
+// #define FILE_PATH1 "src/editor.c"
+#define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "res/mock5.txt"
 
 typedef struct {
@@ -135,9 +136,6 @@ typedef struct {
     int fps_frame_count;
     float fps;
     long long frame_count;
-    bool go_to_line_mode;
-    char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
-    int current_go_to_line_char_i;
     bool left_mouse_down;
     bool left_mouse_handled;
 } Editor_State;
@@ -166,7 +164,8 @@ void handle_char_input(Editor_State *state, char c);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
 Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
-void handle_cursor_movement_keys(Editor_State *state, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end);
+void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
+void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, GLFWwindow *window, Editor_State *state);
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
