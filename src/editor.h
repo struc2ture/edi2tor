@@ -20,8 +20,8 @@
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 #define FONT_SIZE 20.0f
 
-// #define FILE_PATH1 "src/editor.c"
-#define FILE_PATH1 "res/mock4.txt"
+#define FILE_PATH1 "src/editor.c"
+// #define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "res/mock5.txt"
 
 typedef struct {
@@ -125,7 +125,7 @@ typedef struct {
 
 typedef struct {
     Render_State render_state;
-    Buffer_View *buffer_views;
+    Buffer_View **buffer_views;
     int buffer_view_count;
     Buffer_View *active_buffer_view;
     Copy_Buffer copy_buffer;
@@ -173,8 +173,11 @@ void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bo
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
-Buffer_View open_buffer_view(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state);
-void set_buffer_view_rect(Buffer_View *buffer_view, Rect rect, Render_State *render_state);
+Buffer_View *buffer_view_create(Rect rect, Render_State *render_state, Editor_State *state);
+Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state);
+void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, Render_State *render_state);
+int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state);
+void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state);
 
 Vert make_vert(float x, float y, float u, float v, const unsigned char color[4]);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);

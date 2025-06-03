@@ -43,13 +43,19 @@ void _init(GLFWwindow *window, void *_state)
 
     initialize_render_state(window, &state->render_state);
 
-    state->buffer_view_count = 2;
-    state->buffer_views = xmalloc(state->buffer_view_count * sizeof(state->buffer_views[0]));
+    Buffer_View *first_file = buffer_view_open_file(
+        FILE_PATH1,
+        (Rect){10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100},
+        &state->render_state,
+        state);
 
-    state->buffer_views[0] = open_buffer_view(FILE_PATH1, (Rect){10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100}, &state->render_state, state);
-    state->buffer_views[1] = open_buffer_view(FILE_PATH2, (Rect){state->render_state.window_dim.x * 0.5f + 10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100}, &state->render_state, state);
+    buffer_view_open_file(
+        FILE_PATH2,
+        (Rect){state->render_state.window_dim.x * 0.5f + 10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100},
+        &state->render_state,
+        state);
 
-    state->active_buffer_view = state->buffer_views;
+    buffer_view_set_active(first_file, state);
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -78,25 +84,10 @@ void _render(GLFWwindow *window, void *_state)
 
     perform_timing_calculations(state);
 
-    for (int i = 0; i < state->buffer_view_count; i++)
+    // Render buffer views backwards for correct z ordering
+    for (int i = state->buffer_view_count - 1; i >= 0; i--)
     {
-        Buffer_View *buffer_view = &state->buffer_views[i];
-
-        float dS = 0.0f;
-        // if (i == 0)
-        // {
-        //     dS = state->delta_time * 10.0f;
-        // }
-        // else
-        // {
-        //     dS = -state->delta_time * 10.0f;
-        // }
-
-        Rect new_rect = buffer_view->outer_rect;
-        new_rect.x += dS;
-        new_rect.y += dS;
-        set_buffer_view_rect(buffer_view, new_rect, &state->render_state);
-
+        Buffer_View *buffer_view = state->buffer_views[i];
         bool is_active = buffer_view == state->active_buffer_view;
         draw_buffer_view(buffer_view, is_active, &state->render_state, state->delta_time);
     }
@@ -165,13 +156,14 @@ void refresh_callback(GLFWwindow* window) {
 
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
+    (void) window;
     Buffer_View *active_view = state->active_buffer_view;
     switch(key)
     {
-        case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
-        {
-            glfwSetWindowShouldClose(window, 1);
-        } break;
+        // case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
+        // {
+        //     glfwSetWindowShouldClose(window, 1);
+        // } break;
         case GLFW_KEY_LEFT:
         case GLFW_KEY_RIGHT:
         case GLFW_KEY_UP:
@@ -276,7 +268,7 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
             {
                 if (state->active_buffer_view != clicked_view)
                 {
-                    state->active_buffer_view = clicked_view;
+                    buffer_view_set_active(clicked_view, state);
                     state->left_mouse_handled = true;
                 }
                 Rect_Bounds resize_handle = {
@@ -313,7 +305,7 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
             Rect new_rect = state->active_buffer_view->outer_rect;
             new_rect.x += mouse_delta.x;
             new_rect.y += mouse_delta.y;
-            set_buffer_view_rect(state->active_buffer_view, new_rect, &state->render_state);
+            buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
         }
         else if (state->is_viewport_resize)
         {
@@ -321,7 +313,7 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
             Rect new_rect = state->active_buffer_view->outer_rect;
             new_rect.w += mouse_delta.x;
             new_rect.h += mouse_delta.y;
-            set_buffer_view_rect(state->active_buffer_view, new_rect, &state->render_state);
+            buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
         }
     }
     else
@@ -476,15 +468,6 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
 }
 
-Buffer_View open_buffer_view(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state)
-{
-    Buffer_View view = {0};
-    view.viewport.canvas_zoom = DEFAULT_ZOOM;
-    set_buffer_view_rect(&view, rect, render_state);
-    open_file_for_edit(file_path, &view, state);
-    return view;
-}
-
 void perform_timing_calculations(Editor_State *state)
 {
     float current_time = (float)glfwGetTime();
@@ -499,7 +482,27 @@ void perform_timing_calculations(Editor_State *state)
     }
 }
 
-void set_buffer_view_rect(Buffer_View *buffer_view, Rect rect, Render_State *render_state)
+Buffer_View *buffer_view_create(Rect rect, Render_State *render_state, Editor_State *state)
+{
+    Buffer_View *view = xcalloc(sizeof(Buffer_View));
+    view->viewport.canvas_zoom = DEFAULT_ZOOM;
+    buffer_view_set_rect(view, rect, render_state);
+    state->buffer_view_count++;
+    state->buffer_views = xrealloc(state->buffer_views, state->buffer_view_count * sizeof(state->buffer_views[0]));
+    Buffer_View **new_slot = &state->buffer_views[state->buffer_view_count - 1];
+    *new_slot = view;
+    return *new_slot;
+}
+
+Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state)
+{
+    Buffer_View *new_view = buffer_view_create(rect, render_state, state);
+    open_file_for_edit(file_path, new_view, state);
+    buffer_view_set_active(new_view, state);
+    return new_view;
+}
+
+void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, Render_State *render_state)
 {
     const float padding = 4.0f;
     buffer_view->outer_rect = rect;
@@ -507,6 +510,29 @@ void set_buffer_view_rect(Buffer_View *buffer_view, Rect rect, Render_State *ren
     buffer_view->viewport.screen_rect.y = rect.y + padding;
     buffer_view->viewport.screen_rect.w = rect.w - render_state->line_num_col_width - padding;
     buffer_view->viewport.screen_rect.h = rect.h - 2 * padding;
+}
+
+int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state)
+{
+    int index = 0;
+    Buffer_View **buffer_view_c = state->buffer_views;
+    while (*buffer_view_c != buffer_view)
+    {
+        index++;
+        buffer_view_c++;
+    }
+    return index;
+}
+
+void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state)
+{
+    int active_index = buffer_view_get_index(buffer_view, state);
+    for (int i = active_index; i > 0; i--)
+    {
+        state->buffer_views[i] = state->buffer_views[i - 1];
+    }
+    state->buffer_views[0] = buffer_view;
+    state->active_buffer_view = buffer_view;
 }
 
 Vert make_vert(float x, float y, float u, float v, const unsigned char color[4])
@@ -1089,20 +1115,20 @@ Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state)
 {
     for (int i = 0; i < state->buffer_view_count; i++)
     {
-        Rect_Bounds b = rect_get_bounds(state->buffer_views[i].outer_rect);
+        Rect_Bounds b = rect_get_bounds(state->buffer_views[i]->outer_rect);
         const float resize_handle_radius = 5.0f;
         Rect_Bounds resize_handle = {
-            .min_x = state->buffer_views[i].outer_rect.x + state->buffer_views[i].outer_rect.w - resize_handle_radius,
-            .min_y = state->buffer_views[i].outer_rect.y + state->buffer_views[i].outer_rect.h - resize_handle_radius,
-            .max_x = state->buffer_views[i].outer_rect.x + state->buffer_views[i].outer_rect.w + resize_handle_radius,
-            .max_y = state->buffer_views[i].outer_rect.y + state->buffer_views[i].outer_rect.h + resize_handle_radius
+            .min_x = state->buffer_views[i]->outer_rect.x + state->buffer_views[i]->outer_rect.w - resize_handle_radius,
+            .min_y = state->buffer_views[i]->outer_rect.y + state->buffer_views[i]->outer_rect.h - resize_handle_radius,
+            .max_x = state->buffer_views[i]->outer_rect.x + state->buffer_views[i]->outer_rect.w + resize_handle_radius,
+            .max_y = state->buffer_views[i]->outer_rect.y + state->buffer_views[i]->outer_rect.h + resize_handle_radius
         };
         if ((pos.x > b.min_x && pos.x < b.max_x &&
             pos.y > b.min_y && pos.y < b.max_y) ||
             (pos.x > resize_handle.min_x && pos.x < resize_handle.max_x &&
             pos.y > resize_handle.min_y && pos.y < resize_handle.max_y))
         {
-            return &state->buffer_views[i];
+            return state->buffer_views[i];
         }
     }
     return NULL;
