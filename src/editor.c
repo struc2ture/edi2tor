@@ -43,17 +43,13 @@ void _init(GLFWwindow *window, void *_state)
 
     initialize_render_state(window, &state->render_state);
 
-    state->buffer_view_count = 1;
+    state->buffer_view_count = 2;
     state->buffer_views = xmalloc(state->buffer_view_count * sizeof(state->buffer_views[0]));
+
+    state->buffer_views[0] = open_buffer_view(FILE_PATH1, (Rect){100, 100, 300, 300}, &state->render_state, state);
+    state->buffer_views[1] = open_buffer_view(FILE_PATH2, (Rect){500, 400, 400, 400}, &state->render_state, state);
+
     state->active_buffer_view = state->buffer_views;
-
-    state->active_buffer_view->viewport.canvas_zoom = DEFAULT_ZOOM;
-    // int window_w, window_h;
-    // glfwGetWindowSize(window, &window_w, &window_h);
-
-    set_buffer_view_rect(state->active_buffer_view, (Rect){100, 100, 300, 300}, &state->render_state);
-
-    open_file_for_edit(FILE_PATH, state);
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -82,7 +78,28 @@ void _render(GLFWwindow *window, void *_state)
 
     perform_timing_calculations(state);
 
-    draw_buffer_view(state->active_buffer_view, &state->render_state, state->delta_time);
+    for (int i = 0; i < state->buffer_view_count; i++)
+    {
+        Buffer_View *buffer_view = &state->buffer_views[i];
+
+        float dS;
+        if (i == 0)
+        {
+            dS = state->delta_time * 10.0f;
+        }
+        else
+        {
+            dS = -state->delta_time * 10.0f;
+        }
+
+        Rect new_rect = buffer_view->outer_rect;
+        new_rect.x += dS;
+        new_rect.y += dS;
+        set_buffer_view_rect(buffer_view, new_rect, &state->render_state);
+
+        bool is_active = buffer_view == state->active_buffer_view;
+        draw_buffer_view(buffer_view, is_active, &state->render_state, state->delta_time);
+    }
 
     draw_status_bar(window, state, &state->render_state);
 
@@ -230,7 +247,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_F7: if (action == GLFW_PRESS)
         {
-            open_file_for_edit(FILE_PATH, state);
+            // TODO: Implement reloading current file
         } break;
         case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
@@ -419,6 +436,15 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     render_state->framebuffer_dim.x = framebuffer_w;
     render_state->framebuffer_dim.y = framebuffer_h;
     render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
+}
+
+Buffer_View open_buffer_view(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state)
+{
+    Buffer_View view = {0};
+    view.viewport.canvas_zoom = DEFAULT_ZOOM;
+    set_buffer_view_rect(&view, rect, render_state);
+    open_file_for_edit(file_path, &view, state);
+    return view;
 }
 
 void perform_timing_calculations(Editor_State *state)
@@ -767,21 +793,23 @@ void draw_line_numbers(Text_Buffer text_buffer, Text_Cursor cursor, Viewport vie
     }
 }
 
-void draw_buffer_view(Buffer_View *buffer_view, Render_State *render_state, float delta_time)
+void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *render_state, float delta_time)
 {
-    Rect new_rect = buffer_view->outer_rect;
-    new_rect.x += delta_time * 10.0f;
-    new_rect.y += delta_time * 10.0f;
-
-    set_buffer_view_rect(buffer_view, new_rect, render_state);
-
     set_screen_space_transform(render_state);
-    draw_quad(buffer_view->outer_rect, (unsigned char[4]){40, 40, 40, 255});
+    if (is_active)
+    {
+        draw_quad(buffer_view->outer_rect, (unsigned char[4]){40, 40, 40, 255});
+    }
+    else
+    {
+        draw_quad(buffer_view->outer_rect, (unsigned char[4]){20, 20, 20, 255});
+    }
     draw_quad(buffer_view->viewport.screen_rect, (unsigned char[4]){10, 10, 10, 255});
 
     set_viewport_transform(buffer_view->viewport, render_state);
     draw_text_buffer(buffer_view->text_buffer, buffer_view->viewport, render_state);
-    draw_cursor(buffer_view->text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
+    if (is_active)
+        draw_cursor(buffer_view->text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
     draw_selection(buffer_view->text_buffer, buffer_view->selection, buffer_view->viewport, render_state);
     draw_line_numbers(buffer_view->text_buffer, buffer_view->cursor, buffer_view->viewport, render_state);
 }
@@ -1490,13 +1518,12 @@ bool is_white_line(Text_Line line)
     return true;
 }
 
-void open_file_for_edit(const char *path, Editor_State *state)
+void open_file_for_edit(const char *path, Buffer_View *buffer_view, Editor_State *state)
 {
-    Buffer_View *active_view = state->active_buffer_view;
-    active_view->file_info = read_file(path, &state->active_buffer_view->text_buffer);
+    buffer_view->file_info = read_file(path, &buffer_view->text_buffer);
     trace_log("Read file at %s", path);
-    move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line, false);
-    move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, active_view->cursor.pos.col, false, false);
+    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line, false);
+    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col, false, false);
 }
 
 File_Info read_file(const char *path, Text_Buffer *text_buffer)

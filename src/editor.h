@@ -20,8 +20,8 @@
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 #define FONT_SIZE 20.0f
 
-#define FILE_PATH "src/editor.c"
-// #define FILE_PATH "res/mock5.txt"
+#define FILE_PATH1 "src/editor.c"
+#define FILE_PATH2 "res/mock5.txt"
 
 typedef struct {
     float x, y;
@@ -170,6 +170,7 @@ void handle_cursor_movement_keys(Editor_State *state, Cursor_Movement_Dir dir, b
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
+Buffer_View open_buffer_view(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state);
 void set_buffer_view_rect(Buffer_View *buffer_view, Rect rect, Render_State *render_state);
 
 Vert make_vert(float x, float y, float u, float v, const unsigned char color[4]);
@@ -191,7 +192,7 @@ void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *
 void draw_cursor(Text_Buffer text_buffer, Text_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
 void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
 void draw_line_numbers(Text_Buffer text_buffer, Text_Cursor cursor, Viewport viewport, Render_State *render_state);
-void draw_buffer_view(Buffer_View *buffer_view, Render_State *render_state, float delta_time);
+void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *render_state, float delta_time);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
@@ -246,7 +247,7 @@ void increase_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor
 void delete_current_line(Editor_State *state);
 bool is_white_line(Text_Line line);
 
-void open_file_for_edit(const char *path, Editor_State *state);
+void open_file_for_edit(const char *path, Buffer_View *buffer_view, Editor_State *state);
 File_Info read_file(const char *path, Text_Buffer *text_buffer);
 void write_file(Text_Buffer text_buffer, File_Info file_info);
 
