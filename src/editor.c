@@ -46,8 +46,8 @@ void _init(GLFWwindow *window, void *_state)
     state->buffer_view_count = 2;
     state->buffer_views = xmalloc(state->buffer_view_count * sizeof(state->buffer_views[0]));
 
-    state->buffer_views[0] = open_buffer_view(FILE_PATH1, (Rect){100, 100, 300, 300}, &state->render_state, state);
-    state->buffer_views[1] = open_buffer_view(FILE_PATH2, (Rect){500, 400, 400, 400}, &state->render_state, state);
+    state->buffer_views[0] = open_buffer_view(FILE_PATH1, (Rect){10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100}, &state->render_state, state);
+    state->buffer_views[1] = open_buffer_view(FILE_PATH2, (Rect){state->render_state.window_dim.x * 0.5f + 10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100}, &state->render_state, state);
 
     state->active_buffer_view = state->buffer_views;
 }
