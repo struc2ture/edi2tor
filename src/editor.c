@@ -47,13 +47,13 @@ void _init(GLFWwindow *window, void *_state)
     state->buffer_views = xmalloc(state->buffer_view_count * sizeof(state->buffer_views[0]));
     state->active_buffer_view = state->buffer_views;
 
-    state->active_buffer_view->viewport.zoom = DEFAULT_ZOOM;
+    state->active_buffer_view->viewport.canvas_zoom = DEFAULT_ZOOM;
     int window_w, window_h;
     glfwGetWindowSize(window, &window_w, &window_h);
-    state->active_buffer_view->viewport.outer_dim.x = window_w;
-    state->active_buffer_view->viewport.outer_dim.y = window_h;
-
-    update_mvp_canvas_space(&state->render_state, state->active_buffer_view->viewport);
+    state->active_buffer_view->viewport.screen_rect.x = 100;
+    state->active_buffer_view->viewport.screen_rect.y = 100;
+    state->active_buffer_view->viewport.screen_rect.w = 300;
+    state->active_buffer_view->viewport.screen_rect.h = 300;
 
     open_file_for_edit(FILE_PATH, state);
 }
@@ -79,6 +79,7 @@ void _render(GLFWwindow *window, void *_state)
         state->should_break = false;
     }
 
+    glDisable(GL_SCISSOR_TEST);
     glClear(GL_COLOR_BUFFER_BIT);
 
     perform_timing_calculations(state);
@@ -118,30 +119,31 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    state->active_buffer_view->viewport.offset.x -= x_offset * SCROLL_SENS;
-    state->active_buffer_view->viewport.offset.y -= y_offset * SCROLL_SENS;
-    update_mvp_canvas_space(&state->render_state, state->active_buffer_view->viewport);
+    state->active_buffer_view->viewport.canvas_offset.x -= x_offset * SCROLL_SENS;
+    state->active_buffer_view->viewport.canvas_offset.y -= y_offset * SCROLL_SENS;
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
 {
-    (void)window; (void)w; (void)h;
+    (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
     glViewport(0, 0, w, h);
+    state->render_state.framebuffer_dim.x = w;
+    state->render_state.framebuffer_dim.y = h;
+    state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
 }
 
 void window_size_callback(GLFWwindow *window, int w, int h)
 {
     (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    state->active_buffer_view->viewport.outer_dim.x = w;
-    state->active_buffer_view->viewport.outer_dim.y = h;
     state->render_state.window_dim.x = w;
     state->render_state.window_dim.y = h;
-    update_mvp_canvas_space(&state->render_state, state->active_buffer_view->viewport);
+    state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
 }
 
 void refresh_callback(GLFWwindow* window) {
     (void)window; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    _render(window, state);
+    // TODO: This seems to cause an issue with window resize action not ending in macos, main program loop still being blocked
+    // _render(window, state);
 }
 
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
@@ -238,13 +240,11 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            active_view->viewport.zoom += 0.25f;
-            update_mvp_canvas_space(&state->render_state, active_view->viewport);
+            active_view->viewport.canvas_zoom += 0.25f;
         } break;
         case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            active_view->viewport.zoom -= 0.25f;
-            update_mvp_canvas_space(&state->render_state, active_view->viewport);
+            active_view->viewport.canvas_zoom -= 0.25f;
         } break;
         case GLFW_KEY_G: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
@@ -416,6 +416,9 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     glfwGetWindowSize(window, &window_w, &window_h);
     render_state->window_dim.x = window_w;
     render_state->window_dim.y = window_h;
+    render_state->framebuffer_dim.x = framebuffer_w;
+    render_state->framebuffer_dim.y = framebuffer_h;
+    render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
 
     render_state->line_num_field_width = get_string_rect("0000 ", render_state->font, 0, 0).w;
 }
@@ -750,20 +753,23 @@ void draw_line_numbers(Text_Buffer text_buffer, Viewport viewport, Render_State 
 
 void draw_buffer_view(Buffer_View *buffer_view, Render_State *render_state, float delta_time)
 {
-    // set_viewport_transform();
+    buffer_view->viewport.screen_rect.x += delta_time * 10.0f;
+    buffer_view->viewport.screen_rect.y += delta_time * 10.0f;
 
-    update_mvp_canvas_space(render_state, buffer_view->viewport);
+    set_screen_space_transform(render_state);
+    draw_quad(buffer_view->viewport.screen_rect, (unsigned char[4]){50, 50, 50, 255});
 
+    set_viewport_transform(buffer_view->viewport, render_state);
     draw_text_buffer(buffer_view->text_buffer, buffer_view->viewport, render_state);
     draw_cursor(buffer_view->text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
     draw_selection(buffer_view->text_buffer, buffer_view->selection, buffer_view->viewport, render_state);
-    draw_line_numbers(buffer_view->text_buffer, buffer_view->viewport, render_state);
+    // draw_line_numbers(buffer_view->text_buffer, buffer_view->viewport, render_state);
 }
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state)
 {
     (void)window;
-    update_mvp_screen_space(render_state);
+    set_screen_space_transform(render_state);
 
     const float font_line_height = get_font_line_height(render_state->font);
     const float x_padding = 10;
@@ -875,37 +881,67 @@ void mul_mat4(const float *a, const float *b, float *out) // row-major
     }
 }
 
-void update_mvp_canvas_space(Render_State *render_state, Viewport viewport)
+void gl_enable_viewport_scissor(Viewport viewport, Render_State *render_state)
 {
-    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, render_state->proj_transform);
-    make_view(viewport.offset.x, viewport.offset.y, viewport.zoom, render_state->view_transform);
-    float mvp[16];
-    mul_mat4(render_state->view_transform, render_state->proj_transform, mvp);
+    glEnable(GL_SCISSOR_TEST);
+    Rect scaled_rect = {
+        .x = viewport.screen_rect.x * render_state->dpi_scale,
+        .y = viewport.screen_rect.y * render_state->dpi_scale,
+        .w = viewport.screen_rect.w * render_state->dpi_scale,
+        .h = viewport.screen_rect.h * render_state->dpi_scale
+    };
+    float scaled_window_h = render_state->window_dim.y * render_state->dpi_scale;
+    GLint scissor_x = (GLint)floor(scaled_rect.x);
+    float viewport_screen_rect_topdown_bottom_y = scaled_rect.y + scaled_rect.h;
+    float viewport_screen_rect_bottomup_bottom_y = scaled_window_h - viewport_screen_rect_topdown_bottom_y;
+    GLint scissor_y = (GLint)floor(viewport_screen_rect_bottomup_bottom_y);
+    GLsizei scissor_w = (GLsizei)(ceil(scaled_rect.x + scaled_rect.w) - scissor_x);
+    GLsizei scissor_h = (GLsizei)(ceil(viewport_screen_rect_bottomup_bottom_y + scaled_rect.h) - scissor_y);
+    glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
+}
+
+void set_viewport_transform(Viewport viewport, Render_State *render_state)
+{
+    float proj[16], view_viewport[16], view_screen[16], view[16], mvp[16];
+
+    make_view(viewport.canvas_offset.x, viewport.canvas_offset.y, viewport.canvas_zoom, view_viewport);
+    make_view(-viewport.screen_rect.x, -viewport.screen_rect.y, 1.0f, view_screen);
+    mul_mat4(view_viewport, view_screen, view);
+
+    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+    mul_mat4(view, proj, mvp);
+
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
+
+    gl_enable_viewport_scissor(viewport, render_state);
+}
+
+void set_screen_space_transform(Render_State *render_state)
+{
+    glDisable(GL_SCISSOR_TEST);
+    float proj[16];
+    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, proj);
 }
 
 void update_mvp_vertical_canvas_space(Render_State *render_state, Viewport viewport)
 {
-    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, render_state->proj_transform);
-    make_view(0, viewport.offset.y, viewport.zoom, render_state->view_transform);
+    float proj[16];
+    float view[16];
     float mvp[16];
-    mul_mat4(render_state->view_transform, render_state->proj_transform, mvp);
+    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+    make_view(0, viewport.canvas_offset.y, viewport.canvas_zoom, view);
+    mul_mat4(view, proj, mvp);
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
-}
-
-void update_mvp_screen_space(Render_State *render_state)
-{
-    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, render_state->proj_transform);
-    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, render_state->proj_transform);
 }
 
 Rect_Bounds get_viewport_bounds(Viewport viewport)
 {
     Rect_Bounds r;
-    r.min_x = viewport.offset.x;
-    r.min_y = viewport.offset.y;
-    r.max_x = r.min_x + viewport.outer_dim.x / viewport.zoom;
-    r.max_y = r.min_y + viewport.outer_dim.y / viewport.zoom;
+    r.min_x = viewport.canvas_offset.x;
+    r.min_y = viewport.canvas_offset.y;
+    r.max_x = r.min_x + viewport.screen_rect.w / viewport.canvas_zoom;
+    r.max_y = r.min_y + viewport.screen_rect.h / viewport.canvas_zoom;
     return r;
 }
 
@@ -921,19 +957,21 @@ Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font, floa
     return viewport_bounds;
 }
 
-Vec_2 get_viewport_dim(Viewport viewport)
+Rect get_viewport_rect(Viewport viewport)
 {
-    Vec_2 r;
-    r.x = viewport.outer_dim.x / viewport.zoom;
-    r.y = viewport.outer_dim.y / viewport.zoom;
+    Rect r;
+    r.x = viewport.canvas_offset.x;
+    r.y = viewport.canvas_offset.y;
+    r.w = viewport.screen_rect.w / viewport.canvas_zoom;
+    r.h = viewport.screen_rect.h / viewport.canvas_zoom;
     return r;
 }
 
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport)
 {
     Vec_2 r;
-    r.x = viewport.offset.x + window_pos.x / viewport.zoom;
-    r.y = viewport.offset.y + window_pos.y / viewport.zoom;
+    r.x = viewport.canvas_offset.x + (window_pos.x - viewport.screen_rect.x) / viewport.canvas_zoom;
+    r.y = viewport.canvas_offset.y + (window_pos.y - viewport.screen_rect.y) / viewport.canvas_zoom;
     return r;
 }
 
@@ -946,18 +984,22 @@ bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport)
             canvas_pos.y < viewport_bounds.max_y);
 }
 
-Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport)
+Vec_2 get_mouse_window_pos(GLFWwindow *window)
 {
     double mouse_x, mouse_y;
     glfwGetCursorPos(window, &mouse_x, &mouse_y);
     Vec_2 mouse_window_pos = {mouse_x, mouse_y};
-    Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(mouse_window_pos, viewport);
+    return mouse_window_pos;
+}
+
+Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport)
+{
+    Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(get_mouse_window_pos(window), viewport);
     return mouse_canvas_pos;
 }
 
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
 {
-    // TODO: Handle buffer_view's quad position
     Buffer_View *active_view = state->active_buffer_view;
     Buf_Pos r;
     Vec_2 pos = get_mouse_canvas_pos(window, active_view->viewport);
@@ -975,44 +1017,36 @@ Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
 
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state)
 {
+    Rect viewport_r = get_viewport_rect(*viewport);
     Rect_Bounds viewport_b = get_viewport_cursor_bounds(*viewport, render_state->font, render_state->line_num_field_width);
     Rect_Bounds cursor_b = rect_get_bounds(get_cursor_rect(text_buffer, cursor, render_state));
     float font_space_width = get_char_width(' ', render_state->font);
     float font_line_height = get_font_line_height(render_state->font);
-    bool will_update_shader = false;
     if (cursor_b.max_y <= viewport_b.min_y || cursor_b.min_y >= viewport_b.max_y)
     {
-        Vec_2 viewport_dim = get_viewport_dim(*viewport);
         if (cursor_b.max_y <= viewport_b.min_y)
         {
-            viewport->offset.y = cursor_b.min_y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+            viewport->canvas_offset.y = cursor_b.min_y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
         }
         else
         {
-            viewport->offset.y = cursor_b.max_y - viewport_dim.y + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+            viewport->canvas_offset.y = cursor_b.max_y - viewport_r.h + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
         }
-        will_update_shader = true;
     }
     if (cursor_b.max_x <= viewport_b.min_x || cursor_b.min_x >= viewport_b.max_x)
     {
-        Vec_2 viewport_dim = get_viewport_dim(*viewport);
         if (cursor_b.max_x <= viewport_b.min_x)
         {
-            viewport->offset.x = cursor_b.min_x - render_state->line_num_field_width - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
-            if (viewport->offset.x < 0.0f)
+            viewport->canvas_offset.x = cursor_b.min_x - render_state->line_num_field_width - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            if (viewport->canvas_offset.x < 0.0f)
             {
-                viewport->offset.x = 0.0f;
+                viewport->canvas_offset.x = 0.0f;
             }
         }
         else
         {
-            viewport->offset.x = cursor_b.max_x - viewport_dim.x + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            viewport->canvas_offset.x = cursor_b.max_x - viewport_r.w + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
         }
-        will_update_shader = true;
-    }
-    if (will_update_shader)
-    {
-        update_mvp_canvas_space(render_state, *viewport);
     }
 }
 

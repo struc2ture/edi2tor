@@ -51,9 +51,9 @@ typedef struct {
 } Vert_Buffer;
 
 typedef struct {
-    Vec_2 offset;
-    Rect outer_dim;
-    float zoom;
+    Rect screen_rect;
+    Vec_2 canvas_offset;
+    float canvas_zoom;
 } Viewport;
 
 typedef struct {
@@ -107,8 +107,8 @@ typedef struct {
     GLuint vbo;
     GLuint shader_mvp_loc;
     Vec_2 window_dim;
-    float view_transform[16];
-    float proj_transform[16];
+    Vec_2 framebuffer_dim;
+    float dpi_scale;
     Render_Font font;
     float line_num_field_width;
 } Render_State;
@@ -196,16 +196,18 @@ void make_ortho(float left, float right, float bottom, float top, float near, fl
 void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
-void update_mvp_canvas_space(Render_State *render_state, Viewport viewport);
+void gl_enable_viewport_scissor(Viewport viewport, Render_State *render_state);
+void set_viewport_transform(Viewport viewport, Render_State *render_state);
+void set_screen_space_transform(Render_State *render_state);
 void update_mvp_vertical_canvas_space(Render_State *render_state, Viewport viewport);
-void update_mvp_screen_space(Render_State *render_state);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);
 Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font, float line_num_field_width);
-Vec_2 get_viewport_dim(Viewport viewport);
+Rect get_viewport_rect(Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
+Vec_2 get_mouse_window_pos(GLFWwindow *window);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state);
