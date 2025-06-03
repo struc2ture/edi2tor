@@ -112,6 +112,8 @@ typedef struct {
     float dpi_scale;
     Render_Font font;
     float line_num_col_width;
+    float buffer_view_name_height;
+    float buffer_view_padding;
 } Render_State;
 
 typedef struct {
@@ -197,7 +199,8 @@ void draw_quad(Rect q, const unsigned char color[4]);
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Text_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
 void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
-void draw_line_numbers(Text_Buffer text_buffer, Text_Cursor cursor, Viewport viewport, Render_State *render_state);
+void draw_line_numbers(Buffer_View buffer_view, Render_State *render_state);
+void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Render_State *render_state);
 void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *render_state, float delta_time);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
@@ -207,10 +210,10 @@ void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
 void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
-void set_viewport_transform(Viewport viewport, Render_State *render_state);
-void set_line_num_col_transform(Viewport viewport, Render_State *render_state);
-void set_screen_space_transform(Render_State *render_state);
-void update_mvp_vertical_canvas_space(Render_State *render_state, Viewport viewport);
+void transform_set_viewport(Viewport viewport, Render_State *render_state);
+void transform_set_line_num_col(Buffer_View buffer_view, Render_State *render_state);
+void transform_set_rect(Rect rect, Render_State *render_state);
+void transform_set_screen_space(Render_State *render_state);
 
 Rect_Bounds get_viewport_bounds(Viewport viewport);
 Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font);
