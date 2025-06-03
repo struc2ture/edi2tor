@@ -82,15 +82,15 @@ void _render(GLFWwindow *window, void *_state)
     {
         Buffer_View *buffer_view = &state->buffer_views[i];
 
-        float dS;
-        if (i == 0)
-        {
-            dS = state->delta_time * 10.0f;
-        }
-        else
-        {
-            dS = -state->delta_time * 10.0f;
-        }
+        float dS = 0.0f;
+        // if (i == 0)
+        // {
+        //     dS = state->delta_time * 10.0f;
+        // }
+        // else
+        // {
+        //     dS = -state->delta_time * 10.0f;
+        // }
 
         Rect new_rect = buffer_view->outer_rect;
         new_rect.x += dS;
@@ -289,26 +289,43 @@ void handle_char_input(Editor_State *state, char c)
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
-    Buffer_View *active_view = state->active_buffer_view;
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        bool is_just_pressed = !state->left_mouse_down;
-        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        if (is_shift_pressed && is_just_pressed && !is_selection_valid(active_view->text_buffer, active_view->selection)) {
-            start_selection_at_cursor(state);
+        if (!state->left_mouse_handled)
+        {
+            bool is_just_pressed = !state->left_mouse_down;
+            state->left_mouse_down = true;
+            if (is_just_pressed)
+            {
+                Buffer_View *clicked_view = get_buffer_view_under_mouse(window, state);
+                if (state->active_buffer_view != clicked_view)
+                {
+                    state->active_buffer_view = clicked_view;
+                    state->left_mouse_handled = true;
+                    return;
+                }
+            }
+            Buffer_View *active_view = state->active_buffer_view;
+            if (active_view != NULL)
+            {
+                bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+                if (is_shift_pressed && is_just_pressed && !is_selection_valid(active_view->text_buffer, active_view->selection)) {
+                    start_selection_at_cursor(state);
+                }
+                Buf_Pos bp = get_buf_pos_under_mouse(window, state);
+                move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, bp.line, false);
+                move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, bp.col, false, false);
+                extend_selection_to_cursor(state);
+                if (!is_shift_pressed && is_just_pressed) {
+                    start_selection_at_cursor(state);
+                }
+                if (is_shift_pressed || !is_just_pressed) {
+                    extend_selection_to_cursor(state);
+                }
+            }
         }
-        Buf_Pos bp = get_buf_pos_under_mouse(window, state);
-        move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, bp.line, false);
-        move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, bp.col, false, false);
-        extend_selection_to_cursor(state);
-        if (!is_shift_pressed && is_just_pressed) {
-            start_selection_at_cursor(state);
-        }
-        if (is_shift_pressed || !is_just_pressed) {
-            extend_selection_to_cursor(state);
-        }
-        state->left_mouse_down = true;
     } else {
         state->left_mouse_down = false;
+        state->left_mouse_handled = false;
     }
 }
 
@@ -1066,6 +1083,22 @@ Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport)
 {
     Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(get_mouse_window_pos(window), viewport);
     return mouse_canvas_pos;
+}
+
+Buffer_View *get_buffer_view_under_mouse(GLFWwindow *window, Editor_State *state)
+{
+    Vec_2 mouse_window_pos = get_mouse_window_pos(window);
+
+    for (int i = 0; i < state->buffer_view_count; i++)
+    {
+        Rect_Bounds b = rect_get_bounds(state->buffer_views[i].outer_rect);
+        if (mouse_window_pos.x > b.min_x && mouse_window_pos.x < b.max_x &&
+            mouse_window_pos.y > b.min_y && mouse_window_pos.y < b.max_y)
+        {
+            return &state->buffer_views[i];
+        }
+    }
+    return NULL;
 }
 
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)

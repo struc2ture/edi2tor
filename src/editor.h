@@ -139,6 +139,7 @@ typedef struct {
     char go_to_line_chars[GO_TO_LINE_CHAR_MAX];
     int current_go_to_line_char_i;
     bool left_mouse_down;
+    bool left_mouse_handled;
 } Editor_State;
 
 typedef enum {
@@ -214,6 +215,7 @@ bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_window_pos(GLFWwindow *window);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
+Buffer_View *get_buffer_view_under_mouse(GLFWwindow *window, Editor_State *state);
 Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state);
 bool is_canvas_rect_in_viewport(Viewport viewport, Rect rect);
