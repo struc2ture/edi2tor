@@ -138,6 +138,8 @@ typedef struct {
     long long frame_count;
     bool left_mouse_down;
     bool left_mouse_handled;
+    Vec_2 prev_mouse_pos;
+    bool is_viewport_drag;
 } Editor_State;
 
 typedef enum {
@@ -165,7 +167,7 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
 Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
 void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
-void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, GLFWwindow *window, Editor_State *state);
+void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_window_pos, Editor_State *state);
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
@@ -211,11 +213,12 @@ Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font);
 Rect get_viewport_rect(Viewport viewport);
 Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport);
 bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport);
+bool is_pos_in_bounds(Vec_2 pos, Rect_Bounds bounds);
 bool is_canvas_y_pos_in_bounds(float canvas_y, Viewport viewport);
 Vec_2 get_mouse_window_pos(GLFWwindow *window);
-Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport);
-Buffer_View *get_buffer_view_under_mouse(GLFWwindow *window, Editor_State *state);
-Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state);
+Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
+Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state);
+Buf_Pos canvas_pos_to_buf_pos(Vec_2 canvas_pos, const Buffer_View *buffer_view, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state);
 bool is_canvas_rect_in_viewport(Viewport viewport, Rect rect);
 

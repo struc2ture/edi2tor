@@ -105,6 +105,8 @@ void _render(GLFWwindow *window, void *_state)
 
     handle_mouse_input(window, state);
 
+    state->prev_mouse_pos = get_mouse_window_pos(window);
+
     glfwSwapBuffers(window);
     glfwPollEvents();
 
@@ -261,31 +263,54 @@ void handle_char_input(Editor_State *state, char c)
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        if (!state->left_mouse_handled)
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        bool is_just_pressed = !state->left_mouse_down;
+        state->left_mouse_down = true;
+        if (is_just_pressed)
         {
-            bool is_just_pressed = !state->left_mouse_down;
-            state->left_mouse_down = true;
-            if (is_just_pressed)
+            Buffer_View *clicked_view = get_buffer_view_at_pos(get_mouse_window_pos(window), state);
+            if (state->active_buffer_view != clicked_view)
             {
-                Buffer_View *clicked_view = get_buffer_view_under_mouse(window, state);
-                if (state->active_buffer_view != clicked_view)
+                if (clicked_view != NULL)
                 {
                     state->active_buffer_view = clicked_view;
-                    state->left_mouse_handled = true;
-                    return;
+                    state->is_viewport_drag = true;
                 }
+                state->left_mouse_handled = true;
             }
+        }
+        if (!state->left_mouse_handled && !state->is_viewport_drag)
+        {
             Buffer_View *active_view = state->active_buffer_view;
             if (active_view != NULL)
             {
-                bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-                handle_mouse_buffer_click(active_view, is_shift_pressed, is_just_pressed, window, state);
+                Vec_2 mouse_window_pos = get_mouse_window_pos(window);
+                if (is_pos_in_bounds(mouse_window_pos, rect_get_bounds(active_view->viewport.screen_rect)))
+                {
+                    bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+                    handle_mouse_buffer_click(active_view, is_shift_pressed, is_just_pressed, mouse_window_pos, state);
+                }
+                else
+                {
+                    state->is_viewport_drag = true;
+                }
             }
         }
-    } else {
+        if (state->is_viewport_drag)
+        {
+            Vec_2 mouse_delta = get_mouse_delta(window, state);
+            Rect new_rect = state->active_buffer_view->outer_rect;
+            new_rect.x += mouse_delta.x;
+            new_rect.y += mouse_delta.y;
+            set_buffer_view_rect(state->active_buffer_view, new_rect, &state->render_state);
+        }
+    }
+    else
+    {
         state->left_mouse_down = false;
         state->left_mouse_handled = false;
+        state->is_viewport_drag = false;
     }
 }
 
@@ -343,14 +368,15 @@ void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir d
     else cancel_selection(state);
 }
 
-void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, GLFWwindow *window, Editor_State *state)
+void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_window_pos, Editor_State *state)
 {
     if (with_selection && just_pressed && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection)) {
         start_selection_at_cursor(state);
     }
-    Buf_Pos bp = get_buf_pos_under_mouse(window, state);
-    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, bp.line, false);
-    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, bp.col, false, false);
+    Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(mouse_window_pos, buffer_view->viewport);
+    Buf_Pos mouse_buf_pos = canvas_pos_to_buf_pos(mouse_canvas_pos, buffer_view, &state->render_state);
+    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_buf_pos.line, false);
+    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_buf_pos.col, false, false);
     extend_selection_to_cursor(state);
     if (!with_selection && just_pressed) {
         start_selection_at_cursor(state);
@@ -841,23 +867,6 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *rend
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
     status_str_y += font_line_height;
 
-    #if 0
-    Rect_Bounds viewport_bounds = get_viewport_bounds(active_view->viewport);
-    double mouse_x, mouse_y;
-    glfwGetCursorPos(window, &mouse_x, &mouse_y);
-    Vec_2 mouse_window_pos = { .x = mouse_x, .y = mouse_y };
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, active_view->viewport);
-
-    snprintf(status_str_buf, sizeof(status_str_buf),
-        "Viewport bounds: " VEC2_FMT VEC2_FMT "; Zoom: %0.2f; Mouse Position: window: " VEC2_FMT " canvas: " VEC2_FMT,
-        VEC2_ARG(viewport_bounds.min),
-        VEC2_ARG(viewport_bounds.max),
-        active_view->viewport.zoom,
-        VEC2_ARG(mouse_window_pos),
-        VEC2_ARG(mouse_canvas_pos));
-    draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, color);
-    #endif
-
     snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f", state->fps, state->delta_time);
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
 }
@@ -1032,6 +1041,13 @@ bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport)
             canvas_pos.y < viewport_bounds.max_y);
 }
 
+bool is_pos_in_bounds(Vec_2 pos, Rect_Bounds bounds)
+{
+    bool in_bounds = pos.x > bounds.min_x && pos.x < bounds.max_x &&
+        pos.y > bounds.min_y && pos.y < bounds.max_y;
+    return in_bounds;
+}
+
 Vec_2 get_mouse_window_pos(GLFWwindow *window)
 {
     double mouse_x, mouse_y;
@@ -1040,21 +1056,23 @@ Vec_2 get_mouse_window_pos(GLFWwindow *window)
     return mouse_window_pos;
 }
 
-Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Viewport viewport)
+Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(get_mouse_window_pos(window), viewport);
-    return mouse_canvas_pos;
+    Vec_2 current_mouse_pos = get_mouse_window_pos(window);
+    Vec_2 delta_mouse_pos = {
+        .x = current_mouse_pos.x - state->prev_mouse_pos.x,
+        .y = current_mouse_pos.y - state->prev_mouse_pos.y
+    };
+    return delta_mouse_pos;
 }
 
-Buffer_View *get_buffer_view_under_mouse(GLFWwindow *window, Editor_State *state)
+Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state)
 {
-    Vec_2 mouse_window_pos = get_mouse_window_pos(window);
-
     for (int i = 0; i < state->buffer_view_count; i++)
     {
         Rect_Bounds b = rect_get_bounds(state->buffer_views[i].outer_rect);
-        if (mouse_window_pos.x > b.min_x && mouse_window_pos.x < b.max_x &&
-            mouse_window_pos.y > b.min_y && mouse_window_pos.y < b.max_y)
+        if (pos.x > b.min_x && pos.x < b.max_x &&
+            pos.y > b.min_y && pos.y < b.max_y)
         {
             return &state->buffer_views[i];
         }
@@ -1062,19 +1080,16 @@ Buffer_View *get_buffer_view_under_mouse(GLFWwindow *window, Editor_State *state
     return NULL;
 }
 
-Buf_Pos get_buf_pos_under_mouse(GLFWwindow *window, Editor_State *state)
+Buf_Pos canvas_pos_to_buf_pos(Vec_2 canvas_pos, const Buffer_View *buffer_view, const Render_State *render_state)
 {
-    Buffer_View *active_view = state->active_buffer_view;
     Buf_Pos r;
-    Vec_2 pos = get_mouse_canvas_pos(window, active_view->viewport);
-    r.line = pos.y / (float)get_font_line_height(state->render_state.font);
-    r.col = 0;
+    r.line = canvas_pos.y / (float)get_font_line_height(render_state->font);
     if (r.line < 0) {
         r.line = 0;
-    } else if (r.line >= active_view->text_buffer.line_count) {
-        r.line = active_view->text_buffer.line_count - 1;
+    } else if (r.line >= buffer_view->text_buffer.line_count) {
+        r.line = buffer_view->text_buffer.line_count - 1;
     }
-    r.col = get_char_i_at_pos_in_string(active_view->text_buffer.lines[r.line].str, state->render_state.font, pos.x);
+    r.col = get_char_i_at_pos_in_string(buffer_view->text_buffer.lines[r.line].str, render_state->font, canvas_pos.x);
     return r;
 }
 
