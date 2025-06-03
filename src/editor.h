@@ -140,6 +140,7 @@ typedef struct {
     bool left_mouse_handled;
     Vec_2 prev_mouse_pos;
     bool is_viewport_drag;
+    bool is_viewport_resize;
 } Editor_State;
 
 typedef enum {

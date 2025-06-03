@@ -265,35 +265,45 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
+        const float resize_handle_radius = 5.0f;
+        Vec_2 mouse_window_pos = get_mouse_window_pos(window);
         bool is_just_pressed = !state->left_mouse_down;
         state->left_mouse_down = true;
         if (is_just_pressed)
         {
-            Buffer_View *clicked_view = get_buffer_view_at_pos(get_mouse_window_pos(window), state);
-            if (state->active_buffer_view != clicked_view)
+            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_window_pos, state);
+            if (clicked_view != NULL)
             {
-                if (clicked_view != NULL)
+                if (state->active_buffer_view != clicked_view)
                 {
                     state->active_buffer_view = clicked_view;
+                    state->left_mouse_handled = true;
+                }
+                Rect_Bounds resize_handle = {
+                    .min_x = state->active_buffer_view->outer_rect.x + state->active_buffer_view->outer_rect.w - resize_handle_radius,
+                    .min_y = state->active_buffer_view->outer_rect.y + state->active_buffer_view->outer_rect.h - resize_handle_radius,
+                    .max_x = state->active_buffer_view->outer_rect.x + state->active_buffer_view->outer_rect.w + resize_handle_radius,
+                    .max_y = state->active_buffer_view->outer_rect.y + state->active_buffer_view->outer_rect.h + resize_handle_radius
+                };
+                if (is_pos_in_bounds(mouse_window_pos, resize_handle))
+                {
+                    state->is_viewport_resize = true;
+                }
+                else if (!is_pos_in_bounds(mouse_window_pos, rect_get_bounds(state->active_buffer_view->viewport.screen_rect)))
+                {
                     state->is_viewport_drag = true;
                 }
-                state->left_mouse_handled = true;
             }
         }
-        if (!state->left_mouse_handled && !state->is_viewport_drag)
+        if (!state->left_mouse_handled && !state->is_viewport_drag && !state->is_viewport_resize)
         {
             Buffer_View *active_view = state->active_buffer_view;
             if (active_view != NULL)
             {
-                Vec_2 mouse_window_pos = get_mouse_window_pos(window);
                 if (is_pos_in_bounds(mouse_window_pos, rect_get_bounds(active_view->viewport.screen_rect)))
                 {
                     bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
                     handle_mouse_buffer_click(active_view, is_shift_pressed, is_just_pressed, mouse_window_pos, state);
-                }
-                else
-                {
-                    state->is_viewport_drag = true;
                 }
             }
         }
@@ -305,12 +315,21 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
             new_rect.y += mouse_delta.y;
             set_buffer_view_rect(state->active_buffer_view, new_rect, &state->render_state);
         }
+        else if (state->is_viewport_resize)
+        {
+            Vec_2 mouse_delta = get_mouse_delta(window, state);
+            Rect new_rect = state->active_buffer_view->outer_rect;
+            new_rect.w += mouse_delta.x;
+            new_rect.h += mouse_delta.y;
+            set_buffer_view_rect(state->active_buffer_view, new_rect, &state->render_state);
+        }
     }
     else
     {
         state->left_mouse_down = false;
         state->left_mouse_handled = false;
         state->is_viewport_drag = false;
+        state->is_viewport_resize = false;
     }
 }
 
@@ -1071,8 +1090,17 @@ Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state)
     for (int i = 0; i < state->buffer_view_count; i++)
     {
         Rect_Bounds b = rect_get_bounds(state->buffer_views[i].outer_rect);
-        if (pos.x > b.min_x && pos.x < b.max_x &&
-            pos.y > b.min_y && pos.y < b.max_y)
+        const float resize_handle_radius = 5.0f;
+        Rect_Bounds resize_handle = {
+            .min_x = state->buffer_views[i].outer_rect.x + state->buffer_views[i].outer_rect.w - resize_handle_radius,
+            .min_y = state->buffer_views[i].outer_rect.y + state->buffer_views[i].outer_rect.h - resize_handle_radius,
+            .max_x = state->buffer_views[i].outer_rect.x + state->buffer_views[i].outer_rect.w + resize_handle_radius,
+            .max_y = state->buffer_views[i].outer_rect.y + state->buffer_views[i].outer_rect.h + resize_handle_radius
+        };
+        if ((pos.x > b.min_x && pos.x < b.max_x &&
+            pos.y > b.min_y && pos.y < b.max_y) ||
+            (pos.x > resize_handle.min_x && pos.x < resize_handle.max_x &&
+            pos.y > resize_handle.min_y && pos.y < resize_handle.max_y))
         {
             return &state->buffer_views[i];
         }
