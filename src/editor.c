@@ -20,18 +20,6 @@ void _init(GLFWwindow *window, void *_state)
 
     initialize_render_state(window, &state->render_state);
 
-    Buffer_View *first_file = buffer_view_open_file(
-        FILE_PATH1,
-        (Rect){10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100},
-        state);
-
-    buffer_view_open_file(
-        FILE_PATH2,
-        (Rect){state->render_state.window_dim.x * 0.5f + 10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100},
-        state);
-
-    buffer_view_set_active(first_file, state);
-
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
 }
@@ -317,7 +305,7 @@ void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state)
         state->buffer_views[i] = state->buffer_views[i + 1];
     }
     state->buffer_view_count--;
-    state->buffer_views = xrealloc(state->buffer_views, state->buffer_view_count);
+    state->buffer_views = xrealloc(state->buffer_views, state->buffer_view_count * sizeof(state->buffer_views[0]));
     if (state->active_buffer_view == buffer_view)
     {
         state->active_buffer_view = state->buffer_views[0];
@@ -1798,6 +1786,25 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
                 buffer_view_destroy(state->active_buffer_view, state);
             }
         } break;
+        case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            buffer_view_open_file(
+                FILE_PATH1,
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
+        } break;
+        case GLFW_KEY_2: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            buffer_view_open_file(
+                FILE_PATH2,
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
+        } break;
+
     }
 }
 
