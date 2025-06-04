@@ -99,6 +99,15 @@ void _render(GLFWwindow *window, void *_state)
 
     state->prev_mouse_pos = get_mouse_screen_pos(window);
 
+    if (state->scroll_timeout > 0.0f)
+    {
+        state->scroll_timeout -= state->delta_time;
+    }
+    else
+    {
+        state->scrolled_buffer_view = NULL;
+    }
+
     glfwSwapBuffers(window);
     glfwPollEvents();
 
@@ -128,19 +137,22 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-    Buffer_View *hovered_buffer_view = get_buffer_view_at_pos(mouse_canvas_pos, state);
-    if (hovered_buffer_view)
+    if (state->scroll_timeout <= 0.0f)
     {
-        hovered_buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
-        hovered_buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
+        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+        state->scrolled_buffer_view = get_buffer_view_at_pos(mouse_canvas_pos, state);
+    }
+    state->scroll_timeout = 0.1f;
+    if (state->scrolled_buffer_view)
+    {
+        state->scrolled_buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
+        state->scrolled_buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
     }
     else
     {
         state->canvas_viewport.rect.x -= x_offset * SCROLL_SENS;
         state->canvas_viewport.rect.y -= y_offset * SCROLL_SENS;
-        trace_log("canvas_viewport scrolled: %f, %f", state->canvas_viewport.rect.x, state->canvas_viewport.rect.y);
     }
 }
 

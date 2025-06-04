@@ -145,6 +145,8 @@ typedef struct {
     bool is_buffer_view_drag;
     bool is_buffer_view_resize;
     bool is_buffer_view_text_area_click;
+    float scroll_timeout;
+    Buffer_View *scrolled_buffer_view;
 } Editor_State;
 
 typedef enum {
