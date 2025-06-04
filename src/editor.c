@@ -761,11 +761,17 @@ void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Viewport can
 {
     Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
 
+    char buffer_view_name_buf[256];
+    if (!buffer_view.file_info.has_been_modified)
+        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s", buffer_view.file_info.path);
+    else
+        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s[*]", buffer_view.file_info.path);
+
     transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
-        draw_string(buffer_view.file_info.path, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255});
+        draw_string(buffer_view_name_buf, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255});
     else
-        draw_string(buffer_view.file_info.path, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255});
+        draw_string(buffer_view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255});
 }
 
 void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
@@ -1310,10 +1316,12 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
         line->str[cursor->pos.col] = c;
         move_cursor_to_col(text_buffer, cursor, state, cursor->pos.col + 1, true, false);
     }
+    active_view->file_info.has_been_modified = true;
 }
 
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
+    Buffer_View *active_view = state->active_buffer_view;
     if (cursor->pos.col <= 0) {
         if (cursor->pos.line <= 0) {
             return;
@@ -1334,6 +1342,7 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         resize_text_line(&text_buffer->lines[cursor->pos.line], line->len - 1);
         move_cursor_to_col(text_buffer, cursor, state, cursor->pos.col - 1, true, false);
     }
+    active_view->file_info.has_been_modified = true;
 }
 
 void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
@@ -1779,6 +1788,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
             write_file(active_view->text_buffer, active_view->file_info);
+            active_view->file_info.has_been_modified = false;
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {

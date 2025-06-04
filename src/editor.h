@@ -58,6 +58,7 @@ typedef struct {
 
 typedef struct {
     char *path;
+    bool has_been_modified;
 } File_Info;
 
 typedef struct {
