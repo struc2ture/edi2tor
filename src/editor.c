@@ -46,13 +46,11 @@ void _init(GLFWwindow *window, void *_state)
     Buffer_View *first_file = buffer_view_open_file(
         FILE_PATH1,
         (Rect){10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100},
-        &state->render_state,
         state);
 
     buffer_view_open_file(
         FILE_PATH2,
         (Rect){state->render_state.window_dim.x * 0.5f + 10, 10, state->render_state.window_dim.x * 0.5f - 20, state->render_state.window_dim.y - 100},
-        &state->render_state,
         state);
 
     buffer_view_set_active(first_file, state);
@@ -96,7 +94,7 @@ void _render(GLFWwindow *window, void *_state)
 
     handle_mouse_input(window, state);
 
-    state->prev_mouse_pos = get_mouse_window_pos(window);
+    state->prev_mouse_pos = get_mouse_screen_pos(window);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
@@ -127,8 +125,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    state->active_buffer_view->viewport.canvas_offset.x -= x_offset * SCROLL_SENS;
-    state->active_buffer_view->viewport.canvas_offset.y -= y_offset * SCROLL_SENS;
+    state->active_buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
+    state->active_buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
@@ -234,11 +232,11 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            active_view->viewport.canvas_zoom += 0.25f;
+            active_view->viewport.zoom += 0.25f;
         } break;
         case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            active_view->viewport.canvas_zoom -= 0.25f;
+            active_view->viewport.zoom -= 0.25f;
         } break;
     }
 }
@@ -257,13 +255,13 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
-        const float resize_handle_radius = 5.0f;
-        Vec_2 mouse_window_pos = get_mouse_window_pos(window);
+        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
         bool is_just_pressed = !state->left_mouse_down;
         state->left_mouse_down = true;
         if (is_just_pressed)
         {
-            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_window_pos, state);
+            // TODO: Mouse screen position will have to be converted to canvas position
+            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_screen_pos, state);
             if (clicked_view != NULL)
             {
                 if (state->active_buffer_view != clicked_view)
@@ -271,46 +269,36 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
                     buffer_view_set_active(clicked_view, state);
                     state->left_mouse_handled = true;
                 }
-                Rect_Bounds resize_handle = {
-                    .min_x = state->active_buffer_view->outer_rect.x + state->active_buffer_view->outer_rect.w - resize_handle_radius,
-                    .min_y = state->active_buffer_view->outer_rect.y + state->active_buffer_view->outer_rect.h - resize_handle_radius,
-                    .max_x = state->active_buffer_view->outer_rect.x + state->active_buffer_view->outer_rect.w + resize_handle_radius,
-                    .max_y = state->active_buffer_view->outer_rect.y + state->active_buffer_view->outer_rect.h + resize_handle_radius
-                };
-                if (is_pos_in_bounds(mouse_window_pos, resize_handle))
-                {
-                    state->is_viewport_resize = true;
-                }
-                else if (!is_pos_in_bounds(mouse_window_pos, rect_get_bounds(state->active_buffer_view->viewport.screen_rect)))
-                {
-                    state->is_viewport_drag = true;
-                }
+                Rect text_area_rect = buffer_view_get_text_area_rect(*clicked_view, &state->render_state);
+                Rect resize_handle_rect = buffer_view_get_resize_handle_rect(*clicked_view, &state->render_state);
+                if (rect_p_intersect(mouse_screen_pos, resize_handle_rect))
+                    state->is_buffer_view_resize = true;
+                else if (rect_p_intersect(mouse_screen_pos, text_area_rect))
+                    state->is_buffer_view_text_area_click = true;
+                else
+                    state->is_buffer_view_drag = true;
             }
         }
-        if (!state->left_mouse_handled && !state->is_viewport_drag && !state->is_viewport_resize)
+
+        Buffer_View *active_view = state->active_buffer_view;
+        if (!state->left_mouse_handled && state->is_buffer_view_text_area_click)
         {
-            Buffer_View *active_view = state->active_buffer_view;
-            if (active_view != NULL)
-            {
-                if (is_pos_in_bounds(mouse_window_pos, rect_get_bounds(active_view->viewport.screen_rect)))
-                {
-                    bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-                    handle_mouse_buffer_click(active_view, is_shift_pressed, is_just_pressed, mouse_window_pos, state);
-                }
-            }
+            bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+            Vec_2 mouse_text_area_pos = buffer_view_screen_pos_to_text_area_pos(*active_view, mouse_screen_pos, &state->render_state);
+            handle_mouse_text_area_click(active_view, is_shift_pressed, is_just_pressed, mouse_text_area_pos, state);
         }
-        if (state->is_viewport_drag)
+        else if (state->is_buffer_view_drag)
         {
             Vec_2 mouse_delta = get_mouse_delta(window, state);
-            Rect new_rect = state->active_buffer_view->outer_rect;
+            Rect new_rect = active_view->outer_rect;
             new_rect.x += mouse_delta.x;
             new_rect.y += mouse_delta.y;
             buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
         }
-        else if (state->is_viewport_resize)
+        else if (state->is_buffer_view_resize)
         {
             Vec_2 mouse_delta = get_mouse_delta(window, state);
-            Rect new_rect = state->active_buffer_view->outer_rect;
+            Rect new_rect = active_view->outer_rect;
             new_rect.w += mouse_delta.x;
             new_rect.h += mouse_delta.y;
             buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
@@ -320,8 +308,9 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
     {
         state->left_mouse_down = false;
         state->left_mouse_handled = false;
-        state->is_viewport_drag = false;
-        state->is_viewport_resize = false;
+        state->is_buffer_view_text_area_click = false;
+        state->is_buffer_view_drag = false;
+        state->is_buffer_view_resize = false;
     }
 }
 
@@ -379,20 +368,23 @@ void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir d
     else cancel_selection(state);
 }
 
-void handle_mouse_buffer_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_window_pos, Editor_State *state)
+void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_text_area_pos, Editor_State *state)
 {
-    if (with_selection && just_pressed && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection)) {
+    if (with_selection && just_pressed && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection))
+    {
         start_selection_at_cursor(state);
     }
-    Vec_2 mouse_canvas_pos = window_pos_to_canvas_pos(mouse_window_pos, buffer_view->viewport);
-    Buf_Pos mouse_buf_pos = canvas_pos_to_buf_pos(mouse_canvas_pos, buffer_view, &state->render_state);
-    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_buf_pos.line, false);
-    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_buf_pos.col, false, false);
+    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
+    Cursor mouse_cursor = buffer_pos_to_cursor(mouse_buffer_pos, buffer_view->text_buffer, &state->render_state);
+    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
+    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
     extend_selection_to_cursor(state);
-    if (!with_selection && just_pressed) {
+    if (!with_selection && just_pressed)
+    {
         start_selection_at_cursor(state);
     }
-    if (with_selection || !just_pressed) {
+    if (with_selection || !just_pressed)
+    {
         extend_selection_to_cursor(state);
     }
 }
@@ -455,9 +447,10 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     glEnableVertexAttribArray(2);
 
     render_state->font = load_font(FONT_PATH);
-    render_state->line_num_col_width = get_string_rect("000", render_state->font, 0, 0).w;
+    render_state->buffer_view_line_num_col_width = get_string_rect("000", render_state->font, 0, 0).w;
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
+    render_state->buffer_view_resize_handle_radius = 5.0f;
 
     render_state->shader_mvp_loc = glGetUniformLocation(render_state->prog, "u_mvp");
 
@@ -484,11 +477,11 @@ void perform_timing_calculations(Editor_State *state)
     }
 }
 
-Buffer_View *buffer_view_create(Rect rect, Render_State *render_state, Editor_State *state)
+Buffer_View *buffer_view_create(Rect rect, Editor_State *state)
 {
     Buffer_View *view = xcalloc(sizeof(Buffer_View));
-    view->viewport.canvas_zoom = DEFAULT_ZOOM;
-    buffer_view_set_rect(view, rect, render_state);
+    view->viewport.zoom = DEFAULT_ZOOM;
+    buffer_view_set_rect(view, rect, &state->render_state);
     state->buffer_view_count++;
     state->buffer_views = xrealloc(state->buffer_views, state->buffer_view_count * sizeof(state->buffer_views[0]));
     Buffer_View **new_slot = &state->buffer_views[state->buffer_view_count - 1];
@@ -496,22 +489,12 @@ Buffer_View *buffer_view_create(Rect rect, Render_State *render_state, Editor_St
     return *new_slot;
 }
 
-Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Render_State *render_state, Editor_State *state)
+Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state)
 {
-    Buffer_View *new_view = buffer_view_create(rect, render_state, state);
+    Buffer_View *new_view = buffer_view_create(rect, state);
     open_file_for_edit(file_path, new_view, state);
     buffer_view_set_active(new_view, state);
     return new_view;
-}
-
-void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, Render_State *render_state)
-{
-    float pad = render_state->buffer_view_padding;
-    buffer_view->outer_rect = rect;
-    buffer_view->viewport.screen_rect.x = rect.x + pad + render_state->line_num_col_width + pad;
-    buffer_view->viewport.screen_rect.y = rect.y + pad + render_state->buffer_view_name_height + pad;
-    buffer_view->viewport.screen_rect.w = rect.w - pad - render_state->line_num_col_width - pad - pad;
-    buffer_view->viewport.screen_rect.h = rect.h - pad - render_state->buffer_view_name_height - pad - pad;
 }
 
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state)
@@ -535,6 +518,93 @@ void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state)
     }
     state->buffer_views[0] = buffer_view;
     state->active_buffer_view = buffer_view;
+}
+
+Rect buffer_view_get_text_area_rect(Buffer_View buffer_view, const Render_State *render_state)
+{
+    const float pad = render_state->buffer_view_padding;
+    const float line_num_w = render_state->buffer_view_line_num_col_width;
+    const float name_h = render_state->buffer_view_name_height;
+    Rect r;
+    r.x = buffer_view.outer_rect.x + pad + line_num_w + pad;
+    r.y = buffer_view.outer_rect.y + pad + name_h + pad;
+    r.w = buffer_view.outer_rect.w - pad - line_num_w - pad - pad;
+    r.h = buffer_view.outer_rect.h - pad - name_h - pad - pad;
+    return r;
+}
+
+Rect buffer_view_get_line_num_col_rect(Buffer_View buffer_view, const Render_State *render_state)
+{
+    const float pad = render_state->buffer_view_padding;
+    const float line_num_w = render_state->buffer_view_line_num_col_width;
+    const float name_h = render_state->buffer_view_name_height;
+    Rect r;
+    r.x = buffer_view.outer_rect.x + pad;
+    r.y = buffer_view.outer_rect.y + pad + name_h + pad;
+    r.w = line_num_w;
+    r.h = buffer_view.outer_rect.h - pad - name_h - pad - pad;
+    return r;
+}
+
+Rect buffer_view_get_name_rect(Buffer_View buffer_view, const Render_State *render_state)
+{
+    const float right_limit = 40.0f;
+    const float pad = render_state->buffer_view_padding;
+    const float line_num_w = render_state->buffer_view_line_num_col_width;
+    const float name_h = render_state->buffer_view_name_height;
+    Rect r;
+    r.x = buffer_view.outer_rect.x + pad + line_num_w + pad;
+    r.y = buffer_view.outer_rect.y + pad;
+    r.w = buffer_view.outer_rect.w - pad - line_num_w - pad - pad - right_limit;
+    r.h = name_h;
+    return r;
+}
+
+Rect buffer_view_get_resize_handle_rect(Buffer_View buffer_view, const Render_State *render_state)
+{
+    Rect r;
+    r.x = buffer_view.outer_rect.x + buffer_view.outer_rect.w - render_state->buffer_view_resize_handle_radius;
+    r.y = buffer_view.outer_rect.y + buffer_view.outer_rect.h - render_state->buffer_view_resize_handle_radius;
+    r.w = 2 * render_state->buffer_view_resize_handle_radius;
+    r.h = 2 * render_state->buffer_view_resize_handle_radius;
+    return r;
+}
+
+void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, const Render_State *render_state)
+{
+    buffer_view->outer_rect = rect;
+    Rect text_area_rect = buffer_view_get_text_area_rect(*buffer_view, render_state);
+    viewport_set_outer_rect(&buffer_view->viewport, text_area_rect);
+}
+
+Vec_2 buffer_view_screen_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 screen_pos, const Render_State *render_state)
+{
+    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
+    Vec_2 text_area_pos;
+    text_area_pos.x = screen_pos.x - text_area_rect.x;
+    text_area_pos.y = screen_pos.y - text_area_rect.y;
+    return text_area_pos;
+}
+
+Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos)
+{
+    Vec_2 buffer_pos;
+    buffer_pos.x = buffer_view.viewport.rect.x + text_area_pos.x / buffer_view.viewport.zoom;
+    buffer_pos.y = buffer_view.viewport.rect.y + text_area_pos.y / buffer_view.viewport.zoom;
+    return buffer_pos;
+}
+
+void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect)
+{
+    viewport->rect.w = outer_rect.w / viewport->zoom;
+    viewport->rect.h = outer_rect.h / viewport->zoom;
+}
+
+void viewport_set_zoom(Viewport *viewport, float new_zoom)
+{
+    viewport->rect.w *= viewport->zoom / new_zoom;
+    viewport->rect.h *= viewport->zoom / new_zoom;
+    viewport->zoom = new_zoom;
 }
 
 Vert make_vert(float x, float y, float u, float v, const unsigned char color[4])
@@ -695,7 +765,7 @@ int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x)
     return char_i;
 }
 
-Rect get_cursor_rect(Text_Buffer text_buffer, Text_Cursor cursor, Render_State *render_state)
+Rect get_cursor_rect(Text_Buffer text_buffer, Display_Cursor cursor, Render_State *render_state)
 {
     Rect cursor_rect = get_string_char_rect(text_buffer.lines[cursor.pos.line].str, render_state->font, cursor.pos.col);
     float line_height = get_font_line_height(render_state->font);
@@ -759,25 +829,22 @@ void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *
     for (int i = 0; i < text_buffer.line_count; i++)
     {
         Rect string_rect = get_string_rect(text_buffer.lines[i].str, render_state->font, 0, y);
-        bool is_seen = is_canvas_rect_in_viewport(viewport, string_rect);
+        bool is_seen = rect_intersect(string_rect, viewport.rect);
         if (is_seen)
             draw_string(text_buffer.lines[i].str, render_state->font, x, y, (unsigned char[4]){255, 255, 255, 255});
         y += line_height;
     }
 }
 
-void draw_cursor(Text_Buffer text_buffer, Text_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
+void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
 {
     cursor->blink_time += delta_time;
     if (cursor->blink_time < 0.5f)
     {
         Rect cursor_rect = get_cursor_rect(text_buffer, *cursor, render_state);
-
-        bool is_seen = is_canvas_rect_in_viewport(viewport, cursor_rect);
+        bool is_seen = rect_intersect(cursor_rect, viewport.rect);
         if (is_seen)
-        {
             draw_quad(cursor_rect, (unsigned char[4]){0, 0, 255, 255});
-        }
     } else if (cursor->blink_time > 1.0f)
     {
         cursor->blink_time -= 1.0f;
@@ -787,10 +854,10 @@ void draw_cursor(Text_Buffer text_buffer, Text_Cursor *cursor, Viewport viewport
 void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state)
 {
     if (is_selection_valid(text_buffer, selection)) {
-        Buf_Pos start = selection.start;
-        Buf_Pos end = selection.end;
+        Cursor start = selection.start;
+        Cursor end = selection.end;
         if (start.line > end.line || (start.line == end.line && start.col > end.col)) {
-            Buf_Pos tmp = start;
+            Cursor tmp = start;
             start = end;
             end = tmp;
         }
@@ -813,13 +880,10 @@ void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport 
             }
             if (h_end > h_start)
             {
-                Rect rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
-                rect.y += i * get_font_line_height(render_state->font);
-
-                if (is_canvas_rect_in_viewport(viewport, rect))
-                {
-                    draw_quad(rect, (unsigned char[4]){200, 200, 200, 130});
-                }
+                Rect selected_rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
+                selected_rect.y += i * get_font_line_height(render_state->font);
+                if (rect_intersect(selected_rect, viewport.rect))
+                    draw_quad(selected_rect, (unsigned char[4]){200, 200, 200, 130});
             }
         }
     }
@@ -827,11 +891,11 @@ void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport 
 
 void draw_line_numbers(Buffer_View buffer_view, Render_State *render_state)
 {
-    transform_set_line_num_col(buffer_view, render_state);
+    transform_set_buffer_view_line_num_col(buffer_view, render_state);
 
     const float font_line_height = get_font_line_height(render_state->font);
-    const float viewport_min_y = buffer_view.viewport.canvas_offset.y;
-    const float viewport_max_y = viewport_min_y + buffer_view.viewport.screen_rect.h / buffer_view.viewport.canvas_zoom;
+    const float viewport_min_y = buffer_view.viewport.rect.y;
+    const float viewport_max_y = viewport_min_y + buffer_view.viewport.rect.h;
 
     char line_i_str_buf[256];
     for (int line_i = 0; line_i < buffer_view.text_buffer.line_count; line_i++)
@@ -857,12 +921,7 @@ void draw_line_numbers(Buffer_View buffer_view, Render_State *render_state)
 
 void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Render_State *render_state)
 {
-    const float right_limit = 40.0f;
-    Rect name_rect;
-    name_rect.x = buffer_view.viewport.screen_rect.x + render_state->buffer_view_padding;
-    name_rect.y = buffer_view.outer_rect.y + render_state->buffer_view_padding;
-    name_rect.w = buffer_view.viewport.screen_rect.w - right_limit;
-    name_rect.h = render_state->buffer_view_name_height;
+    Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
 
     // transform_set_screen_space(render_state);
     // draw_quad(name_rect, (unsigned char[4]){100, 100, 100, 255});
@@ -882,9 +941,10 @@ void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *re
     else
         draw_quad(buffer_view->outer_rect, (unsigned char[4]){20, 20, 20, 255});
 
-    draw_quad(buffer_view->viewport.screen_rect, (unsigned char[4]){10, 10, 10, 255});
+    Rect text_area_rect = buffer_view_get_text_area_rect(*buffer_view, render_state);
+    draw_quad(text_area_rect, (unsigned char[4]){10, 10, 10, 255});
 
-    transform_set_viewport(buffer_view->viewport, render_state);
+    transform_set_buffer_view_text_area(*buffer_view, render_state);
     draw_text_buffer(buffer_view->text_buffer, buffer_view->viewport, render_state);
     if (is_active)
         draw_cursor(buffer_view->text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
@@ -946,6 +1006,11 @@ void make_ortho(float left, float right, float bottom, float top, float near, fl
     out[15] = 1.0f;
 }
 
+void make_viewport_transform(Viewport viewport, float *out)
+{
+    make_view(viewport.rect.x, viewport.rect.y, viewport.zoom, out);
+}
+
 void make_view(float offset_x, float offset_y, float scale, float *out)
 {
     out[0]  = scale; out[1]  = 0;     out[2]  = 0; out[3]  = 0;
@@ -995,34 +1060,32 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
     glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
 }
 
-void transform_set_viewport(Viewport viewport, Render_State *render_state)
+void transform_set_buffer_view_text_area(Buffer_View buffer_view, Render_State *render_state)
 {
-    float proj[16], view_viewport[16], view_screen[16], view[16], mvp[16];
-    make_view(viewport.canvas_offset.x, viewport.canvas_offset.y, viewport.canvas_zoom, view_viewport);
-    make_view(-viewport.screen_rect.x, -viewport.screen_rect.y, 1.0f, view_screen);
-    mul_mat4(view_viewport, view_screen, view);
+    float proj[16], view_viewport[16], view_canvas[16], view[16], mvp[16];
+    make_viewport_transform(buffer_view.viewport, view_viewport);
+    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
+    make_view(-text_area_rect.x, -text_area_rect.y, 1.0f, view_canvas);
+    mul_mat4(view_viewport, view_canvas, view);
+    // TODO: One more transform: canvas space -> screen space
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
     mul_mat4(view, proj, mvp);
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
-    gl_enable_scissor(viewport.screen_rect, render_state);
+    gl_enable_scissor(text_area_rect, render_state);
 }
 
-void transform_set_line_num_col(Buffer_View buffer_view, Render_State *render_state)
+void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Render_State *render_state)
 {
     float proj[16], view_viewport[16], view_screen[16], view[16], mvp[16];
-    Rect line_num_col_screen_rect = {
-        .x = buffer_view.outer_rect.x + render_state->buffer_view_padding,
-        .y = buffer_view.viewport.screen_rect.y,
-        .w = render_state->line_num_col_width,
-        .h = buffer_view.viewport.screen_rect.h
-    };
-    make_view(0.0f, buffer_view.viewport.canvas_offset.y, buffer_view.viewport.canvas_zoom, view_viewport);
-    make_view(-line_num_col_screen_rect.x, -line_num_col_screen_rect.y, 1.0f, view_screen);
+    make_view(0.0f, buffer_view.viewport.rect.y, buffer_view.viewport.zoom, view_viewport);
+    Rect line_num_col_rect = buffer_view_get_line_num_col_rect(buffer_view, render_state);
+    make_view(-line_num_col_rect.x, -line_num_col_rect.y, 1.0f, view_screen);
     mul_mat4(view_viewport, view_screen, view);
+    // TODO: One more transform: canvas space -> screen space
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
     mul_mat4(view, proj, mvp);
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
-    gl_enable_scissor(line_num_col_screen_rect, render_state);
+    gl_enable_scissor(line_num_col_rect, render_state);
 }
 
 void transform_set_rect(Rect rect, Render_State *render_state)
@@ -1043,19 +1106,9 @@ void transform_set_screen_space(Render_State *render_state)
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, proj);
 }
 
-Rect_Bounds get_viewport_bounds(Viewport viewport)
-{
-    Rect_Bounds r;
-    r.min_x = viewport.canvas_offset.x;
-    r.min_y = viewport.canvas_offset.y;
-    r.max_x = r.min_x + viewport.screen_rect.w / viewport.canvas_zoom;
-    r.max_y = r.min_y + viewport.screen_rect.h / viewport.canvas_zoom;
-    return r;
-}
-
 Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font)
 {
-    Rect_Bounds viewport_bounds = get_viewport_bounds(viewport);
+    Rect_Bounds viewport_bounds = rect_get_bounds(viewport.rect);
     float space_width = get_char_width(' ', font);
     float font_line_height = get_font_line_height(font);
     viewport_bounds.min_x += VIEWPORT_CURSOR_BOUNDARY_COLUMNS * space_width;
@@ -1065,51 +1118,17 @@ Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font)
     return viewport_bounds;
 }
 
-Rect get_viewport_rect(Viewport viewport)
-{
-    Rect r;
-    r.x = viewport.canvas_offset.x;
-    r.y = viewport.canvas_offset.y;
-    r.w = viewport.screen_rect.w / viewport.canvas_zoom;
-    r.h = viewport.screen_rect.h / viewport.canvas_zoom;
-    return r;
-}
-
-Vec_2 window_pos_to_canvas_pos(Vec_2 window_pos, Viewport viewport)
-{
-    Vec_2 r;
-    r.x = viewport.canvas_offset.x + (window_pos.x - viewport.screen_rect.x) / viewport.canvas_zoom;
-    r.y = viewport.canvas_offset.y + (window_pos.y - viewport.screen_rect.y) / viewport.canvas_zoom;
-    return r;
-}
-
-bool is_canvas_pos_in_bounds(Vec_2 canvas_pos, Viewport viewport)
-{
-    Rect_Bounds viewport_bounds = get_viewport_bounds(viewport);
-    return (canvas_pos.x > viewport_bounds.min_x &&
-            canvas_pos.x < viewport_bounds.max_x &&
-            canvas_pos.y > viewport_bounds.min_y &&
-            canvas_pos.y < viewport_bounds.max_y);
-}
-
-bool is_pos_in_bounds(Vec_2 pos, Rect_Bounds bounds)
-{
-    bool in_bounds = pos.x > bounds.min_x && pos.x < bounds.max_x &&
-        pos.y > bounds.min_y && pos.y < bounds.max_y;
-    return in_bounds;
-}
-
-Vec_2 get_mouse_window_pos(GLFWwindow *window)
+Vec_2 get_mouse_screen_pos(GLFWwindow *window)
 {
     double mouse_x, mouse_y;
     glfwGetCursorPos(window, &mouse_x, &mouse_y);
-    Vec_2 mouse_window_pos = {mouse_x, mouse_y};
-    return mouse_window_pos;
+    Vec_2 p = {mouse_x, mouse_y};
+    return p;
 }
 
 Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state)
 {
-    Vec_2 current_mouse_pos = get_mouse_window_pos(window);
+    Vec_2 current_mouse_pos = get_mouse_screen_pos(window);
     Vec_2 delta_mouse_pos = {
         .x = current_mouse_pos.x - state->prev_mouse_pos.x,
         .y = current_mouse_pos.y - state->prev_mouse_pos.y
@@ -1121,18 +1140,11 @@ Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state)
 {
     for (int i = 0; i < state->buffer_view_count; i++)
     {
-        Rect_Bounds b = rect_get_bounds(state->buffer_views[i]->outer_rect);
-        const float resize_handle_radius = 5.0f;
-        Rect_Bounds resize_handle = {
-            .min_x = state->buffer_views[i]->outer_rect.x + state->buffer_views[i]->outer_rect.w - resize_handle_radius,
-            .min_y = state->buffer_views[i]->outer_rect.y + state->buffer_views[i]->outer_rect.h - resize_handle_radius,
-            .max_x = state->buffer_views[i]->outer_rect.x + state->buffer_views[i]->outer_rect.w + resize_handle_radius,
-            .max_y = state->buffer_views[i]->outer_rect.y + state->buffer_views[i]->outer_rect.h + resize_handle_radius
-        };
-        if ((pos.x > b.min_x && pos.x < b.max_x &&
-            pos.y > b.min_y && pos.y < b.max_y) ||
-            (pos.x > resize_handle.min_x && pos.x < resize_handle.max_x &&
-            pos.y > resize_handle.min_y && pos.y < resize_handle.max_y))
+        Rect buffer_view_rect = state->buffer_views[i]->outer_rect;
+        Rect resize_handle_rect = buffer_view_get_resize_handle_rect(*state->buffer_views[i], &state->render_state);
+        bool at_buffer_view_rect = rect_p_intersect(pos, buffer_view_rect);
+        bool at_resize_handle = rect_p_intersect(pos, resize_handle_rect);
+        if (at_buffer_view_rect || at_resize_handle)
         {
             return state->buffer_views[i];
         }
@@ -1140,22 +1152,22 @@ Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state)
     return NULL;
 }
 
-Buf_Pos canvas_pos_to_buf_pos(Vec_2 canvas_pos, const Buffer_View *buffer_view, const Render_State *render_state)
+Cursor buffer_pos_to_cursor(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)
 {
-    Buf_Pos r;
-    r.line = canvas_pos.y / (float)get_font_line_height(render_state->font);
-    if (r.line < 0) {
-        r.line = 0;
-    } else if (r.line >= buffer_view->text_buffer.line_count) {
-        r.line = buffer_view->text_buffer.line_count - 1;
+    Cursor cursor;
+    cursor.line = buffer_pos.y / (float)get_font_line_height(render_state->font);
+    if (cursor.line < 0) {
+        cursor.line = 0;
+    } else if (cursor.line >= text_buffer.line_count) {
+        cursor.line = text_buffer.line_count - 1;
     }
-    r.col = get_char_i_at_pos_in_string(buffer_view->text_buffer.lines[r.line].str, render_state->font, canvas_pos.x);
-    return r;
+    cursor.col = get_char_i_at_pos_in_string(text_buffer.lines[cursor.line].str, render_state->font, buffer_pos.x);
+    return cursor;
 }
 
-void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewport *viewport, Render_State *render_state)
+void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Viewport *viewport, Render_State *render_state)
 {
-    Rect viewport_r = get_viewport_rect(*viewport);
+    Rect viewport_r = viewport->rect;
     Rect_Bounds viewport_b = get_viewport_cursor_bounds(*viewport, render_state->font);
     Rect_Bounds cursor_b = rect_get_bounds(get_cursor_rect(text_buffer, cursor, render_state));
     float font_space_width = get_char_width(' ', render_state->font);
@@ -1164,52 +1176,43 @@ void viewport_snap_to_cursor(Text_Buffer text_buffer, Text_Cursor cursor, Viewpo
     {
         if (cursor_b.max_y <= viewport_b.min_y)
         {
-            viewport->canvas_offset.y = cursor_b.min_y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+            viewport->rect.y = cursor_b.min_y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
         }
         else
         {
-            viewport->canvas_offset.y = cursor_b.max_y - viewport_r.h + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+            viewport->rect.y = cursor_b.max_y - viewport_r.h + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
         }
     }
     if (cursor_b.max_x <= viewport_b.min_x || cursor_b.min_x >= viewport_b.max_x)
     {
         if (cursor_b.max_x <= viewport_b.min_x)
         {
-            viewport->canvas_offset.x = cursor_b.min_x - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
-            if (viewport->canvas_offset.x < 0.0f)
+            viewport->rect.x = cursor_b.min_x - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            if (viewport->rect.x < 0.0f)
             {
-                viewport->canvas_offset.x = 0.0f;
+                viewport->rect.x = 0.0f;
             }
         }
         else
         {
-            viewport->canvas_offset.x = cursor_b.max_x - viewport_r.w + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            viewport->rect.x = cursor_b.max_x - viewport_r.w + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
         }
     }
 }
 
-bool is_canvas_rect_in_viewport(Viewport viewport, Rect rect)
-{
-    Rect_Bounds rect_b = rect_get_bounds(rect);
-    Rect_Bounds viewport_b = get_viewport_bounds(viewport);
-    bool intersect = rect_b.min_x < viewport_b.max_x && rect_b.max_x > viewport_b.min_x &&
-        rect_b.min_y < viewport_b.max_y && rect_b.max_y > viewport_b.min_y;
-    return intersect;
-}
-
-bool is_buf_pos_valid(Text_Buffer text_buf, Buf_Pos buf_pos)
+bool is_cursor_valid(Text_Buffer text_buf, Cursor buf_pos)
 {
     bool is_valid = buf_pos.line >= 0 && buf_pos.line < text_buf.line_count &&
         buf_pos.col >= 0 && buf_pos.col < text_buf.lines[buf_pos.line].len;
     return is_valid;
 }
 
-bool is_buf_pos_equal(Buf_Pos a, Buf_Pos b)
+bool is_cursor_equal(Cursor a, Cursor b)
 {
     return a.line == b.line && a.col == b.col;
 }
 
-void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport)
+void move_cursor_to_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport)
 {
     int orig_cursor_line = cursor->pos.line;
     cursor->pos.line = to_line;
@@ -1237,7 +1240,7 @@ void move_cursor_to_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_S
     }
 }
 
-void move_cursor_to_col(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line)
+void move_cursor_to_col(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line)
 {
     int prev_cursor_char = cursor->pos.col;
     (void)state;
@@ -1405,7 +1408,7 @@ void remove_line(Text_Buffer *text_buffer, int remove_at)
     text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
 }
 
-void insert_char(Text_Buffer *text_buffer, char c, Text_Cursor *cursor, Editor_State *state, bool auto_indent)
+void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent)
 {
     Buffer_View *active_view = state->active_buffer_view;
     if (c == '\n') {
@@ -1435,7 +1438,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Text_Cursor *cursor, Editor_S
     }
 }
 
-void remove_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
     if (cursor->pos.col <= 0) {
         if (cursor->pos.line <= 0) {
@@ -1459,7 +1462,7 @@ void remove_char(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *st
     }
 }
 
-void insert_indent(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
     if (is_selection_valid(*text_buffer, state->active_buffer_view->selection))
     {
@@ -1485,7 +1488,7 @@ int get_line_indent(Text_Line line)
     return 0;
 }
 
-void decrease_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+void decrease_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
     int indent = get_line_indent(text_buffer->lines[cursor->pos.line]);
     int chars_to_remove = indent % INDENT_SPACES;
@@ -1500,16 +1503,16 @@ void decrease_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, E
     }
 }
 
-void decrease_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+void decrease_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
     if (is_selection_valid(*text_buffer, active_view->selection))
     {
-        Buf_Pos start = active_view->selection.start;
-        Buf_Pos end = active_view->selection.end;
+        Cursor start = active_view->selection.start;
+        Cursor end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Buf_Pos temp = start;
+            Cursor temp = start;
             start = end;
             end = temp;
         }
@@ -1528,7 +1531,7 @@ void decrease_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor
     }
 }
 
-void increase_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+void increase_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
     int indent = get_line_indent(text_buffer->lines[cursor->pos.line]);
     int chars_to_add = INDENT_SPACES - (indent % INDENT_SPACES);
@@ -1539,16 +1542,16 @@ void increase_indent_level_line(Text_Buffer *text_buffer, Text_Cursor *cursor, E
     }
 }
 
-void increase_indent_level(Text_Buffer *text_buffer, Text_Cursor *cursor, Editor_State *state)
+void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
     if (is_selection_valid(*text_buffer, active_view->selection))
     {
-        Buf_Pos start = active_view->selection.start;
-        Buf_Pos end = active_view->selection.end;
+        Cursor start = active_view->selection.start;
+        Cursor end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Buf_Pos temp = start;
+            Cursor temp = start;
             start = end;
             end = temp;
         }
@@ -1651,17 +1654,17 @@ void extend_selection_to_cursor(Editor_State *state)
 
 bool is_selection_valid(Text_Buffer text_buffer, Text_Selection selection)
 {
-    bool is_valid = is_buf_pos_valid(text_buffer, selection.start) &&
-        is_buf_pos_valid(text_buffer, selection.end) &&
-        !is_buf_pos_equal(selection.start, selection.end);
+    bool is_valid = is_cursor_valid(text_buffer, selection.start) &&
+        is_cursor_valid(text_buffer, selection.end) &&
+        !is_cursor_equal(selection.start, selection.end);
     return is_valid;
 }
 
 void cancel_selection(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    active_view->selection.start = (Buf_Pos){ -1, -1 };
-    active_view->selection.end = (Buf_Pos){ -1, -1 };
+    active_view->selection.start = (Cursor){ -1, -1 };
+    active_view->selection.end = (Cursor){ -1, -1 };
 }
 
 int selection_char_count(Editor_State *state)
@@ -1670,11 +1673,11 @@ int selection_char_count(Editor_State *state)
     int char_count = 0;
     if (is_selection_valid(active_view->text_buffer, active_view->selection))
     {
-        Buf_Pos start = active_view->selection.start;
-        Buf_Pos end = active_view->selection.end;
+        Cursor start = active_view->selection.start;
+        Cursor end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Buf_Pos temp = start;
+            Cursor temp = start;
             start = end;
             end = temp;
         }
@@ -1709,11 +1712,11 @@ void delete_selected(Editor_State *state)
     int char_count = selection_char_count(state);
     if (char_count > 0)
     {
-        Buf_Pos start = active_view->selection.start;
-        Buf_Pos end = active_view->selection.end;
+        Cursor start = active_view->selection.start;
+        Cursor end = active_view->selection.end;
         if (start.line > end.line || (start.line == end.line && start.col > end.col))
         {
-            Buf_Pos temp = start;
+            Cursor temp = start;
             start = end;
             end = temp;
         }
@@ -1732,11 +1735,11 @@ void copy_at_selection(Editor_State *state)
     Buffer_View *active_view = state->active_buffer_view;
     if (is_selection_valid(active_view->text_buffer, active_view->selection))
     {
-        Buf_Pos start = active_view->selection.start;
-        Buf_Pos end = active_view->selection.end;
+        Cursor start = active_view->selection.start;
+        Cursor end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Buf_Pos temp = start;
+            Cursor temp = start;
             start = end;
             end = temp;
         }

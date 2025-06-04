@@ -84,3 +84,31 @@ inline static Rect_Bounds rect_get_bounds(Rect r)
     b.max_y = r.y + r.h;
     return b;
 }
+
+inline static bool rect_intersect(Rect a, Rect b)
+{
+    float a_min_x = a.x;
+    float a_min_y = a.y;
+    float a_max_x = a.x + a.w;
+    float a_max_y = a.y + a.h;
+    float b_min_x = b.x;
+    float b_min_y = b.y;
+    float b_max_x = b.x + b.w;
+    float b_max_y = b.y + b.h;
+    bool intersect =
+        a_min_x < b_max_x && a_max_x > b_min_x &&
+        a_min_y < b_max_y && a_max_y > b_min_y;
+    return intersect;
+}
+
+inline static bool rect_p_intersect(Vec_2 p, Rect rect)
+{
+    float min_x = rect.x;
+    float min_y = rect.y;
+    float max_x = rect.x + rect.w;
+    float max_y = rect.y + rect.h;
+    bool intersect =
+        p.x > min_x && p.x < max_x &&
+        p.y > min_y && p.y < max_y;
+    return intersect;
+}
