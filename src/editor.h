@@ -182,6 +182,7 @@ void perform_timing_calculations(Editor_State *state);
 
 Buffer_View *buffer_view_create(Rect rect, Editor_State *state);
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
+void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state);
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state);
 Rect buffer_view_get_text_area_rect(Buffer_View buffer_view, const Render_State *render_state);
@@ -283,7 +284,8 @@ void delete_selected(Editor_State *state);
 void copy_at_selection(Editor_State *state);
 void paste_from_copy_buffer(Editor_State *state);
 
-void validate_text_buffer(Text_Buffer *text_buffer);
+void text_buffer_destroy(Text_Buffer *text_buffer);
+void text_buffer_validate(Text_Buffer *text_buffer);
 
 void rebuild_dl();
 void insert_go_to_line_char(Editor_State *state, char c);

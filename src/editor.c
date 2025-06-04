@@ -307,6 +307,23 @@ Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_Stat
     return new_view;
 }
 
+void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state)
+{
+    text_buffer_destroy(&buffer_view->text_buffer);
+    int index_to_delete = buffer_view_get_index(buffer_view, state);
+    free(state->buffer_views[index_to_delete]);
+    for (int i = index_to_delete; i < state->buffer_view_count - 1; i++)
+    {
+        state->buffer_views[i] = state->buffer_views[i + 1];
+    }
+    state->buffer_view_count--;
+    state->buffer_views = xrealloc(state->buffer_views, state->buffer_view_count);
+    if (state->active_buffer_view == buffer_view)
+    {
+        state->active_buffer_view = state->buffer_views[0];
+    }
+}
+
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state)
 {
     int index = 0;
@@ -1487,7 +1504,18 @@ void write_file(Text_Buffer text_buffer, File_Info file_info)
     trace_log("Saved file to %s", file_info.path);
 }
 
-void validate_text_buffer(Text_Buffer *text_buffer)
+void text_buffer_destroy(Text_Buffer *text_buffer)
+{
+    for (int i = 0; i < text_buffer->line_count; i++)
+    {
+        free(text_buffer->lines[i].str);
+    }
+    free(text_buffer->lines);
+    text_buffer->lines = NULL;
+    text_buffer->line_count = 0;
+}
+
+void text_buffer_validate(Text_Buffer *text_buffer)
 {
     for (int i = 0; i < text_buffer->line_count; i++) {
         int actual_len = strlen(text_buffer->lines[i].str);
@@ -1744,7 +1772,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_F8: if (action == GLFW_PRESS)
         {
-            validate_text_buffer(&active_view->text_buffer);
+            text_buffer_validate(&active_view->text_buffer);
             trace_log("Validated text buffer");
         } break;
         case GLFW_KEY_F7: if (action == GLFW_PRESS)
@@ -1762,6 +1790,13 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
             active_view->viewport.zoom -= 0.25f;
+        } break;
+        case GLFW_KEY_W: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            if (state->active_buffer_view)
+            {
+                buffer_view_destroy(state->active_buffer_view, state);
+            }
         } break;
     }
 }
