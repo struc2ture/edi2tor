@@ -118,6 +118,13 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     {
         state->scrolled_buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
         state->scrolled_buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
+
+        if (state->scrolled_buffer_view->viewport.rect.x < 0.0f) state->scrolled_buffer_view->viewport.rect.x = 0.0f;
+        if (state->scrolled_buffer_view->viewport.rect.y < 0.0f) state->scrolled_buffer_view->viewport.rect.y = 0.0f;
+        float buffer_max_y = (state->scrolled_buffer_view->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
+        if (state->scrolled_buffer_view->viewport.rect.y > buffer_max_y) state->scrolled_buffer_view->viewport.rect.y = buffer_max_y;
+        float buffer_max_x = 256 * get_font_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
+        if (state->scrolled_buffer_view->viewport.rect.x > buffer_max_x) state->scrolled_buffer_view->viewport.rect.x = buffer_max_x;
     }
     else
     {
@@ -1042,10 +1049,13 @@ void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Vie
         if (cursor_b.max_y <= viewport_b.min_y)
         {
             viewport->rect.y = cursor_b.min_y - VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+            if (viewport->rect.y < 0.0f) viewport->rect.y = 0.0f;
         }
         else
         {
             viewport->rect.y = cursor_b.max_y - viewport_r.h + VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
+            float buffer_max_y = (text_buffer.line_count - 1) * font_line_height;
+            if (viewport->rect.y > buffer_max_y) viewport->rect.y = buffer_max_y;
         }
     }
     if (cursor_b.max_x <= viewport_b.min_x || cursor_b.min_x >= viewport_b.max_x)
@@ -1053,14 +1063,13 @@ void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Vie
         if (cursor_b.max_x <= viewport_b.min_x)
         {
             viewport->rect.x = cursor_b.min_x - VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
-            if (viewport->rect.x < 0.0f)
-            {
-                viewport->rect.x = 0.0f;
-            }
+            if (viewport->rect.x < 0.0f) viewport->rect.x = 0.0f;
         }
         else
         {
             viewport->rect.x = cursor_b.max_x - viewport_r.w + VIEWPORT_CURSOR_BOUNDARY_COLUMNS * font_space_width;
+            float buffer_max_x = 256 * font_space_width; // TODO: Determine max x coordinates based on longest line
+            if (viewport->rect.x > buffer_max_x) viewport->rect.x = buffer_max_x;
         }
     }
 }
