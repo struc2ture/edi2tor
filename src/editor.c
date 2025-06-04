@@ -9,31 +9,8 @@
 
 #include "editor.h"
 
+#include "shaders.h"
 #include "util.h"
-
-const char *vs_src =
-"#version 410 core\n"
-"layout (location = 0) in vec2 aPos;\n"
-"layout (location = 1) in vec2 aTexCoord;\n"
-"layout (location = 2) in vec4 aColor;\n"
-"uniform mat4 u_mvp;\n"
-"out vec2 TexCoord;\n"
-"out vec4 Color;\n"
-"void main() {\n"
-"    gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);\n"
-"    TexCoord = aTexCoord;\n"
-"    Color = aColor;\n"
-"}";
-
-const char *fs_src =
-"#version 410 core\n"
-"out vec4 FragColor;\n"
-"in vec2 TexCoord;\n"
-"uniform sampler2D u_tex;\n"
-"in vec4 Color;\n"
-"void main() {\n"
-"    FragColor = vec4(vec3(Color), Color.a * texture(u_tex, TexCoord).r);\n"
-"}";
 
 void _init(GLFWwindow *window, void *_state)
 {
@@ -85,6 +62,11 @@ void _render(GLFWwindow *window, void *_state)
 
     perform_timing_calculations(state);
 
+    glUseProgram(state->render_state.grid_shader);
+    draw_grid(state->canvas_viewport, &state->render_state);
+
+    glUseProgram(state->render_state.main_shader);
+
     // Render buffer views backwards for correct z ordering
     for (int i = state->buffer_view_count - 1; i >= 0; i--)
     {
@@ -93,7 +75,7 @@ void _render(GLFWwindow *window, void *_state)
         draw_buffer_view(buffer_view, is_active, state->canvas_viewport, &state->render_state, state->delta_time);
     }
 
-    draw_status_bar(window, state, &state->render_state);
+    // draw_status_bar(window, state, &state->render_state);
 
     handle_mouse_input(window, state);
 
@@ -179,244 +161,72 @@ void refresh_callback(GLFWwindow* window) {
     // _render(window, state);
 }
 
-void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+bool gl_check_compile_success(GLuint shader, const char *src)
 {
-    (void) window;
-    Buffer_View *active_view = state->active_buffer_view;
-    switch(key)
-    {
-        // case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
-        // {
-        //     glfwSetWindowShouldClose(window, 1);
-        // } break;
-        case GLFW_KEY_LEFT:
-        case GLFW_KEY_RIGHT:
-        case GLFW_KEY_UP:
-        case GLFW_KEY_DOWN:
-        if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            Cursor_Movement_Dir dir = get_cursor_movement_dir_by_key(key);
-            handle_cursor_movement_keys(active_view, dir, mods & GLFW_MOD_SHIFT, mods & GLFW_MOD_ALT, mods & GLFW_MOD_SUPER, state);
-        } break;
-        case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            insert_char(&active_view->text_buffer, '\n', &active_view->cursor, state, true);
-        } break;
-        case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            if (is_selection_valid(active_view->text_buffer, active_view->selection)) delete_selected(state);
-            else remove_char(&active_view->text_buffer, &active_view->cursor, state);
-        } break;
-        case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            if (mods == GLFW_MOD_ALT)
-            {
-                int indent_i = get_line_indent(active_view->text_buffer.lines[active_view->cursor.pos.line]);
-                move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, indent_i, true, false);
-            }
-            else insert_indent(&active_view->text_buffer, &active_view->cursor, state);
-        } break;
-        case GLFW_KEY_LEFT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            decrease_indent_level(&active_view->text_buffer, &active_view->cursor, state);
-        } break;
-        case GLFW_KEY_RIGHT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            increase_indent_level(&active_view->text_buffer, &active_view->cursor, state);
-        } break;
-        case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            copy_at_selection(state);
-        } break;
-        case GLFW_KEY_V: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            paste_from_copy_buffer(state);
-        } break;
-        case GLFW_KEY_X: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            delete_current_line(state);
-        } break;
-        case GLFW_KEY_F12: if (action == GLFW_PRESS)
-        {
-            state->should_break = true;
-        } break;
-        case GLFW_KEY_F9: if (action == GLFW_PRESS)
-        {
-            rebuild_dl();
-        } break;
-        case GLFW_KEY_F8: if (action == GLFW_PRESS)
-        {
-            validate_text_buffer(&active_view->text_buffer);
-            trace_log("Validated text buffer");
-        } break;
-        case GLFW_KEY_F7: if (action == GLFW_PRESS)
-        {
-            // TODO: Implement reloading current file
-        } break;
-        case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            write_file(active_view->text_buffer, active_view->file_info);
-        } break;
-        case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            active_view->viewport.zoom += 0.25f;
-        } break;
-        case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            active_view->viewport.zoom -= 0.25f;
-        } break;
+    GLint success = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char log[512];
+        glGetShaderInfoLog(shader, sizeof(log), NULL, log);
+        fprintf(stderr, "Shader compile error:\n%s\nSource:\n", log);
+        fprintf(stderr, "%s\n", src);
     }
+    return (bool)success;
 }
 
-void handle_char_input(Editor_State *state, char c)
+bool gl_check_link_success(GLuint prog)
 {
-    Buffer_View *active_view = state->active_buffer_view;
-        if (is_selection_valid(active_view->text_buffer, active_view->selection))
-        {
-            delete_selected(state);
-        }
-        insert_char(&active_view->text_buffer, c, &active_view->cursor, state, false);
+    GLint success = 0;
+    glGetProgramiv(prog, GL_LINK_STATUS, &success);
+    if (!success) {
+        char log[512];
+        glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+        fprintf(stderr, "Program link error:\n%s\n", log);
+    }
+    return (bool)success;
 }
 
-void handle_mouse_input(GLFWwindow *window, Editor_State *state)
+GLuint gl_create_shader_program(const char *vs_src, const char *fs_src)
 {
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-    {
-        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-        bool is_just_pressed = !state->left_mouse_down;
-        state->left_mouse_down = true;
-        if (is_just_pressed)
-        {
-            // TODO: Mouse screen position will have to be converted to canvas position
-            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_canvas_pos, state);
-            if (clicked_view != NULL)
-            {
-                if (state->active_buffer_view != clicked_view)
-                {
-                    buffer_view_set_active(clicked_view, state);
-                    state->left_mouse_handled = true;
-                }
-                Rect text_area_rect = buffer_view_get_text_area_rect(*clicked_view, &state->render_state);
-                Rect resize_handle_rect = buffer_view_get_resize_handle_rect(*clicked_view, &state->render_state);
-                if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-                    state->is_buffer_view_resize = true;
-                else if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
-                    state->is_buffer_view_text_area_click = true;
-                else
-                    state->is_buffer_view_drag = true;
-            }
-        }
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &vs_src, 0);
+    glCompileShader(vs);
+    gl_check_compile_success(vs, vs_src);
 
-        Buffer_View *active_view = state->active_buffer_view;
-        if (!state->left_mouse_handled && state->is_buffer_view_text_area_click)
-        {
-            bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-            Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*active_view, mouse_canvas_pos, &state->render_state);
-            handle_mouse_text_area_click(active_view, is_shift_pressed, is_just_pressed, mouse_text_area_pos, state);
-        }
-        else if (state->is_buffer_view_drag)
-        {
-            Vec_2 mouse_delta = get_mouse_delta(window, state);
-            Rect new_rect = active_view->outer_rect;
-            new_rect.x += mouse_delta.x;
-            new_rect.y += mouse_delta.y;
-            buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
-        }
-        else if (state->is_buffer_view_resize)
-        {
-            Vec_2 mouse_delta = get_mouse_delta(window, state);
-            Rect new_rect = active_view->outer_rect;
-            new_rect.w += mouse_delta.x;
-            new_rect.h += mouse_delta.y;
-            buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
-        }
-    }
-    else
-    {
-        state->left_mouse_down = false;
-        state->left_mouse_handled = false;
-        state->is_buffer_view_text_area_click = false;
-        state->is_buffer_view_drag = false;
-        state->is_buffer_view_resize = false;
-    }
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &fs_src, 0);
+    glCompileShader(fs);
+    gl_check_compile_success(fs, fs_src);
 
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, fs);
+    glLinkProgram(prog);
+    gl_check_link_success(prog);
 
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    return prog;
 }
 
-Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key)
+void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
 {
-    switch (key)
-    {
-        case GLFW_KEY_LEFT: return CURSOR_MOVE_LEFT;
-        case GLFW_KEY_RIGHT: return CURSOR_MOVE_RIGHT;
-        case GLFW_KEY_UP: return CURSOR_MOVE_UP;
-        case GLFW_KEY_DOWN: return CURSOR_MOVE_DOWN;
-        default: return CURSOR_MOVE_UP;
-    }
-}
-
-void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state)
-{
-    if (with_selection && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection)) start_selection_at_cursor(state);
-
-    switch (dir)
-    {
-        case CURSOR_MOVE_LEFT:
-        {
-            if (big_steps) move_cursor_to_prev_start_of_word(state);
-            else if (start_end) move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true, false);
-            else move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col - 1, true, true);
-        } break;
-        case CURSOR_MOVE_RIGHT:
-        {
-            if (big_steps) move_cursor_to_next_end_of_word(state);
-            else if (start_end) move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            else move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col + 1, true, true);
-        } break;
-        case CURSOR_MOVE_UP:
-        {
-            if (big_steps) move_cursor_to_prev_white_line(state);
-            else if (start_end) {
-                move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true);
-                move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true, false);
-            }
-            else move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line - 1, true);
-        } break;
-        case CURSOR_MOVE_DOWN:
-        {
-            if (big_steps) move_cursor_to_next_white_line(state);
-            else if (start_end) {
-                move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_LINES, true);
-                move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            }
-            else move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line + 1, true);
-        } break;
-    }
-
-    if (with_selection) extend_selection_to_cursor(state);
-    else cancel_selection(state);
-}
-
-void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_text_area_pos, Editor_State *state)
-{
-    if (with_selection && just_pressed && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection))
-    {
-        start_selection_at_cursor(state);
-    }
-    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
-    Cursor mouse_cursor = buffer_pos_to_cursor(mouse_buffer_pos, buffer_view->text_buffer, &state->render_state);
-    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
-    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
-    extend_selection_to_cursor(state);
-    if (!with_selection && just_pressed)
-    {
-        start_selection_at_cursor(state);
-    }
-    if (with_selection || !just_pressed)
-    {
-        extend_selection_to_cursor(state);
-    }
+    glEnable(GL_SCISSOR_TEST);
+    Rect scaled_rect = {
+        .x = screen_rect.x * render_state->dpi_scale,
+        .y = screen_rect.y * render_state->dpi_scale,
+        .w = screen_rect.w * render_state->dpi_scale,
+        .h = screen_rect.h * render_state->dpi_scale
+    };
+    float scaled_window_h = render_state->window_dim.y * render_state->dpi_scale;
+    GLint scissor_x = (GLint)floor(scaled_rect.x);
+    float screen_rect_topdown_bottom_y = scaled_rect.y + scaled_rect.h;
+    float screen_rect_bottomup_bottom_y = scaled_window_h - screen_rect_topdown_bottom_y;
+    GLint scissor_y = (GLint)floor(screen_rect_bottomup_bottom_y);
+    GLsizei scissor_w = (GLsizei)(ceil(scaled_rect.x + scaled_rect.w) - scissor_x);
+    GLsizei scissor_h = (GLsizei)(ceil(screen_rect_bottomup_bottom_y + scaled_rect.h) - scissor_y);
+    glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
 }
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state)
@@ -428,41 +238,13 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     glfwGetFramebufferSize(window, &framebuffer_w, &framebuffer_h);
     glViewport(0, 0, framebuffer_w, framebuffer_h);
 
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vs_src, 0);
-    glCompileShader(vs);
+    render_state->main_shader = gl_create_shader_program(shader_main_vert_src, shader_main_frag_src);
+    render_state->grid_shader = gl_create_shader_program(shader_main_vert_src, shader_grid_frag_src);
 
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fs_src, 0);
-    glCompileShader(fs);
-    { // TODO Move to a function
-        GLuint shader = fs;
-        GLint success = 0;
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            char log[512];
-            glGetShaderInfoLog(shader, sizeof(log), NULL, log);
-            fprintf(stderr, "Shader compile error:\n%s\nSource:\n", log);
-            fprintf(stderr, "%s\n", fs_src);
-        }
-    }
-    render_state->prog = glCreateProgram();
-    glAttachShader(render_state->prog, vs);
-    glAttachShader(render_state->prog, fs);
-    glLinkProgram(render_state->prog);
-    { // TODO Move to a function
-        GLint success = 0;
-        glGetProgramiv(render_state->prog, GL_LINK_STATUS, &success);
-        if (!success) {
-            char log[512];
-            glGetProgramInfoLog(render_state->prog, sizeof(log), NULL, log);
-            fprintf(stderr, "Program link error:\n%s\n", log);
-        }
-    }
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    glUseProgram(render_state->prog);
+    render_state->grid_shader_mvp_loc = glGetUniformLocation(render_state->grid_shader, "u_mvp");
+    render_state->grid_shader_offset_loc = glGetUniformLocation(render_state->grid_shader, "u_offset");
+    render_state->grid_shader_resolution_loc = glGetUniformLocation(render_state->grid_shader, "u_resolution");
+    render_state->main_shader_mvp_loc = glGetUniformLocation(render_state->main_shader, "u_mvp");
 
     glGenVertexArrays(1, &render_state->vao);
     glGenBuffers(1, &render_state->vbo);
@@ -481,8 +263,6 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
     render_state->buffer_view_resize_handle_radius = 5.0f;
-
-    render_state->shader_mvp_loc = glGetUniformLocation(render_state->prog, "u_mvp");
 
     int window_w, window_h;
     glfwGetWindowSize(window, &window_w, &window_h);
@@ -851,6 +631,22 @@ void draw_quad(Rect q, const unsigned char color[4])
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
+void draw_grid(Viewport canvas_viewport, Render_State *render_state)
+{
+    float proj[16];
+    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+
+    glUniformMatrix4fv(render_state->grid_shader_mvp_loc, 1, GL_FALSE, proj);
+
+    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
+
+    float scaled_offset_x = canvas_viewport.rect.x * render_state->dpi_scale;
+    float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
+    glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
+
+    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
+}
+
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
 {
     float x = 0, y = 0;
@@ -1068,25 +864,6 @@ void mul_mat4(const float *a, const float *b, float *out) // row-major
     }
 }
 
-void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
-{
-    glEnable(GL_SCISSOR_TEST);
-    Rect scaled_rect = {
-        .x = screen_rect.x * render_state->dpi_scale,
-        .y = screen_rect.y * render_state->dpi_scale,
-        .w = screen_rect.w * render_state->dpi_scale,
-        .h = screen_rect.h * render_state->dpi_scale
-    };
-    float scaled_window_h = render_state->window_dim.y * render_state->dpi_scale;
-    GLint scissor_x = (GLint)floor(scaled_rect.x);
-    float screen_rect_topdown_bottom_y = scaled_rect.y + scaled_rect.h;
-    float screen_rect_bottomup_bottom_y = scaled_window_h - screen_rect_topdown_bottom_y;
-    GLint scissor_y = (GLint)floor(screen_rect_bottomup_bottom_y);
-    GLsizei scissor_w = (GLsizei)(ceil(scaled_rect.x + scaled_rect.w) - scissor_x);
-    GLsizei scissor_h = (GLsizei)(ceil(screen_rect_bottomup_bottom_y + scaled_rect.h) - scissor_y);
-    glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
-}
-
 void transform_set_buffer_view_text_area(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state)
 {
     float proj[16], view_viewport[16], view_canvas[16], view_a[16], view_screen[16], view[16], mvp[16];
@@ -1102,7 +879,7 @@ void transform_set_buffer_view_text_area(Buffer_View buffer_view, Viewport canva
     mul_mat4(view_a, view_screen, view);
     mul_mat4(view, proj, mvp);
 
-    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
 
     Rect text_area_screen_rect = canvas_rect_to_screen_rect(text_area_rect, canvas_viewport);
     gl_enable_scissor(text_area_screen_rect, render_state);
@@ -1123,7 +900,7 @@ void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Viewport ca
     mul_mat4(view_a, view_screen, view);
     mul_mat4(view, proj, mvp);
 
-    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
 
     Rect line_num_col_screen_rect = canvas_rect_to_screen_rect(line_num_col_rect, canvas_viewport);
     gl_enable_scissor(line_num_col_screen_rect, render_state);
@@ -1140,7 +917,7 @@ void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *rende
     mul_mat4(view_canvas, view_screen, view);
     mul_mat4(view, proj, mvp);
 
-    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
 
     Rect screen_rect = canvas_rect_to_screen_rect(rect, canvas_viewport);
     gl_enable_scissor(screen_rect, render_state);
@@ -1155,7 +932,7 @@ void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_s
 
     mul_mat4(view, proj, mvp);
 
-    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
 
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1166,7 +943,7 @@ void transform_set_screen_space(Render_State *render_state)
 
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
 
-    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, proj);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, proj);
 
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1898,4 +1675,244 @@ void rebuild_dl()
         fprintf(stderr, "Build failed with code %d\n", result);
     }
     trace_log("Rebuilt dl");
+}
+
+void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+{
+    (void) window;
+    Buffer_View *active_view = state->active_buffer_view;
+    switch(key)
+    {
+        // case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
+        // {
+        //     glfwSetWindowShouldClose(window, 1);
+        // } break;
+        case GLFW_KEY_LEFT:
+        case GLFW_KEY_RIGHT:
+        case GLFW_KEY_UP:
+        case GLFW_KEY_DOWN:
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            Cursor_Movement_Dir dir = get_cursor_movement_dir_by_key(key);
+            handle_cursor_movement_keys(active_view, dir, mods & GLFW_MOD_SHIFT, mods & GLFW_MOD_ALT, mods & GLFW_MOD_SUPER, state);
+        } break;
+        case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            insert_char(&active_view->text_buffer, '\n', &active_view->cursor, state, true);
+        } break;
+        case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (is_selection_valid(active_view->text_buffer, active_view->selection)) delete_selected(state);
+            else remove_char(&active_view->text_buffer, &active_view->cursor, state);
+        } break;
+        case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (mods == GLFW_MOD_ALT)
+            {
+                int indent_i = get_line_indent(active_view->text_buffer.lines[active_view->cursor.pos.line]);
+                move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, indent_i, true, false);
+            }
+            else insert_indent(&active_view->text_buffer, &active_view->cursor, state);
+        } break;
+        case GLFW_KEY_LEFT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            decrease_indent_level(&active_view->text_buffer, &active_view->cursor, state);
+        } break;
+        case GLFW_KEY_RIGHT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            increase_indent_level(&active_view->text_buffer, &active_view->cursor, state);
+        } break;
+        case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            copy_at_selection(state);
+        } break;
+        case GLFW_KEY_V: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            paste_from_copy_buffer(state);
+        } break;
+        case GLFW_KEY_X: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            delete_current_line(state);
+        } break;
+        case GLFW_KEY_F12: if (action == GLFW_PRESS)
+        {
+            state->should_break = true;
+        } break;
+        case GLFW_KEY_F9: if (action == GLFW_PRESS)
+        {
+            rebuild_dl();
+        } break;
+        case GLFW_KEY_F8: if (action == GLFW_PRESS)
+        {
+            validate_text_buffer(&active_view->text_buffer);
+            trace_log("Validated text buffer");
+        } break;
+        case GLFW_KEY_F7: if (action == GLFW_PRESS)
+        {
+            // TODO: Implement reloading current file
+        } break;
+        case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            write_file(active_view->text_buffer, active_view->file_info);
+        } break;
+        case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            active_view->viewport.zoom += 0.25f;
+        } break;
+        case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            active_view->viewport.zoom -= 0.25f;
+        } break;
+    }
+}
+
+void handle_char_input(Editor_State *state, char c)
+{
+    Buffer_View *active_view = state->active_buffer_view;
+        if (is_selection_valid(active_view->text_buffer, active_view->selection))
+        {
+            delete_selected(state);
+        }
+        insert_char(&active_view->text_buffer, c, &active_view->cursor, state, false);
+}
+
+void handle_mouse_input(GLFWwindow *window, Editor_State *state)
+{
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+        bool is_just_pressed = !state->left_mouse_down;
+        state->left_mouse_down = true;
+        if (is_just_pressed)
+        {
+            // TODO: Mouse screen position will have to be converted to canvas position
+            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_canvas_pos, state);
+            if (clicked_view != NULL)
+            {
+                if (state->active_buffer_view != clicked_view)
+                {
+                    buffer_view_set_active(clicked_view, state);
+                    state->left_mouse_handled = true;
+                }
+                Rect text_area_rect = buffer_view_get_text_area_rect(*clicked_view, &state->render_state);
+                Rect resize_handle_rect = buffer_view_get_resize_handle_rect(*clicked_view, &state->render_state);
+                if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+                    state->is_buffer_view_resize = true;
+                else if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
+                    state->is_buffer_view_text_area_click = true;
+                else
+                    state->is_buffer_view_drag = true;
+            }
+        }
+
+        Buffer_View *active_view = state->active_buffer_view;
+        if (!state->left_mouse_handled && state->is_buffer_view_text_area_click)
+        {
+            bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+            Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*active_view, mouse_canvas_pos, &state->render_state);
+            handle_mouse_text_area_click(active_view, is_shift_pressed, is_just_pressed, mouse_text_area_pos, state);
+        }
+        else if (state->is_buffer_view_drag)
+        {
+            Vec_2 mouse_delta = get_mouse_delta(window, state);
+            Rect new_rect = active_view->outer_rect;
+            new_rect.x += mouse_delta.x;
+            new_rect.y += mouse_delta.y;
+            buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
+        }
+        else if (state->is_buffer_view_resize)
+        {
+            Vec_2 mouse_delta = get_mouse_delta(window, state);
+            Rect new_rect = active_view->outer_rect;
+            new_rect.w += mouse_delta.x;
+            new_rect.h += mouse_delta.y;
+            buffer_view_set_rect(state->active_buffer_view, new_rect, &state->render_state);
+        }
+    }
+    else
+    {
+        state->left_mouse_down = false;
+        state->left_mouse_handled = false;
+        state->is_buffer_view_text_area_click = false;
+        state->is_buffer_view_drag = false;
+        state->is_buffer_view_resize = false;
+    }
+
+
+}
+
+Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key)
+{
+    switch (key)
+    {
+        case GLFW_KEY_LEFT: return CURSOR_MOVE_LEFT;
+        case GLFW_KEY_RIGHT: return CURSOR_MOVE_RIGHT;
+        case GLFW_KEY_UP: return CURSOR_MOVE_UP;
+        case GLFW_KEY_DOWN: return CURSOR_MOVE_DOWN;
+        default: return CURSOR_MOVE_UP;
+    }
+}
+
+void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state)
+{
+    if (with_selection && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection)) start_selection_at_cursor(state);
+
+    switch (dir)
+    {
+        case CURSOR_MOVE_LEFT:
+        {
+            if (big_steps) move_cursor_to_prev_start_of_word(state);
+            else if (start_end) move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true, false);
+            else move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col - 1, true, true);
+        } break;
+        case CURSOR_MOVE_RIGHT:
+        {
+            if (big_steps) move_cursor_to_next_end_of_word(state);
+            else if (start_end) move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            else move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col + 1, true, true);
+        } break;
+        case CURSOR_MOVE_UP:
+        {
+            if (big_steps) move_cursor_to_prev_white_line(state);
+            else if (start_end) {
+                move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true);
+                move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true, false);
+            }
+            else move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line - 1, true);
+        } break;
+        case CURSOR_MOVE_DOWN:
+        {
+            if (big_steps) move_cursor_to_next_white_line(state);
+            else if (start_end) {
+                move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_LINES, true);
+                move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            }
+            else move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line + 1, true);
+        } break;
+    }
+
+    if (with_selection) extend_selection_to_cursor(state);
+    else cancel_selection(state);
+}
+
+void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_text_area_pos, Editor_State *state)
+{
+    if (with_selection && just_pressed && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection))
+    {
+        start_selection_at_cursor(state);
+    }
+    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
+    Cursor mouse_cursor = buffer_pos_to_cursor(mouse_buffer_pos, buffer_view->text_buffer, &state->render_state);
+    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
+    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
+    extend_selection_to_cursor(state);
+    if (!with_selection && just_pressed)
+    {
+        start_selection_at_cursor(state);
+    }
+    if (with_selection || !just_pressed)
+    {
+        extend_selection_to_cursor(state);
+    }
 }

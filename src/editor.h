@@ -102,10 +102,14 @@ typedef struct {
 } Render_Font;
 
 typedef struct {
-    GLuint prog;
+    GLuint main_shader;
+    GLuint grid_shader;
     GLuint vao;
     GLuint vbo;
-    GLuint shader_mvp_loc;
+    GLuint main_shader_mvp_loc;
+    GLuint grid_shader_mvp_loc;
+    GLuint grid_shader_offset_loc;
+    GLuint grid_shader_resolution_loc;
     Vec_2 window_dim;
     Vec_2 framebuffer_dim;
     float dpi_scale;
@@ -168,13 +172,10 @@ void framebuffer_size_callback(GLFWwindow *window, int w, int h);
 void window_size_callback(GLFWwindow *window, int w, int h);
 void refresh_callback(GLFWwindow *window);
 
-void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void handle_char_input(Editor_State *state, char c);
-void handle_mouse_input(GLFWwindow *window, Editor_State *state);
-
-Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
-void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
-void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_screen_pos, Editor_State *state);
+bool gl_check_compile_success(GLuint shader, const char *src);
+bool gl_check_link_success(GLuint prog);
+GLuint gl_create_shader_program(const char *vs_src, const char *fs_src);
+void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
@@ -209,6 +210,8 @@ Rect get_cursor_rect(Text_Buffer text_buffer, Display_Cursor cursor, Render_Stat
 void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4]);
 void draw_quad(Rect q, const unsigned char color[4]);
 
+void draw_grid(Viewport canvas_viewport, Render_State *render_state);
+
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
 void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
@@ -223,7 +226,6 @@ void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_viewport_transform(Viewport viewport, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
-void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 void transform_set_buffer_view_text_area(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state);
 void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state);
 void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state);
@@ -285,3 +287,11 @@ void validate_text_buffer(Text_Buffer *text_buffer);
 
 void rebuild_dl();
 void insert_go_to_line_char(Editor_State *state, char c);
+
+void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void handle_char_input(Editor_State *state, char c);
+void handle_mouse_input(GLFWwindow *window, Editor_State *state);
+
+Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
+void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
+void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_screen_pos, Editor_State *state);
