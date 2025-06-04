@@ -1,0 +1,51 @@
+#pragma once
+
+const char *shader_main_vert_src =
+"#version 410 core\n"
+"layout (location = 0) in vec2 aPos;\n"
+"layout (location = 1) in vec2 aTexCoord;\n"
+"layout (location = 2) in vec4 aColor;\n"
+"uniform mat4 u_mvp;\n"
+"out vec2 TexCoord;\n"
+"out vec4 Color;\n"
+"void main() {\n"
+"    gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);\n"
+"    TexCoord = aTexCoord;\n"
+"    Color = aColor;\n"
+"}\n";
+
+const char *shader_main_frag_src =
+"#version 410 core\n"
+"out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D u_tex;\n"
+"in vec4 Color;\n"
+"void main() {\n"
+"    FragColor = vec4(vec3(Color), Color.a * texture(u_tex, TexCoord).r);\n"
+"}\n";
+
+const char *shader_grid_frag_src =
+"#version 410 core\n"
+"out vec4 FragColor;\n"
+"uniform vec2 u_resolution;\n"
+"uniform vec2 u_offset;\n"
+"void main() {\n"
+"    vec2 screenPos = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);"
+"    vec2 canvasPos = screenPos + u_offset;\n"
+"    float spacing = 100.0;\n"
+"\n"
+"    float distX = abs(mod(canvasPos.x, spacing));\n"
+"    distX = min(distX, spacing - distX);\n"
+"    float gridX = smoothstep(1.0, 0.0, distX);\n"
+"    float distY = abs(mod(canvasPos.y, spacing));\n"
+"    distY = min(distY, spacing - distY);\n"
+"    float gridY = smoothstep(1.0, 0.0, distY);\n"
+"\n"
+"    float originX = smoothstep(2.0, 0.0, abs(canvasPos.x));\n"
+"    float originY = smoothstep(2.0, 0.0, abs(canvasPos.y));\n"
+"\n"
+"    vec3 gridColor = mix(vec3(0.0), vec3(0.5), max(gridX, gridY));\n"
+"    gridColor = mix(gridColor, vec3(0.6), max(originX, originY));\n"
+"\n"
+"    FragColor = vec4(gridColor, 1.0);\n"
+"}\n";
