@@ -130,6 +130,7 @@ typedef struct {
     Buffer_View **buffer_views;
     int buffer_view_count;
     Buffer_View *active_buffer_view;
+    Viewport canvas_viewport;
     Copy_Buffer copy_buffer;
     bool should_break;
     float delta_time;
@@ -185,7 +186,7 @@ Rect buffer_view_get_line_num_col_rect(Buffer_View buffer_view, const Render_Sta
 Rect buffer_view_get_name_rect(Buffer_View buffer_view, const Render_State *render_state);
 Rect buffer_view_get_resize_handle_rect(Buffer_View buffer_view, const Render_State *render_state);
 void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, const Render_State *render_state);
-Vec_2 buffer_view_screen_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 screen_pos, const Render_State *render_state);
+Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 canvas_pos, const Render_State *render_state);
 Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos);
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
@@ -209,9 +210,9 @@ void draw_quad(Rect q, const unsigned char color[4]);
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
 void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
-void draw_line_numbers(Buffer_View buffer_view, Render_State *render_state);
-void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Render_State *render_state);
-void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *render_state, float delta_time);
+void draw_line_numbers(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state);
+void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
+void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
@@ -221,13 +222,14 @@ void make_viewport_transform(Viewport viewport, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
 void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
-void transform_set_buffer_view_text_area(Buffer_View buffer_view, Render_State *render_state);
-void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Render_State *render_state);
-void transform_set_rect(Rect rect, Render_State *render_state);
+void transform_set_buffer_view_text_area(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state);
+void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state);
+void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state);
+void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_state);
 void transform_set_screen_space(Render_State *render_state);
 
-Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font);
-Vec_2 window_pos_to_buffer_pos(Vec_2 window_pos, Viewport viewport);
+Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
+Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
 Vec_2 get_mouse_screen_pos(GLFWwindow *window);
 Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
 Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state);

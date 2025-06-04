@@ -54,6 +54,9 @@ void _init(GLFWwindow *window, void *_state)
         state);
 
     buffer_view_set_active(first_file, state);
+
+    state->canvas_viewport.zoom = 1.0f;
+    viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -87,7 +90,7 @@ void _render(GLFWwindow *window, void *_state)
     {
         Buffer_View *buffer_view = state->buffer_views[i];
         bool is_active = buffer_view == state->active_buffer_view;
-        draw_buffer_view(buffer_view, is_active, &state->render_state, state->delta_time);
+        draw_buffer_view(buffer_view, is_active, state->canvas_viewport, &state->render_state, state->delta_time);
     }
 
     draw_status_bar(window, state, &state->render_state);
@@ -125,8 +128,20 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    state->active_buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
-    state->active_buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
+    Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+    Buffer_View *hovered_buffer_view = get_buffer_view_at_pos(mouse_canvas_pos, state);
+    if (hovered_buffer_view)
+    {
+        hovered_buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
+        hovered_buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
+    }
+    else
+    {
+        state->canvas_viewport.rect.x -= x_offset * SCROLL_SENS;
+        state->canvas_viewport.rect.y -= y_offset * SCROLL_SENS;
+        trace_log("canvas_viewport scrolled: %f, %f", state->canvas_viewport.rect.x, state->canvas_viewport.rect.y);
+    }
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
@@ -256,12 +271,13 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
         bool is_just_pressed = !state->left_mouse_down;
         state->left_mouse_down = true;
         if (is_just_pressed)
         {
             // TODO: Mouse screen position will have to be converted to canvas position
-            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_screen_pos, state);
+            Buffer_View *clicked_view = get_buffer_view_at_pos(mouse_canvas_pos, state);
             if (clicked_view != NULL)
             {
                 if (state->active_buffer_view != clicked_view)
@@ -271,9 +287,9 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
                 }
                 Rect text_area_rect = buffer_view_get_text_area_rect(*clicked_view, &state->render_state);
                 Rect resize_handle_rect = buffer_view_get_resize_handle_rect(*clicked_view, &state->render_state);
-                if (rect_p_intersect(mouse_screen_pos, resize_handle_rect))
+                if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
                     state->is_buffer_view_resize = true;
-                else if (rect_p_intersect(mouse_screen_pos, text_area_rect))
+                else if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
                     state->is_buffer_view_text_area_click = true;
                 else
                     state->is_buffer_view_drag = true;
@@ -284,7 +300,7 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
         if (!state->left_mouse_handled && state->is_buffer_view_text_area_click)
         {
             bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-            Vec_2 mouse_text_area_pos = buffer_view_screen_pos_to_text_area_pos(*active_view, mouse_screen_pos, &state->render_state);
+            Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*active_view, mouse_canvas_pos, &state->render_state);
             handle_mouse_text_area_click(active_view, is_shift_pressed, is_just_pressed, mouse_text_area_pos, state);
         }
         else if (state->is_buffer_view_drag)
@@ -312,6 +328,8 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
         state->is_buffer_view_drag = false;
         state->is_buffer_view_resize = false;
     }
+
+
 }
 
 Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key)
@@ -577,12 +595,12 @@ void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, const Render_Stat
     viewport_set_outer_rect(&buffer_view->viewport, text_area_rect);
 }
 
-Vec_2 buffer_view_screen_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 screen_pos, const Render_State *render_state)
+Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 canvas_pos, const Render_State *render_state)
 {
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
     Vec_2 text_area_pos;
-    text_area_pos.x = screen_pos.x - text_area_rect.x;
-    text_area_pos.y = screen_pos.y - text_area_rect.y;
+    text_area_pos.x = canvas_pos.x - text_area_rect.x;
+    text_area_pos.y = canvas_pos.y - text_area_rect.y;
     return text_area_pos;
 }
 
@@ -889,9 +907,9 @@ void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport 
     }
 }
 
-void draw_line_numbers(Buffer_View buffer_view, Render_State *render_state)
+void draw_line_numbers(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state)
 {
-    transform_set_buffer_view_line_num_col(buffer_view, render_state);
+    transform_set_buffer_view_line_num_col(buffer_view, canvas_viewport, render_state);
 
     const float font_line_height = get_font_line_height(render_state->font);
     const float viewport_min_y = buffer_view.viewport.rect.y;
@@ -919,23 +937,20 @@ void draw_line_numbers(Buffer_View buffer_view, Render_State *render_state)
     }
 }
 
-void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Render_State *render_state)
+void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
 {
     Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
 
-    // transform_set_screen_space(render_state);
-    // draw_quad(name_rect, (unsigned char[4]){100, 100, 100, 255});
-
-    transform_set_rect(name_rect, render_state);
+    transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
         draw_string(buffer_view.file_info.path, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255});
     else
         draw_string(buffer_view.file_info.path, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255});
 }
 
-void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *render_state, float delta_time)
+void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
 {
-    transform_set_screen_space(render_state);
+    transform_set_canvas_space(canvas_viewport, render_state);
     if (is_active)
         draw_quad(buffer_view->outer_rect, (unsigned char[4]){40, 40, 40, 255});
     else
@@ -944,13 +959,13 @@ void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Render_State *re
     Rect text_area_rect = buffer_view_get_text_area_rect(*buffer_view, render_state);
     draw_quad(text_area_rect, (unsigned char[4]){10, 10, 10, 255});
 
-    transform_set_buffer_view_text_area(*buffer_view, render_state);
+    transform_set_buffer_view_text_area(*buffer_view, canvas_viewport, render_state);
     draw_text_buffer(buffer_view->text_buffer, buffer_view->viewport, render_state);
     if (is_active)
         draw_cursor(buffer_view->text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
     draw_selection(buffer_view->text_buffer, buffer_view->selection, buffer_view->viewport, render_state);
-    draw_line_numbers(*buffer_view, render_state);
-    draw_buffer_view_name(*buffer_view, is_active, render_state);
+    draw_line_numbers(*buffer_view, canvas_viewport, render_state);
+    draw_buffer_view_name(*buffer_view, is_active, canvas_viewport, render_state);
 }
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state)
@@ -1060,50 +1075,88 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
     glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
 }
 
-void transform_set_buffer_view_text_area(Buffer_View buffer_view, Render_State *render_state)
+void transform_set_buffer_view_text_area(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state)
 {
-    float proj[16], view_viewport[16], view_canvas[16], view[16], mvp[16];
-    make_viewport_transform(buffer_view.viewport, view_viewport);
+    float proj[16], view_viewport[16], view_canvas[16], view_a[16], view_screen[16], view[16], mvp[16];
+
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
+
+    make_viewport_transform(buffer_view.viewport, view_viewport);
     make_view(-text_area_rect.x, -text_area_rect.y, 1.0f, view_canvas);
-    mul_mat4(view_viewport, view_canvas, view);
-    // TODO: One more transform: canvas space -> screen space
+    make_viewport_transform(canvas_viewport, view_screen);
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+
+    mul_mat4(view_viewport, view_canvas, view_a);
+    mul_mat4(view_a, view_screen, view);
     mul_mat4(view, proj, mvp);
+
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
-    gl_enable_scissor(text_area_rect, render_state);
+
+    Rect text_area_screen_rect = canvas_rect_to_screen_rect(text_area_rect, canvas_viewport);
+    gl_enable_scissor(text_area_screen_rect, render_state);
 }
 
-void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Render_State *render_state)
+void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Viewport canvas_viewport, Render_State *render_state)
 {
-    float proj[16], view_viewport[16], view_screen[16], view[16], mvp[16];
-    make_view(0.0f, buffer_view.viewport.rect.y, buffer_view.viewport.zoom, view_viewport);
+    float proj[16], view_viewport[16], view_canvas[16], view_a[16], view_screen[16], view[16], mvp[16];
+
     Rect line_num_col_rect = buffer_view_get_line_num_col_rect(buffer_view, render_state);
-    make_view(-line_num_col_rect.x, -line_num_col_rect.y, 1.0f, view_screen);
-    mul_mat4(view_viewport, view_screen, view);
-    // TODO: One more transform: canvas space -> screen space
+
+    make_view(0.0f, buffer_view.viewport.rect.y, buffer_view.viewport.zoom, view_viewport);
+    make_view(-line_num_col_rect.x, -line_num_col_rect.y, 1.0f, view_canvas);
+    make_viewport_transform(canvas_viewport, view_screen);
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+
+    mul_mat4(view_viewport, view_canvas, view_a);
+    mul_mat4(view_a, view_screen, view);
     mul_mat4(view, proj, mvp);
+
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
-    gl_enable_scissor(line_num_col_rect, render_state);
+
+    Rect line_num_col_screen_rect = canvas_rect_to_screen_rect(line_num_col_rect, canvas_viewport);
+    gl_enable_scissor(line_num_col_screen_rect, render_state);
 }
 
-void transform_set_rect(Rect rect, Render_State *render_state)
+void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state)
+{
+    float proj[16], view_canvas[16], view_screen[16], view[16], mvp[16];
+
+    make_view(-rect.x, - rect.y, 1.0f, view_canvas);
+    make_viewport_transform(canvas_viewport, view_screen);
+    make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+
+    mul_mat4(view_canvas, view_screen, view);
+    mul_mat4(view, proj, mvp);
+
+    glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
+
+    Rect screen_rect = canvas_rect_to_screen_rect(rect, canvas_viewport);
+    gl_enable_scissor(screen_rect, render_state);
+}
+
+void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_state)
 {
     float proj[16], view[16], mvp[16];
-    make_view(-rect.x, - rect.y, 1.0f, view);
+
+    make_viewport_transform(canvas_viewport, view);
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+
     mul_mat4(view, proj, mvp);
+
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, mvp);
-    gl_enable_scissor(rect, render_state);
+
+    glDisable(GL_SCISSOR_TEST);
 }
 
 void transform_set_screen_space(Render_State *render_state)
 {
-    glDisable(GL_SCISSOR_TEST);
     float proj[16];
+
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
+
     glUniformMatrix4fv(render_state->shader_mvp_loc, 1, GL_FALSE, proj);
+
+    glDisable(GL_SCISSOR_TEST);
 }
 
 Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font)
@@ -1116,6 +1169,24 @@ Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font)
     viewport_bounds.min_y += VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
     viewport_bounds.max_y -= VIEWPORT_CURSOR_BOUNDARY_LINES * font_line_height;
     return viewport_bounds;
+}
+
+Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport)
+{
+    Rect screen_rect;
+    screen_rect.x = canvas_rect.x - canvas_viewport.rect.x;
+    screen_rect.y = canvas_rect.y - canvas_viewport.rect.y;
+    screen_rect.w = canvas_rect.w * canvas_viewport.zoom;
+    screen_rect.h = canvas_rect.h * canvas_viewport.zoom;
+    return screen_rect;
+}
+
+Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport)
+{
+    Vec_2 canvas_pos;
+    canvas_pos.x = canvas_viewport.rect.x + screen_pos.x / canvas_viewport.zoom;
+    canvas_pos.y = canvas_viewport.rect.y + screen_pos.y / canvas_viewport.zoom;
+    return canvas_pos;
 }
 
 Vec_2 get_mouse_screen_pos(GLFWwindow *window)
