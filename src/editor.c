@@ -306,13 +306,13 @@ Buffer *buffer_create_read_file(const char *path, Editor_State *state)
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_FILE;
-    buffer->file.file_info = file_read_into_text_buffer(path, &buffer->file.text_buffer);
+    buffer->file.info = file_read_into_text_buffer(path, &buffer->file.text_buffer);
 
     *new_slot = buffer;
     return *new_slot;
 }
 
-Buffer *buffer_create_prompt(const char *prompt_text, Editor_State *state)
+Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state)
 {
     Buffer **new_slot = buffer_create_new_slot(state);
 
@@ -321,6 +321,7 @@ Buffer *buffer_create_prompt(const char *prompt_text, Editor_State *state)
 
     buffer->prompt.text_buffer.line_count = 2;
     buffer->prompt.text_buffer.lines = xmalloc(buffer->prompt.text_buffer.line_count * sizeof(buffer->prompt.text_buffer.lines[0]));
+    buffer->prompt.context = context;
 
     char prompt_line_buf[MAX_CHARS_PER_LINE];
     snprintf(prompt_line_buf, sizeof(prompt_line_buf), "%s\n", prompt_text);
@@ -391,10 +392,10 @@ Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_Stat
     return new_view;
 }
 
-Buffer_View *buffer_view_prompt(const char *prompt_text, Rect rect, Editor_State *state)
+Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state)
 {
     Buffer_View *new_view = buffer_view_create(rect, state);
-    Buffer *new_buffer = buffer_create_prompt(prompt_text, state);
+    Buffer *new_buffer = buffer_create_prompt(prompt_text, context, state);
     new_view->buffer = new_buffer;
     move_cursor_to_line(&new_buffer->file.text_buffer, &new_view->cursor, state, 1, false);
     move_cursor_to_col(&new_buffer->file.text_buffer, &new_view->cursor, state, 0, false, false);
@@ -514,6 +515,50 @@ Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 tex
     buffer_pos.x = buffer_view.viewport.rect.x + text_area_pos.x / buffer_view.viewport.zoom;
     buffer_pos.y = buffer_view.viewport.rect.y + text_area_pos.y / buffer_view.viewport.zoom;
     return buffer_pos;
+}
+
+Prompt_Context prompt_create_context_open_file()
+{
+    Prompt_Context context;
+    context.kind = PROMPT_OPEN_FILE;
+    return context;
+}
+
+Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
+{
+    bassert(text_buffer.line_count >= 2);
+    bassert(text_buffer.lines[1].buf_len < MAX_CHARS_PER_LINE);
+    Prompt_Result result;
+    strcpy(result.str, text_buffer.lines[1].str);
+    if (result.str[text_buffer.lines[1].len - 1] == '\n')
+    {
+        result.str[text_buffer.lines[1].len - 1] = '\0';
+    }
+    return result;
+}
+
+void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state)
+{
+    (void)window; (void)state;
+    switch (context.kind)
+    {
+        case PROMPT_OPEN_FILE:
+        {
+            Rect buffer_view_rect =
+            {
+                .x = prompt_rect.x,
+                .y = prompt_rect.y,
+                .w = 500,
+                .h = 500
+            };
+            buffer_view_open_file(result.str, buffer_view_rect, state);
+        } break;
+
+        default:
+        {
+            log_warning("prompt_submit: unhandled prompt kind");
+        } break;
+    }
 }
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect)
@@ -862,10 +907,10 @@ void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Viewport can
     Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
 
     char buffer_view_name_buf[256];
-    if (!buffer_view.buffer->file.file_info.has_been_modified)
-        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s", buffer_view.buffer->file.file_info.path);
+    if (!buffer_view.buffer->file.info.has_been_modified)
+        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s", buffer_view.buffer->file.info.path);
     else
-        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s[*]", buffer_view.buffer->file.file_info.path);
+        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s[*]", buffer_view.buffer->file.info.path);
 
     transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
@@ -1104,6 +1149,12 @@ Vec_2 get_mouse_screen_pos(GLFWwindow *window)
     double mouse_x, mouse_y;
     glfwGetCursorPos(window, &mouse_x, &mouse_y);
     Vec_2 p = {mouse_x, mouse_y};
+    return p;
+}
+
+Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state)
+{
+    Vec_2 p = screen_pos_to_canvas_pos(get_mouse_screen_pos(window), state->canvas_viewport);
     return p;
 }
 
@@ -1419,7 +1470,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
         line->str[cursor->pos.col] = c;
         move_cursor_to_col(text_buffer, cursor, state, cursor->pos.col + 1, true, false);
     }
-    active_view->buffer->file.file_info.has_been_modified = true;
+    active_view->buffer->file.info.has_been_modified = true;
 }
 
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
@@ -1445,7 +1496,7 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         resize_text_line(&text_buffer->lines[cursor->pos.line], line->len - 1);
         move_cursor_to_col(text_buffer, cursor, state, cursor->pos.col - 1, true, false);
     }
-    active_view->buffer->file.file_info.has_been_modified = true;
+    active_view->buffer->file.info.has_been_modified = true;
 }
 
 void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
@@ -1827,7 +1878,20 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
-            insert_char(&active_view->buffer->file.text_buffer, '\n', &active_view->cursor, state, true);
+            switch (active_view->buffer->kind)
+            {
+                case BUFFER_PROMPT:
+                {
+                    Prompt_Result prompt_result = prompt_parse_result(active_view->buffer->prompt.text_buffer);
+                    prompt_submit(active_view->buffer->prompt.context, prompt_result, active_view->outer_rect, window, state);
+                    buffer_view_destroy(active_view, state);
+                } break;
+
+                default:
+                {
+                    insert_char(&active_view->buffer->file.text_buffer, '\n', &active_view->cursor, state, true);
+                } break;
+            }
         } break;
         case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
@@ -1882,8 +1946,8 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            file_write(active_view->buffer->file.text_buffer, active_view->buffer->file.file_info);
-            active_view->buffer->file.file_info.has_been_modified = false;
+            file_write(active_view->buffer->file.text_buffer, active_view->buffer->file.info);
+            active_view->buffer->file.info.has_been_modified = false;
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
@@ -1918,12 +1982,12 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;
-        case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        case GLFW_KEY_O: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
             buffer_view_prompt(
-                "Hi, how are you?",
+                "Open file:",
+                prompt_create_context_open_file(),
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
                 state);
         } break;

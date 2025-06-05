@@ -122,6 +122,21 @@ typedef struct {
 } Render_State;
 
 typedef enum {
+    PROMPT_OPEN_FILE
+} Prompt_Kind;
+
+typedef struct {
+    Prompt_Kind kind;
+    union {
+    struct {/* nothing for open_file */} open_file;
+    };
+} Prompt_Context;
+
+typedef struct {
+    char str[MAX_CHARS_PER_LINE];
+} Prompt_Result;
+
+typedef enum {
     BUFFER_FILE,
     BUFFER_PROMPT
 } Buffer_Kind;
@@ -131,10 +146,11 @@ typedef struct {
     union {
     struct {
         Text_Buffer text_buffer;
-        File_Info file_info;
+        File_Info info;
     } file;
     struct {
         Text_Buffer text_buffer;
+        Prompt_Context context;
     } prompt;
     };
 } Buffer;
@@ -203,13 +219,13 @@ void perform_timing_calculations(Editor_State *state);
 Buffer **buffer_create_new_slot(Editor_State *state);
 void buffer_free_slot(Buffer *buffer, Editor_State *state);
 Buffer *buffer_create_read_file(const char *path, Editor_State *state);
-Buffer *buffer_create_prompt(const char *prompt_text, Editor_State *state);
+Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state);
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
 
 Buffer_View *buffer_view_create(Rect rect, Editor_State *state);
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
-Buffer_View *buffer_view_prompt(const char *prompt_text, Rect rect, Editor_State *state);
+Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state);
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state);
@@ -220,6 +236,10 @@ Rect buffer_view_get_resize_handle_rect(Buffer_View buffer_view, const Render_St
 void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, const Render_State *render_state);
 Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 canvas_pos, const Render_State *render_state);
 Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos);
+
+Prompt_Context prompt_create_context_open_file();
+Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
+void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);
@@ -264,6 +284,7 @@ void transform_set_screen_space(Render_State *render_state);
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
 Vec_2 get_mouse_screen_pos(GLFWwindow *window);
+Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state);
 Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
 Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state);
 Cursor buffer_pos_to_cursor(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
