@@ -121,10 +121,23 @@ typedef struct {
     float buffer_view_resize_handle_radius;
 } Render_State;
 
+typedef enum {
+    BUFFER_FILE
+} Buffer_Kind;
+
+typedef struct {
+    Buffer_Kind kind;
+    union {
+        struct {
+            Text_Buffer text_buffer;
+            File_Info file_info;
+        } file;
+    };
+} Buffer;
+
 typedef struct {
     Rect outer_rect;
-    File_Info file_info;
-    Text_Buffer text_buffer;
+    Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
     Text_Selection selection;
@@ -132,6 +145,8 @@ typedef struct {
 
 typedef struct {
     Render_State render_state;
+    Buffer **buffers;
+    int buffer_count;
     Buffer_View **buffer_views;
     int buffer_view_count;
     Buffer_View *active_buffer_view;
@@ -180,6 +195,10 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
+
+Buffer *buffer_create_read_file(const char *path, Editor_State *state);
+int buffer_get_index(Buffer *buffer, Editor_State *state);
+void buffer_destroy(Buffer *buffer, Editor_State *state);
 
 Buffer_View *buffer_view_create(Rect rect, Editor_State *state);
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
@@ -271,9 +290,8 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
 void delete_current_line(Editor_State *state);
 bool is_white_line(Text_Line line);
 
-void open_file_for_edit(const char *path, Buffer_View *buffer_view, Editor_State *state);
-File_Info read_file(const char *path, Text_Buffer *text_buffer);
-void write_file(Text_Buffer text_buffer, File_Info file_info);
+File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
+void file_write(Text_Buffer text_buffer, File_Info file_info);
 
 void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);

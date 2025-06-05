@@ -121,7 +121,7 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 
         if (state->scrolled_buffer_view->viewport.rect.x < 0.0f) state->scrolled_buffer_view->viewport.rect.x = 0.0f;
         if (state->scrolled_buffer_view->viewport.rect.y < 0.0f) state->scrolled_buffer_view->viewport.rect.y = 0.0f;
-        float buffer_max_y = (state->scrolled_buffer_view->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
+        float buffer_max_y = (state->scrolled_buffer_view->buffer->file.text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
         if (state->scrolled_buffer_view->viewport.rect.y > buffer_max_y) state->scrolled_buffer_view->viewport.rect.y = buffer_max_y;
         float buffer_max_x = 256 * get_font_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
         if (state->scrolled_buffer_view->viewport.rect.x > buffer_max_x) state->scrolled_buffer_view->viewport.rect.x = buffer_max_x;
@@ -282,6 +282,56 @@ void perform_timing_calculations(Editor_State *state)
     }
 }
 
+Buffer *buffer_create_read_file(const char *path, Editor_State *state)
+{
+    Buffer *buffer = xcalloc(sizeof(Buffer));
+    buffer->kind = BUFFER_FILE;
+    buffer->file.file_info = file_read_into_text_buffer(path, &buffer->file.text_buffer);
+
+    state->buffer_count++;
+    state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
+
+    Buffer **new_slot = &state->buffers[state->buffer_count - 1];
+    *new_slot = buffer;
+    return *new_slot;
+}
+
+int buffer_get_index(Buffer *buffer, Editor_State *state)
+{
+    int index = 0;
+    Buffer **buffer_c = state->buffers;
+    while (*buffer_c != buffer)
+    {
+        index++;
+        buffer_c++;
+    }
+    return index;
+}
+
+void buffer_destroy(Buffer *buffer, Editor_State *state)
+{
+    switch (buffer->kind)
+    {
+        case BUFFER_FILE:
+        {
+            text_buffer_destroy(&buffer->file.text_buffer);
+            int index_to_delete = buffer_get_index(buffer, state);
+            free(state->buffers[index_to_delete]);
+            for (int i = index_to_delete; i < state->buffer_count - 1; i++)
+            {
+                state->buffers[i] = state->buffers[i + 1];
+            }
+            state->buffer_count--;
+            state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
+        } break;
+
+        default:
+        {
+            bassert(!"buffer_destroy: unhandled buffer kind.");
+        }
+    }
+}
+
 Buffer_View *buffer_view_create(Rect rect, Editor_State *state)
 {
     Buffer_View *view = xcalloc(sizeof(Buffer_View));
@@ -297,14 +347,17 @@ Buffer_View *buffer_view_create(Rect rect, Editor_State *state)
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state)
 {
     Buffer_View *new_view = buffer_view_create(rect, state);
-    open_file_for_edit(file_path, new_view, state);
+    Buffer *new_buffer = buffer_create_read_file(file_path, state);
+    new_view->buffer = new_buffer;
+    move_cursor_to_line(&new_buffer->file.text_buffer, &new_view->cursor, state, new_view->cursor.pos.line, false);
+    move_cursor_to_col(&new_buffer->file.text_buffer, &new_view->cursor, state, new_view->cursor.pos.col, false, false);
     buffer_view_set_active(new_view, state);
     return new_view;
 }
 
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state)
 {
-    text_buffer_destroy(&buffer_view->text_buffer);
+    buffer_destroy(buffer_view->buffer, state);
     int index_to_delete = buffer_view_get_index(buffer_view, state);
     free(state->buffer_views[index_to_delete]);
     for (int i = index_to_delete; i < state->buffer_view_count - 1; i++)
@@ -736,7 +789,7 @@ void draw_line_numbers(Buffer_View buffer_view, Viewport canvas_viewport, Render
     const float viewport_max_y = viewport_min_y + buffer_view.viewport.rect.h;
 
     char line_i_str_buf[256];
-    for (int line_i = 0; line_i < buffer_view.text_buffer.line_count; line_i++)
+    for (int line_i = 0; line_i < buffer_view.buffer->file.text_buffer.line_count; line_i++)
     {
         const float min_y = font_line_height * line_i;
         const float max_y = min_y + font_line_height;
@@ -762,10 +815,10 @@ void draw_buffer_view_name(Buffer_View buffer_view, bool is_active, Viewport can
     Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
 
     char buffer_view_name_buf[256];
-    if (!buffer_view.file_info.has_been_modified)
-        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s", buffer_view.file_info.path);
+    if (!buffer_view.buffer->file.file_info.has_been_modified)
+        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s", buffer_view.buffer->file.file_info.path);
     else
-        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s[*]", buffer_view.file_info.path);
+        snprintf(buffer_view_name_buf, sizeof(buffer_view_name_buf), "%s[*]", buffer_view.buffer->file.file_info.path);
 
     transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
@@ -786,10 +839,10 @@ void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_
     draw_quad(text_area_rect, (unsigned char[4]){10, 10, 10, 255});
 
     transform_set_buffer_view_text_area(*buffer_view, canvas_viewport, render_state);
-    draw_text_buffer(buffer_view->text_buffer, buffer_view->viewport, render_state);
+    draw_text_buffer(buffer_view->buffer->file.text_buffer, buffer_view->viewport, render_state);
     if (is_active)
-        draw_cursor(buffer_view->text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
-    draw_selection(buffer_view->text_buffer, buffer_view->selection, buffer_view->viewport, render_state);
+        draw_cursor(buffer_view->buffer->file.text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
+    draw_selection(buffer_view->buffer->file.text_buffer, buffer_view->selection, buffer_view->viewport, render_state);
     draw_line_numbers(*buffer_view, canvas_viewport, render_state);
     draw_buffer_view_name(*buffer_view, is_active, canvas_viewport, render_state);
 }
@@ -823,8 +876,8 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *rend
         "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d",
         active_view->cursor.pos.line,
         active_view->cursor.pos.col,
-        active_view->text_buffer.lines[active_view->cursor.pos.line].len,
-        active_view->text_buffer.line_count);
+        active_view->buffer->file.text_buffer.lines[active_view->cursor.pos.line].len,
+        active_view->buffer->file.text_buffer.line_count);
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
     status_str_y += font_line_height;
 
@@ -1162,7 +1215,7 @@ void move_cursor_to_col(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor
 void move_cursor_to_next_end_of_word(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    Text_Line *current_line = &active_view->text_buffer.lines[active_view->cursor.pos.line];
+    Text_Line *current_line = &active_view->buffer->file.text_buffer.lines[active_view->cursor.pos.line];
     int end_of_word = -1;
     for (int i = active_view->cursor.pos.col + 1; i < current_line->len - 1; i++)
     {
@@ -1174,19 +1227,19 @@ void move_cursor_to_next_end_of_word(Editor_State *state)
     }
     if (end_of_word == -1)
     {
-        move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line + 1, true);
-        move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, 0, true, false);
+        move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, active_view->cursor.pos.line + 1, true);
+        move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, true, false);
     }
     else
     {
-        move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, end_of_word, true, false);
+        move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, end_of_word, true, false);
     }
 }
 
 void move_cursor_to_prev_start_of_word(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    Text_Line *current_line = &active_view->text_buffer.lines[active_view->cursor.pos.line];
+    Text_Line *current_line = &active_view->buffer->file.text_buffer.lines[active_view->cursor.pos.line];
     int start_of_word = -1;
     for (int i = active_view->cursor.pos.col - 1; i > 0; i--)
     {
@@ -1198,29 +1251,29 @@ void move_cursor_to_prev_start_of_word(Editor_State *state)
     }
     if (start_of_word == -1)
     {
-        move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line - 1, true);
-        move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
+        move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, active_view->cursor.pos.line - 1, true);
+        move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
     }
     else
     {
-        move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, start_of_word, true, false);
+        move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, start_of_word, true, false);
     }
 }
 
 void move_cursor_to_next_white_line(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    for (int i = active_view->cursor.pos.line + 1; i < active_view->text_buffer.line_count; i++)
+    for (int i = active_view->cursor.pos.line + 1; i < active_view->buffer->file.text_buffer.line_count; i++)
     {
-        if (is_white_line(active_view->text_buffer.lines[i]))
+        if (is_white_line(active_view->buffer->file.text_buffer.lines[i]))
         {
-            move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, i, true);
-            move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, 0, true, false);
+            move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, i, true);
+            move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, true, false);
             return;
         }
     }
-    move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, MAX_LINES, true);
-    move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
+    move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, MAX_LINES, true);
+    move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
 }
 
 void move_cursor_to_prev_white_line(Editor_State *state)
@@ -1228,15 +1281,15 @@ void move_cursor_to_prev_white_line(Editor_State *state)
     Buffer_View *active_view = state->active_buffer_view;
     for (int i = active_view->cursor.pos.line - 1; i >= 0; i--)
     {
-        if (is_white_line(active_view->text_buffer.lines[i]))
+        if (is_white_line(active_view->buffer->file.text_buffer.lines[i]))
         {
-            move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, i, true);
-            move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, 0, true, false);
+            move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, i, true);
+            move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, true, false);
             return;
         }
     }
-    move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, 0, true);
-    move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, 0, true, false);
+    move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, true);
+    move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, true, false);
 }
 
 Text_Line make_text_line_dup(char *line)
@@ -1303,7 +1356,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
             int indent_spaces = get_line_indent(text_buffer->lines[cursor->pos.line - 1]);
             for (int i = 0; i < indent_spaces; i++)
             {
-                insert_char(&active_view->text_buffer, ' ', &active_view->cursor, state, false);
+                insert_char(&active_view->buffer->file.text_buffer, ' ', &active_view->cursor, state, false);
             }
         }
 
@@ -1316,7 +1369,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
         line->str[cursor->pos.col] = c;
         move_cursor_to_col(text_buffer, cursor, state, cursor->pos.col + 1, true, false);
     }
-    active_view->file_info.has_been_modified = true;
+    active_view->buffer->file.file_info.has_been_modified = true;
 }
 
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
@@ -1342,7 +1395,7 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         resize_text_line(&text_buffer->lines[cursor->pos.line], line->len - 1);
         move_cursor_to_col(text_buffer, cursor, state, cursor->pos.col - 1, true, false);
     }
-    active_view->file_info.has_been_modified = true;
+    active_view->buffer->file.file_info.has_been_modified = true;
 }
 
 void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
@@ -1456,9 +1509,9 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
 void delete_current_line(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    remove_line(&active_view->text_buffer, active_view->cursor.pos.line);
-    move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line, false);
-    move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, 0, false, false);
+    remove_line(&active_view->buffer->file.text_buffer, active_view->cursor.pos.line);
+    move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, active_view->cursor.pos.line, false);
+    move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, false, false);
 }
 
 bool is_white_line(Text_Line line)
@@ -1473,15 +1526,7 @@ bool is_white_line(Text_Line line)
     return true;
 }
 
-void open_file_for_edit(const char *path, Buffer_View *buffer_view, Editor_State *state)
-{
-    buffer_view->file_info = read_file(path, &buffer_view->text_buffer);
-    trace_log("Read file at %s", path);
-    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line, false);
-    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col, false, false);
-}
-
-File_Info read_file(const char *path, Text_Buffer *text_buffer)
+File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
 {
     File_Info file_info = {0};
     file_info.path = xstrdup(path);
@@ -1499,7 +1544,7 @@ File_Info read_file(const char *path, Text_Buffer *text_buffer)
     return file_info;
 }
 
-void write_file(Text_Buffer text_buffer, File_Info file_info)
+void file_write(Text_Buffer text_buffer, File_Info file_info)
 {
     FILE *f = fopen(file_info.path, "w");
     if (!f) fatal("Failed to open file for writing at %s", file_info.path);
@@ -1565,7 +1610,7 @@ int selection_char_count(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
     int char_count = 0;
-    if (is_selection_valid(active_view->text_buffer, active_view->selection))
+    if (is_selection_valid(active_view->buffer->file.text_buffer, active_view->selection))
     {
         Cursor start = active_view->selection.start;
         Cursor end = active_view->selection.end;
@@ -1585,7 +1630,7 @@ int selection_char_count(Editor_State *state)
             }
             else if (i == start.line)
             {
-                char_count += active_view->text_buffer.lines[i].len - start.col;
+                char_count += active_view->buffer->file.text_buffer.lines[i].len - start.col;
             }
             else if (i == end.line)
             {
@@ -1593,7 +1638,7 @@ int selection_char_count(Editor_State *state)
             }
             else
             {
-                char_count += active_view->text_buffer.lines[i].len;
+                char_count += active_view->buffer->file.text_buffer.lines[i].len;
             }
         }
     }
@@ -1614,11 +1659,11 @@ void delete_selected(Editor_State *state)
             start = end;
             end = temp;
         }
-        move_cursor_to_line(&active_view->text_buffer, &active_view->cursor, state, end.line, false);
-        move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, end.col, false, false);
+        move_cursor_to_line(&active_view->buffer->file.text_buffer, &active_view->cursor, state, end.line, false);
+        move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, end.col, false, false);
         for (int i = 0; i < char_count; i++)
         {
-            remove_char(&active_view->text_buffer, &active_view->cursor, state);
+            remove_char(&active_view->buffer->file.text_buffer, &active_view->cursor, state);
         }
         cancel_selection(state);
     }
@@ -1627,7 +1672,7 @@ void delete_selected(Editor_State *state)
 void copy_at_selection(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    if (is_selection_valid(active_view->text_buffer, active_view->selection))
+    if (is_selection_valid(active_view->buffer->file.text_buffer, active_view->selection))
     {
         Cursor start = active_view->selection.start;
         Cursor end = active_view->selection.end;
@@ -1669,7 +1714,7 @@ void copy_at_selection(Editor_State *state)
                 start_c = 0;
                 end_c = -1;
             }
-            state->copy_buffer.lines[copy_buffer_i++] = copy_text_line(active_view->text_buffer.lines[i], start_c, end_c);
+            state->copy_buffer.lines[copy_buffer_i++] = copy_text_line(active_view->buffer->file.text_buffer.lines[i], start_c, end_c);
         }
         trace_log("Copied at selection");
     }
@@ -1684,7 +1729,7 @@ void paste_from_copy_buffer(Editor_State *state)
     Buffer_View *active_view = state->active_buffer_view;
     if (state->copy_buffer.line_count > 0)
     {
-        if (is_selection_valid(active_view->text_buffer, active_view->selection))
+        if (is_selection_valid(active_view->buffer->file.text_buffer, active_view->selection))
         {
             delete_selected(state);
         }
@@ -1692,7 +1737,7 @@ void paste_from_copy_buffer(Editor_State *state)
         {
             for (int char_i = 0; char_i < state->copy_buffer.lines[i].len; char_i++)
             {
-                insert_char(&active_view->text_buffer, state->copy_buffer.lines[i].str[char_i], &active_view->cursor, state, false);
+                insert_char(&active_view->buffer->file.text_buffer, state->copy_buffer.lines[i].str[char_i], &active_view->cursor, state, false);
             }
         }
     }
@@ -1732,29 +1777,29 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
-            insert_char(&active_view->text_buffer, '\n', &active_view->cursor, state, true);
+            insert_char(&active_view->buffer->file.text_buffer, '\n', &active_view->cursor, state, true);
         } break;
         case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
-            if (is_selection_valid(active_view->text_buffer, active_view->selection)) delete_selected(state);
-            else remove_char(&active_view->text_buffer, &active_view->cursor, state);
+            if (is_selection_valid(active_view->buffer->file.text_buffer, active_view->selection)) delete_selected(state);
+            else remove_char(&active_view->buffer->file.text_buffer, &active_view->cursor, state);
         } break;
         case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
             if (mods == GLFW_MOD_ALT)
             {
-                int indent_i = get_line_indent(active_view->text_buffer.lines[active_view->cursor.pos.line]);
-                move_cursor_to_col(&active_view->text_buffer, &active_view->cursor, state, indent_i, true, false);
+                int indent_i = get_line_indent(active_view->buffer->file.text_buffer.lines[active_view->cursor.pos.line]);
+                move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, indent_i, true, false);
             }
-            else insert_indent(&active_view->text_buffer, &active_view->cursor, state);
+            else insert_indent(&active_view->buffer->file.text_buffer, &active_view->cursor, state);
         } break;
         case GLFW_KEY_LEFT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            decrease_indent_level(&active_view->text_buffer, &active_view->cursor, state);
+            decrease_indent_level(&active_view->buffer->file.text_buffer, &active_view->cursor, state);
         } break;
         case GLFW_KEY_RIGHT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            increase_indent_level(&active_view->text_buffer, &active_view->cursor, state);
+            increase_indent_level(&active_view->buffer->file.text_buffer, &active_view->cursor, state);
         } break;
         case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
@@ -1778,7 +1823,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_F8: if (action == GLFW_PRESS)
         {
-            text_buffer_validate(&active_view->text_buffer);
+            text_buffer_validate(&active_view->buffer->file.text_buffer);
             trace_log("Validated text buffer");
         } break;
         case GLFW_KEY_F7: if (action == GLFW_PRESS)
@@ -1787,8 +1832,8 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            write_file(active_view->text_buffer, active_view->file_info);
-            active_view->file_info.has_been_modified = false;
+            file_write(active_view->buffer->file.text_buffer, active_view->buffer->file.file_info);
+            active_view->buffer->file.file_info.has_been_modified = false;
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
@@ -1830,11 +1875,14 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
 void handle_char_input(Editor_State *state, char c)
 {
     Buffer_View *active_view = state->active_buffer_view;
-        if (is_selection_valid(active_view->text_buffer, active_view->selection))
+    if (active_view)
+    {
+        if (is_selection_valid(active_view->buffer->file.text_buffer, active_view->selection))
         {
             delete_selected(state);
         }
-        insert_char(&active_view->text_buffer, c, &active_view->cursor, state, false);
+        insert_char(&active_view->buffer->file.text_buffer, c, &active_view->cursor, state, false);
+    }
 }
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state)
@@ -1917,39 +1965,39 @@ Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key)
 
 void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state)
 {
-    if (with_selection && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection)) start_selection_at_cursor(state);
+    if (with_selection && !is_selection_valid(buffer_view->buffer->file.text_buffer, buffer_view->selection)) start_selection_at_cursor(state);
 
     switch (dir)
     {
         case CURSOR_MOVE_LEFT:
         {
             if (big_steps) move_cursor_to_prev_start_of_word(state);
-            else if (start_end) move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true, false);
-            else move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col - 1, true, true);
+            else if (start_end) move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, 0, true, false);
+            else move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col - 1, true, true);
         } break;
         case CURSOR_MOVE_RIGHT:
         {
             if (big_steps) move_cursor_to_next_end_of_word(state);
-            else if (start_end) move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            else move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col + 1, true, true);
+            else if (start_end) move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
+            else move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col + 1, true, true);
         } break;
         case CURSOR_MOVE_UP:
         {
             if (big_steps) move_cursor_to_prev_white_line(state);
             else if (start_end) {
-                move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true);
-                move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, 0, true, false);
+                move_cursor_to_line(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, 0, true);
+                move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, 0, true, false);
             }
-            else move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line - 1, true);
+            else move_cursor_to_line(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line - 1, true);
         } break;
         case CURSOR_MOVE_DOWN:
         {
             if (big_steps) move_cursor_to_next_white_line(state);
             else if (start_end) {
-                move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_LINES, true);
-                move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
+                move_cursor_to_line(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, MAX_LINES, true);
+                move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
             }
-            else move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line + 1, true);
+            else move_cursor_to_line(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line + 1, true);
         } break;
     }
 
@@ -1959,14 +2007,14 @@ void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir d
 
 void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection, bool just_pressed, Vec_2 mouse_text_area_pos, Editor_State *state)
 {
-    if (with_selection && just_pressed && !is_selection_valid(buffer_view->text_buffer, buffer_view->selection))
+    if (with_selection && just_pressed && !is_selection_valid(buffer_view->buffer->file.text_buffer, buffer_view->selection))
     {
         start_selection_at_cursor(state);
     }
     Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
-    Cursor mouse_cursor = buffer_pos_to_cursor(mouse_buffer_pos, buffer_view->text_buffer, &state->render_state);
-    move_cursor_to_line(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
-    move_cursor_to_col(&buffer_view->text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
+    Cursor mouse_cursor = buffer_pos_to_cursor(mouse_buffer_pos, buffer_view->buffer->file.text_buffer, &state->render_state);
+    move_cursor_to_line(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
+    move_cursor_to_col(&buffer_view->buffer->file.text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
     extend_selection_to_cursor(state);
     if (!with_selection && just_pressed)
     {
