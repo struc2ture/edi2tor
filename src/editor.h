@@ -122,16 +122,20 @@ typedef struct {
 } Render_State;
 
 typedef enum {
-    BUFFER_FILE
+    BUFFER_FILE,
+    BUFFER_PROMPT
 } Buffer_Kind;
 
 typedef struct {
     Buffer_Kind kind;
     union {
-        struct {
-            Text_Buffer text_buffer;
-            File_Info file_info;
-        } file;
+    struct {
+        Text_Buffer text_buffer;
+        File_Info file_info;
+    } file;
+    struct {
+        Text_Buffer text_buffer;
+    } prompt;
     };
 } Buffer;
 
@@ -196,12 +200,16 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
+Buffer **buffer_create_new_slot(Editor_State *state);
+void buffer_free_slot(Buffer *buffer, Editor_State *state);
 Buffer *buffer_create_read_file(const char *path, Editor_State *state);
+Buffer *buffer_create_prompt(const char *prompt_text, Editor_State *state);
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
 
 Buffer_View *buffer_view_create(Rect rect, Editor_State *state);
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
+Buffer_View *buffer_view_prompt(const char *prompt_text, Rect rect, Editor_State *state);
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state);
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state);
@@ -273,7 +281,7 @@ void move_cursor_to_prev_start_of_word(Editor_State *state);
 void move_cursor_to_next_white_line(Editor_State *state);
 void move_cursor_to_prev_white_line(Editor_State *state);
 
-Text_Line make_text_line_dup(char *line);
+Text_Line make_text_line_dup(const char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);
 void resize_text_line(Text_Line *text_line, int new_size);
 void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);

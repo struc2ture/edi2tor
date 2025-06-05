@@ -282,16 +282,51 @@ void perform_timing_calculations(Editor_State *state)
     }
 }
 
+Buffer **buffer_create_new_slot(Editor_State *state)
+{
+    state->buffer_count++;
+    state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
+    return &state->buffers[state->buffer_count - 1];
+}
+
+void buffer_free_slot(Buffer *buffer, Editor_State *state)
+{
+    int index_to_delete = buffer_get_index(buffer, state);
+    for (int i = index_to_delete; i < state->buffer_count - 1; i++)
+    {
+        state->buffers[i] = state->buffers[i + 1];
+    }
+    state->buffer_count--;
+    state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
+}
+
 Buffer *buffer_create_read_file(const char *path, Editor_State *state)
 {
+    Buffer **new_slot = buffer_create_new_slot(state);
+
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_FILE;
     buffer->file.file_info = file_read_into_text_buffer(path, &buffer->file.text_buffer);
 
-    state->buffer_count++;
-    state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
+    *new_slot = buffer;
+    return *new_slot;
+}
 
-    Buffer **new_slot = &state->buffers[state->buffer_count - 1];
+Buffer *buffer_create_prompt(const char *prompt_text, Editor_State *state)
+{
+    Buffer **new_slot = buffer_create_new_slot(state);
+
+    Buffer *buffer = xcalloc(sizeof(Buffer));
+    buffer->kind = BUFFER_PROMPT;
+
+    buffer->prompt.text_buffer.line_count = 2;
+    buffer->prompt.text_buffer.lines = xmalloc(buffer->prompt.text_buffer.line_count * sizeof(buffer->prompt.text_buffer.lines[0]));
+
+    char prompt_line_buf[MAX_CHARS_PER_LINE];
+    snprintf(prompt_line_buf, sizeof(prompt_line_buf), "%s\n", prompt_text);
+    buffer->prompt.text_buffer.lines[0] = make_text_line_dup(prompt_text);
+    buffer->prompt.text_buffer.lines[1] = make_text_line_dup("\n");
+
     *new_slot = buffer;
     return *new_slot;
 }
@@ -315,14 +350,15 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
         case BUFFER_FILE:
         {
             text_buffer_destroy(&buffer->file.text_buffer);
-            int index_to_delete = buffer_get_index(buffer, state);
-            free(state->buffers[index_to_delete]);
-            for (int i = index_to_delete; i < state->buffer_count - 1; i++)
-            {
-                state->buffers[i] = state->buffers[i + 1];
-            }
-            state->buffer_count--;
-            state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
+            buffer_free_slot(buffer, state);
+            free(buffer);
+        } break;
+
+        case BUFFER_PROMPT:
+        {
+            text_buffer_destroy(&buffer->prompt.text_buffer);
+            buffer_free_slot(buffer, state);
+            free(buffer);
         } break;
 
         default:
@@ -351,6 +387,17 @@ Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_Stat
     new_view->buffer = new_buffer;
     move_cursor_to_line(&new_buffer->file.text_buffer, &new_view->cursor, state, new_view->cursor.pos.line, false);
     move_cursor_to_col(&new_buffer->file.text_buffer, &new_view->cursor, state, new_view->cursor.pos.col, false, false);
+    buffer_view_set_active(new_view, state);
+    return new_view;
+}
+
+Buffer_View *buffer_view_prompt(const char *prompt_text, Rect rect, Editor_State *state)
+{
+    Buffer_View *new_view = buffer_view_create(rect, state);
+    Buffer *new_buffer = buffer_create_prompt(prompt_text, state);
+    new_view->buffer = new_buffer;
+    move_cursor_to_line(&new_buffer->file.text_buffer, &new_view->cursor, state, 1, false);
+    move_cursor_to_col(&new_buffer->file.text_buffer, &new_view->cursor, state, 0, false, false);
     buffer_view_set_active(new_view, state);
     return new_view;
 }
@@ -844,7 +891,10 @@ void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_
         draw_cursor(buffer_view->buffer->file.text_buffer, &buffer_view->cursor, buffer_view->viewport, render_state, delta_time);
     draw_selection(buffer_view->buffer->file.text_buffer, buffer_view->selection, buffer_view->viewport, render_state);
     draw_line_numbers(*buffer_view, canvas_viewport, render_state);
-    draw_buffer_view_name(*buffer_view, is_active, canvas_viewport, render_state);
+    if (buffer_view->buffer->kind == BUFFER_FILE)
+    {
+        draw_buffer_view_name(*buffer_view, is_active, canvas_viewport, render_state);
+    }
 }
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state)
@@ -1292,7 +1342,7 @@ void move_cursor_to_prev_white_line(Editor_State *state)
     move_cursor_to_col(&active_view->buffer->file.text_buffer, &active_view->cursor, state, 0, true, false);
 }
 
-Text_Line make_text_line_dup(char *line)
+Text_Line make_text_line_dup(const char *line)
 {
     Text_Line r;
     r.str = xstrdup(line);
@@ -1868,7 +1918,15 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;
-
+        case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            buffer_view_prompt(
+                "Hi, how are you?",
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+                state);
+        } break;
     }
 }
 
