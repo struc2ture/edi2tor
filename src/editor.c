@@ -302,6 +302,16 @@ void buffer_free_slot(Buffer *buffer, Editor_State *state)
     state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
 }
 
+Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state)
+{
+    Buffer **new_slot = buffer_create_new_slot(state);
+    Buffer *buffer = xcalloc(sizeof(Buffer));
+    buffer->kind = BUFFER_GENERIC;
+    buffer->text_buffer = text_buffer;
+    *new_slot = buffer;
+    return *new_slot;
+}
+
 Buffer *buffer_create_read_file(const char *path, Editor_State *state)
 {
     Buffer **new_slot = buffer_create_new_slot(state);
@@ -371,10 +381,11 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
     }
 }
 
-Buffer_View *buffer_view_create(Rect rect, Editor_State *state)
+Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state)
 {
     Buffer_View *view = xcalloc(sizeof(Buffer_View));
     view->viewport.zoom = DEFAULT_ZOOM;
+    view->buffer = buffer;
     buffer_view_set_rect(view, rect, &state->render_state);
     state->buffer_view_count++;
     state->buffer_views = xrealloc(state->buffer_views, state->buffer_view_count * sizeof(state->buffer_views[0]));
@@ -383,23 +394,29 @@ Buffer_View *buffer_view_create(Rect rect, Editor_State *state)
     return *new_slot;
 }
 
+Buffer_View *buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state)
+{
+    Buffer *buffer = buffer_create_generic(text_buffer, state);
+    Buffer_View *view = buffer_view_create(buffer, rect, state);
+    buffer_view_set_active(view, state);
+    return view;
+}
+
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state)
 {
-    Buffer_View *new_view = buffer_view_create(rect, state);
-    Buffer *new_buffer = buffer_create_read_file(file_path, state);
-    new_view->buffer = new_buffer;
-    buffer_view_set_active(new_view, state);
-    return new_view;
+    Buffer *buffer = buffer_create_read_file(file_path, state);
+    Buffer_View *view = buffer_view_create(buffer, rect, state);
+    buffer_view_set_active(view, state);
+    return view;
 }
 
 Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state)
 {
-    Buffer_View *new_view = buffer_view_create(rect, state);
-    Buffer *new_buffer = buffer_create_prompt(prompt_text, context, state);
-    new_view->buffer = new_buffer;
-    new_view->cursor.pos = cursor_pos_clamp(new_view->buffer->text_buffer, (Cursor_Pos){2, 0});
-    buffer_view_set_active(new_view, state);
-    return new_view;
+    Buffer *buffer = buffer_create_prompt(prompt_text, context, state);
+    Buffer_View *view = buffer_view_create(buffer, rect, state);
+    view->cursor.pos = cursor_pos_clamp(view->buffer->text_buffer, (Cursor_Pos){2, 0});
+    buffer_view_set_active(view, state);
+    return view;
 }
 
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state)
@@ -2093,8 +2110,11 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_F1: if (action == GLFW_PRESS)
         {
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
             Text_Buffer log_buffer = {0};
-            unit_tests_run(&log_buffer);
+            unit_tests_run(&log_buffer, true);
+            Buffer_View *view = buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+            view->cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, view->cursor.pos);
         } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {

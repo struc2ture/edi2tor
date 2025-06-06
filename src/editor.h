@@ -151,6 +151,7 @@ typedef struct {
 } Prompt_Result;
 
 typedef enum {
+    BUFFER_GENERIC,
     BUFFER_FILE,
     BUFFER_PROMPT
 } Buffer_Kind;
@@ -159,6 +160,7 @@ typedef struct {
     Buffer_Kind kind;
     Text_Buffer text_buffer;
     union {
+    struct { /* nothing for generic */ } generic;
     struct {
         File_Info info;
     } file;
@@ -231,12 +233,14 @@ void perform_timing_calculations(Editor_State *state);
 
 Buffer **buffer_create_new_slot(Editor_State *state);
 void buffer_free_slot(Buffer *buffer, Editor_State *state);
+Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state);
 Buffer *buffer_create_read_file(const char *path, Editor_State *state);
 Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state);
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
 
-Buffer_View *buffer_view_create(Rect rect, Editor_State *state);
+Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state);
+Buffer_View *buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state);
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
 Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state);
