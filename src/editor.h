@@ -122,13 +122,18 @@ typedef struct {
 } Render_State;
 
 typedef enum {
-    PROMPT_OPEN_FILE
+    PROMPT_OPEN_FILE,
+    PROMPT_GO_TO_LINE
 } Prompt_Kind;
 
+typedef struct Buffer_View Buffer_View;
 typedef struct {
     Prompt_Kind kind;
     union {
     struct {/* nothing for open_file */} open_file;
+    struct {
+        Buffer_View *for_view;
+    } go_to_line;
     };
 } Prompt_Context;
 
@@ -143,25 +148,24 @@ typedef enum {
 
 typedef struct {
     Buffer_Kind kind;
+    Text_Buffer text_buffer;
     union {
     struct {
-        Text_Buffer text_buffer;
         File_Info info;
     } file;
     struct {
-        Text_Buffer text_buffer;
         Prompt_Context context;
     } prompt;
     };
 } Buffer;
 
-typedef struct {
+struct Buffer_View {
     Rect outer_rect;
     Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
     Text_Selection selection;
-} Buffer_View;
+};
 
 typedef struct {
     Render_State render_state;
@@ -228,6 +232,7 @@ Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_Stat
 Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state);
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state);
+bool buffer_view_exists(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state);
 Rect buffer_view_get_text_area_rect(Buffer_View buffer_view, const Render_State *render_state);
 Rect buffer_view_get_line_num_col_rect(Buffer_View buffer_view, const Render_State *render_state);
@@ -238,6 +243,7 @@ Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 can
 Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos);
 
 Prompt_Context prompt_create_context_open_file();
+Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_view);
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
 void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
 
@@ -294,13 +300,15 @@ bool is_cursor_valid(Text_Buffer tb, Cursor bp);
 bool is_cursor_equal(Cursor a, Cursor b);
 void cancel_selection(Editor_State *state);
 
-void move_cursor_to_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
-void move_cursor_to_col(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
+void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
+void move_cursor_to_col(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line);
 
 void move_cursor_to_next_end_of_word(Editor_State *state);
 void move_cursor_to_prev_start_of_word(Editor_State *state);
 void move_cursor_to_next_white_line(Editor_State *state);
 void move_cursor_to_prev_white_line(Editor_State *state);
+
+void display_cursor_move(Buffer_View *buffer_view, Cursor cursor, Editor_State *state);
 
 Text_Line make_text_line_dup(const char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);
