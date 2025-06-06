@@ -75,16 +75,16 @@ typedef struct {
 typedef struct {
     int line;
     int col;
-} Cursor;
+} Cursor_Pos;
 
 typedef struct {
-    Cursor pos;
+    Cursor_Pos pos;
     float blink_time;
 } Display_Cursor;
 
 typedef struct {
-    Cursor start;
-    Cursor end;
+    Cursor_Pos start;
+    Cursor_Pos end;
 } Text_Selection;
 
 typedef struct {
@@ -298,11 +298,11 @@ Vec_2 get_mouse_screen_pos(GLFWwindow *window);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state);
 Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
 Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state);
-Cursor buffer_pos_to_cursor(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
+Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Viewport *viewport, Render_State *render_state);
 
-bool is_cursor_valid(Text_Buffer tb, Cursor bp);
-bool is_cursor_equal(Cursor a, Cursor b);
+bool is_cursor_pos_valid(Text_Buffer tb, Cursor_Pos bp);
+bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b);
 void cancel_selection(Editor_State *state);
 
 void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
@@ -313,7 +313,7 @@ void move_cursor_to_prev_start_of_word(Editor_State *state);
 void move_cursor_to_next_white_line(Editor_State *state);
 void move_cursor_to_prev_white_line(Editor_State *state);
 
-void display_cursor_move(Buffer_View *buffer_view, Cursor cursor, Editor_State *state);
+void display_cursor_move(Buffer_View *buffer_view, Cursor_Pos cursor, Editor_State *state);
 
 Text_Line make_text_line_dup(const char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);

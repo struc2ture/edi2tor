@@ -585,7 +585,7 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             if (buffer_view_exists(context.go_to_line.for_view, state))
             {
                 int go_to_line = xstrtoint(result.str);
-                display_cursor_move(context.go_to_line.for_view, (Cursor){go_to_line - 1, 0}, state);
+                display_cursor_move(context.go_to_line.for_view, (Cursor_Pos){go_to_line - 1, 0}, state);
             }
             else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer %p does not exist", context.go_to_line.for_view);
         } break;
@@ -881,10 +881,10 @@ void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewp
 void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state)
 {
     if (is_selection_valid(text_buffer, selection)) {
-        Cursor start = selection.start;
-        Cursor end = selection.end;
+        Cursor_Pos start = selection.start;
+        Cursor_Pos end = selection.end;
         if (start.line > end.line || (start.line == end.line && start.col > end.col)) {
-            Cursor tmp = start;
+            Cursor_Pos tmp = start;
             start = end;
             end = tmp;
         }
@@ -1231,9 +1231,9 @@ Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state)
     return NULL;
 }
 
-Cursor buffer_pos_to_cursor(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)
+Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)
 {
-    Cursor cursor;
+    Cursor_Pos cursor;
     cursor.line = buffer_pos.y / (float)get_font_line_height(render_state->font);
     if (cursor.line < 0) {
         cursor.line = 0;
@@ -1281,14 +1281,14 @@ void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Vie
     }
 }
 
-bool is_cursor_valid(Text_Buffer text_buf, Cursor buf_pos)
+bool is_cursor_pos_valid(Text_Buffer text_buf, Cursor_Pos buf_pos)
 {
     bool is_valid = buf_pos.line >= 0 && buf_pos.line < text_buf.line_count &&
         buf_pos.col >= 0 && buf_pos.col < text_buf.lines[buf_pos.line].len;
     return is_valid;
 }
 
-bool is_cursor_equal(Cursor a, Cursor b)
+bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b)
 {
     return a.line == b.line && a.col == b.col;
 }
@@ -1440,7 +1440,7 @@ void move_cursor_to_prev_white_line(Editor_State *state)
     move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, true, false);
 }
 
-void display_cursor_move(Buffer_View *buffer_view, Cursor cursor, Editor_State *state)
+void display_cursor_move(Buffer_View *buffer_view, Cursor_Pos cursor, Editor_State *state)
 {
     move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, cursor.line, true);
     move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, cursor.col, true, false);
@@ -1604,11 +1604,11 @@ void decrease_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
     Buffer_View *active_view = state->active_buffer_view;
     if (is_selection_valid(*text_buffer, active_view->selection))
     {
-        Cursor start = active_view->selection.start;
-        Cursor end = active_view->selection.end;
+        Cursor_Pos start = active_view->selection.start;
+        Cursor_Pos end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Cursor temp = start;
+            Cursor_Pos temp = start;
             start = end;
             end = temp;
         }
@@ -1643,11 +1643,11 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
     Buffer_View *active_view = state->active_buffer_view;
     if (is_selection_valid(*text_buffer, active_view->selection))
     {
-        Cursor start = active_view->selection.start;
-        Cursor end = active_view->selection.end;
+        Cursor_Pos start = active_view->selection.start;
+        Cursor_Pos end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Cursor temp = start;
+            Cursor_Pos temp = start;
             start = end;
             end = temp;
         }
@@ -1753,17 +1753,17 @@ void extend_selection_to_cursor(Editor_State *state)
 
 bool is_selection_valid(Text_Buffer text_buffer, Text_Selection selection)
 {
-    bool is_valid = is_cursor_valid(text_buffer, selection.start) &&
-        is_cursor_valid(text_buffer, selection.end) &&
-        !is_cursor_equal(selection.start, selection.end);
+    bool is_valid = is_cursor_pos_valid(text_buffer, selection.start) &&
+        is_cursor_pos_valid(text_buffer, selection.end) &&
+        !is_cursor_pos_equal(selection.start, selection.end);
     return is_valid;
 }
 
 void cancel_selection(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    active_view->selection.start = (Cursor){ -1, -1 };
-    active_view->selection.end = (Cursor){ -1, -1 };
+    active_view->selection.start = (Cursor_Pos){ -1, -1 };
+    active_view->selection.end = (Cursor_Pos){ -1, -1 };
 }
 
 int selection_char_count(Editor_State *state)
@@ -1772,11 +1772,11 @@ int selection_char_count(Editor_State *state)
     int char_count = 0;
     if (is_selection_valid(active_view->buffer->text_buffer, active_view->selection))
     {
-        Cursor start = active_view->selection.start;
-        Cursor end = active_view->selection.end;
+        Cursor_Pos start = active_view->selection.start;
+        Cursor_Pos end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Cursor temp = start;
+            Cursor_Pos temp = start;
             start = end;
             end = temp;
         }
@@ -1811,11 +1811,11 @@ void delete_selected(Editor_State *state)
     int char_count = selection_char_count(state);
     if (char_count > 0)
     {
-        Cursor start = active_view->selection.start;
-        Cursor end = active_view->selection.end;
+        Cursor_Pos start = active_view->selection.start;
+        Cursor_Pos end = active_view->selection.end;
         if (start.line > end.line || (start.line == end.line && start.col > end.col))
         {
-            Cursor temp = start;
+            Cursor_Pos temp = start;
             start = end;
             end = temp;
         }
@@ -1834,11 +1834,11 @@ void copy_at_selection(Editor_State *state)
     Buffer_View *active_view = state->active_buffer_view;
     if (is_selection_valid(active_view->buffer->text_buffer, active_view->selection))
     {
-        Cursor start = active_view->selection.start;
-        Cursor end = active_view->selection.end;
+        Cursor_Pos start = active_view->selection.start;
+        Cursor_Pos end = active_view->selection.end;
         if (start.line > end.line)
         {
-            Cursor temp = start;
+            Cursor_Pos temp = start;
             start = end;
             end = temp;
         }
@@ -2214,7 +2214,7 @@ void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection,
         start_selection_at_cursor(state);
     }
     Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
-    Cursor mouse_cursor = buffer_pos_to_cursor(mouse_buffer_pos, buffer_view->buffer->text_buffer, &state->render_state);
+    Cursor_Pos mouse_cursor = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, &state->render_state);
     move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
     move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
     extend_selection_to_cursor(state);
