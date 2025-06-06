@@ -542,6 +542,14 @@ Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_view)
     return context;
 }
 
+Prompt_Context prompt_create_context_save_as(Buffer_View *for_view)
+{
+    Prompt_Context context;
+    context.kind = PROMPT_SAVE_AS;
+    context.go_to_line.for_view = for_view;
+    return context;
+}
+
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
 {
     bassert(text_buffer.line_count >= 2);
@@ -580,6 +588,14 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 display_cursor_move(context.go_to_line.for_view, (Cursor){go_to_line - 1, 0}, state);
             }
             else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer %p does not exist", context.go_to_line.for_view);
+        } break;
+
+        case PROMPT_SAVE_AS:
+        {
+            if (buffer_view_exists(context.go_to_line.for_view, state))
+            {
+                file_write(context.go_to_line.for_view->buffer->text_buffer, result.str);
+            }
         } break;
 
         default:
@@ -1685,15 +1701,15 @@ File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
     return file_info;
 }
 
-void file_write(Text_Buffer text_buffer, File_Info file_info)
+void file_write(Text_Buffer text_buffer, const char *path)
 {
-    FILE *f = fopen(file_info.path, "w");
-    if (!f) fatal("Failed to open file for writing at %s", file_info.path);
+    FILE *f = fopen(path, "w");
+    if (!f) fatal("Failed to open file for writing at %s", path);
     for (int i = 0; i < text_buffer.line_count; i++) {
         fputs(text_buffer.lines[i].str, f);
     }
     fclose(f);
-    trace_log("Saved file to %s", file_info.path);
+    trace_log("Saved file to %s", path);
 }
 
 void text_buffer_destroy(Text_Buffer *text_buffer)
@@ -1984,12 +2000,27 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         {
             // TODO: Implement reloading current file
         } break;
-        case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        case GLFW_KEY_S: if (mods & GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            file_write(active_view->buffer->text_buffer, active_view->buffer->file.info);
-            if (active_view->buffer->kind == BUFFER_FILE)
+            if (mods & GLFW_MOD_SHIFT)
             {
-                active_view->buffer->file.info.has_been_modified = false;
+                if (active_view != NULL && active_view->buffer->kind == BUFFER_FILE)
+                {
+                    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+                    buffer_view_prompt(
+                        "Save as:",
+                        prompt_create_context_save_as(active_view),
+                        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+                        state);
+                }
+            }
+            else
+            {
+                file_write(active_view->buffer->text_buffer, active_view->buffer->file.info.path);
+                if (active_view->buffer->kind == BUFFER_FILE)
+                {
+                    active_view->buffer->file.info.has_been_modified = false;
+                }
             }
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))

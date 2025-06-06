@@ -123,6 +123,7 @@ typedef struct {
 
 typedef enum {
     PROMPT_OPEN_FILE,
+    PROMPT_SAVE_AS,
     PROMPT_GO_TO_LINE
 } Prompt_Kind;
 
@@ -134,6 +135,9 @@ typedef struct {
     struct {
         Buffer_View *for_view;
     } go_to_line;
+    struct {
+        Buffer_View *for_view;
+    } save_as;
     };
 } Prompt_Context;
 
@@ -244,6 +248,7 @@ Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 tex
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_view);
+Prompt_Context prompt_create_context_save_as(Buffer_View *for_view);
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
 void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
 
@@ -328,7 +333,7 @@ void delete_current_line(Editor_State *state);
 bool is_white_line(Text_Line line);
 
 File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
-void file_write(Text_Buffer text_buffer, File_Info file_info);
+void file_write(Text_Buffer text_buffer, const char *path);
 
 void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);
