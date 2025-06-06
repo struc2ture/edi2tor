@@ -1646,6 +1646,13 @@ void text_buffer_validate(Text_Buffer *text_buffer)
     }
 }
 
+void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line)
+{
+    text_buffer->line_count++;
+    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+    text_buffer->lines[text_buffer->line_count - 1] = text_line;
+}
+
 void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at)
 {
     text_buffer->lines = xrealloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(text_buffer->lines[0]));
@@ -1663,14 +1670,16 @@ void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at)
         text_buffer->lines[i - 1] = text_buffer->lines[i];
     }
     text_buffer->line_count--;
-    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
-}
-
-void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line)
-{
-    text_buffer->line_count++;
-    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
-    text_buffer->lines[text_buffer->line_count - 1] = text_line;
+    if (text_buffer->line_count <= 0)
+    {
+        text_buffer->line_count = 1;
+        text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+        text_buffer->lines[0] = text_line_make_dup("\n");
+    }
+    else
+    {
+        text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+    }
 }
 
 void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...)

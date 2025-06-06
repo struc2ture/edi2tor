@@ -157,7 +157,7 @@ void test__text_line_resize__lengthen(UT_State *s)
     UNIT_TESTS_RUN_CHECK(correct_len && correct_buf_len && null_terminator && correct_str);
 }
 
-void test__text_buffer_create_from_lines(UT_State *s)
+void test__text_buffer_create_from_lines__regular(UT_State *s)
 {
     Text_Buffer text_buffer = text_buffer_create_from_lines(
         "Hello, world!!!",
@@ -180,6 +180,203 @@ void test__text_buffer_create_from_lines(UT_State *s)
     text_buffer_destroy(&text_buffer);
 }
 
+void test__text_buffer_append_line__regular(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        NULL);
+    char *line0_old = text_buffer.lines[0].str;
+    char *line1_old = text_buffer.lines[1].str;
+
+    Text_Line new_line = text_line_make_dup("New line\n");
+    text_buffer_append_line(&text_buffer, new_line);
+
+    bool correct_line_count = text_buffer.line_count == 3;
+    bool correct_line0 = text_buffer.lines[0].str == line0_old;
+    bool correct_line1 = text_buffer.lines[1].str == line1_old;
+    bool correct_line2 = text_buffer.lines[2].str == new_line.str;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0 && correct_line1 && correct_line2);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_append_line__empty(UT_State *s)
+{
+    Text_Buffer text_buffer = {0};
+
+    Text_Line new_line = text_line_make_dup("New line\n");
+    text_buffer_append_line(&text_buffer, new_line);
+
+    bool correct_line_count = text_buffer.line_count == 1;
+    bool correct_line0 = text_buffer.lines[0].str == new_line.str;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_insert_line__regular(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        NULL);
+    char *line0_old = text_buffer.lines[0].str;
+    char *line1_old = text_buffer.lines[1].str;
+
+    Text_Line new_line = text_line_make_dup("New line\n");
+    text_buffer_insert_line(&text_buffer, new_line, 1);
+
+    bool correct_line_count = text_buffer.line_count == 3;
+    bool same_line0 = text_buffer.lines[0].str == line0_old;
+    bool correct_line1 = text_buffer.lines[1].str == new_line.str;
+    bool correct_line2 = text_buffer.lines[2].str == line1_old;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && same_line0 && correct_line1 && correct_line2);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_insert_line__at_start(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        NULL);
+    char *line0_old = text_buffer.lines[0].str;
+    char *line1_old = text_buffer.lines[1].str;
+
+    Text_Line new_line = text_line_make_dup("New line\n");
+    text_buffer_insert_line(&text_buffer, new_line, 0);
+
+    bool correct_line_count = text_buffer.line_count == 3;
+    bool correct_line0 = text_buffer.lines[0].str == new_line.str;
+    bool correct_line1 = text_buffer.lines[1].str == line0_old;
+    bool correct_line2 = text_buffer.lines[2].str == line1_old;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0 && correct_line1 && correct_line2);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_insert_line__at_end(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        NULL);
+    char *line0_old = text_buffer.lines[0].str;
+    char *line1_old = text_buffer.lines[1].str;
+
+    Text_Line new_line = text_line_make_dup("New line\n");
+    text_buffer_insert_line(&text_buffer, new_line, 2);
+
+    bool correct_line_count = text_buffer.line_count == 3;
+    bool correct_line0 = text_buffer.lines[0].str == line0_old;
+    bool correct_line1 = text_buffer.lines[1].str == line1_old;
+    bool correct_line2 = text_buffer.lines[2].str == new_line.str;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0 && correct_line1 && correct_line2);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_insert_line__empty(UT_State *s)
+{
+    Text_Buffer text_buffer = {0};
+
+    Text_Line new_line = text_line_make_dup("New line\n");
+    text_buffer_insert_line(&text_buffer, new_line, 0);
+
+    bool correct_line_count = text_buffer.line_count == 1;
+    bool correct_line0 = text_buffer.lines[0].str == new_line.str;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_remove_line__regular(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        "TEST TEST",
+        NULL);
+    char *line0_old = text_buffer.lines[0].str;
+    char *line2_old = text_buffer.lines[2].str;
+
+    text_buffer_remove_line(&text_buffer, 1);
+
+    bool correct_line_count = text_buffer.line_count == 2;
+    bool correct_line0 = text_buffer.lines[0].str == line0_old;
+    bool correct_line1 = text_buffer.lines[1].str == line2_old;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0 && correct_line1);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_remove_line__at_start(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        "TEST TEST",
+        NULL);
+    char *line1_old = text_buffer.lines[1].str;
+    char *line2_old = text_buffer.lines[2].str;
+
+    text_buffer_remove_line(&text_buffer, 0);
+
+    bool correct_line_count = text_buffer.line_count == 2;
+    bool correct_line0 = text_buffer.lines[0].str == line1_old;
+    bool correct_line1 = text_buffer.lines[1].str == line2_old;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0 && correct_line1);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_remove_line__at_end(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        "Test 123",
+        "TEST TEST",
+        NULL);
+    char *line0_old = text_buffer.lines[0].str;
+    char *line1_old = text_buffer.lines[1].str;
+
+    text_buffer_remove_line(&text_buffer, 2);
+
+    bool correct_line_count = text_buffer.line_count == 2;
+    bool correct_line0 = text_buffer.lines[0].str == line0_old;
+    bool correct_line1 = text_buffer.lines[1].str == line1_old;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0 && correct_line1);
+
+    text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_remove_line__only_line(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "Hello, world!!!",
+        NULL);
+
+    text_buffer_remove_line(&text_buffer, 0);
+
+    bool correct_line_count = text_buffer.line_count == 1;
+    bool correct_line0 = strcmp(text_buffer.lines[0].str, "\n") == 0;
+
+    UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0);
+
+    text_buffer_destroy(&text_buffer);
+}
+
 void test__cursor_pos_clamp__regular(UT_State *s)
 {
     Text_Buffer text_buffer = text_buffer_create_from_lines(
@@ -191,6 +388,8 @@ void test__cursor_pos_clamp__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_clamp(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == pos.line && new_pos.col == pos.col);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_clamp__col_past_end_of_line(UT_State *s)
@@ -204,6 +403,8 @@ void test__cursor_pos_clamp__col_past_end_of_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_clamp(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == pos.line && new_pos.col == 15);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_clamp__col_neg(UT_State *s)
@@ -217,6 +418,8 @@ void test__cursor_pos_clamp__col_neg(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_clamp(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == pos.line && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_clamp__line_neg(UT_State *s)
@@ -230,6 +433,8 @@ void test__cursor_pos_clamp__line_neg(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_clamp(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_clamp__line_past_end_of_buffer(UT_State *s)
@@ -243,6 +448,8 @@ void test__cursor_pos_clamp__line_past_end_of_buffer(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_clamp(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 15);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_char__forward_regular(UT_State *s)
@@ -256,6 +463,8 @@ void test__cursor_pos_advance_char__forward_regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_char(text_buffer, pos, +1, true);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 3);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_char__backward_regular(UT_State *s)
@@ -269,6 +478,8 @@ void test__cursor_pos_advance_char__backward_regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_char(text_buffer, pos, -1, true);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 1);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_char__forward_switch_line(UT_State *s)
@@ -282,6 +493,8 @@ void test__cursor_pos_advance_char__forward_switch_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_char(text_buffer, pos, +1, true);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_char__backward_switch_line(UT_State *s)
@@ -295,6 +508,8 @@ void test__cursor_pos_advance_char__backward_switch_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_char(text_buffer, pos, -1, true);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_char__forward_clamp(UT_State *s)
@@ -308,6 +523,8 @@ void test__cursor_pos_advance_char__forward_clamp(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_char(text_buffer, pos, +1, false);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_char__backward_clamp(UT_State *s)
@@ -321,6 +538,8 @@ void test__cursor_pos_advance_char__backward_clamp(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_char(text_buffer, pos, -1, false);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_line__forward_regular(UT_State *s)
@@ -334,6 +553,8 @@ void test__cursor_pos_advance_line__forward_regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_line(text_buffer, pos, +1);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_line__backward_regular(UT_State *s)
@@ -347,6 +568,8 @@ void test__cursor_pos_advance_line__backward_regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_line(text_buffer, pos, -1);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_line__forward_clamp_line(UT_State *s)
@@ -360,6 +583,8 @@ void test__cursor_pos_advance_line__forward_clamp_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_line(text_buffer, pos, +1);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_line__backward_clamp_line(UT_State *s)
@@ -373,6 +598,8 @@ void test__cursor_pos_advance_line__backward_clamp_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_line(text_buffer, pos, -1);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_line__forward_last_line(UT_State *s)
@@ -386,6 +613,8 @@ void test__cursor_pos_advance_line__forward_last_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_line(text_buffer, pos, +1);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 15);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_advance_line__backward_first_line(UT_State *s)
@@ -399,6 +628,8 @@ void test__cursor_pos_advance_line__backward_first_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_advance_line(text_buffer, pos, -1);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_start_of_buffer__regular(UT_State *s)
@@ -412,6 +643,8 @@ void test__cursor_pos_to_start_of_buffer__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_start_of_buffer(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_end_of_buffer__regular(UT_State *s)
@@ -425,6 +658,8 @@ void test__cursor_pos_to_end_of_buffer__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_end_of_buffer(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 15);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_start_of_line__regular(UT_State *s)
@@ -438,6 +673,8 @@ void test__cursor_pos_to_start_of_line__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_start_of_line(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_end_of_line__regular(UT_State *s)
@@ -451,6 +688,8 @@ void test__cursor_pos_to_end_of_line__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_end_of_line(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_word__regular(UT_State *s)
@@ -464,6 +703,8 @@ void test__cursor_pos_to_next_start_of_word__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_word__start_at_space(UT_State *s)
@@ -477,6 +718,8 @@ void test__cursor_pos_to_next_start_of_word__start_at_space(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_word__start_at_new_line(UT_State *s)
@@ -490,6 +733,8 @@ void test__cursor_pos_to_next_start_of_word__start_at_new_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_word__skip_current(UT_State *s)
@@ -503,6 +748,8 @@ void test__cursor_pos_to_next_start_of_word__skip_current(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_word__next_line(UT_State *s)
@@ -516,6 +763,8 @@ void test__cursor_pos_to_next_start_of_word__next_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_word__last_word(UT_State *s)
@@ -529,6 +778,8 @@ void test__cursor_pos_to_next_start_of_word__last_word(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 1 && new_pos.col == 13);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_word__regular(UT_State *s)
@@ -542,6 +793,8 @@ void test__cursor_pos_to_prev_start_of_word__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_word__start_at_space(UT_State *s)
@@ -555,6 +808,8 @@ void test__cursor_pos_to_prev_start_of_word__start_at_space(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_word__skip_current(UT_State *s)
@@ -568,6 +823,8 @@ void test__cursor_pos_to_prev_start_of_word__skip_current(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_word__prev_line(UT_State *s)
@@ -581,6 +838,8 @@ void test__cursor_pos_to_prev_start_of_word__prev_line(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 8);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_word__first_word(UT_State *s)
@@ -594,6 +853,8 @@ void test__cursor_pos_to_prev_start_of_word__first_word(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_word(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_paragraph__regular(UT_State *s)
@@ -611,6 +872,8 @@ void test__cursor_pos_to_next_start_of_paragraph__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 4 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_paragraph__skip_current(UT_State *s)
@@ -628,6 +891,8 @@ void test__cursor_pos_to_next_start_of_paragraph__skip_current(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 4 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_paragraph__last_paragraph(UT_State *s)
@@ -645,6 +910,8 @@ void test__cursor_pos_to_next_start_of_paragraph__last_paragraph(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 5 && new_pos.col == 4);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_paragraph__last_white_lines(UT_State *s)
@@ -664,6 +931,8 @@ void test__cursor_pos_to_next_start_of_paragraph__last_white_lines(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 7 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_paragraph__start_on_white_line(UT_State *s)
@@ -683,6 +952,8 @@ void test__cursor_pos_to_next_start_of_paragraph__start_on_white_line(UT_State *
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 4 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_next_start_of_paragraph__start_on_last_white_line(UT_State *s)
@@ -702,6 +973,8 @@ void test__cursor_pos_to_next_start_of_paragraph__start_on_last_white_line(UT_St
     Cursor_Pos new_pos = cursor_pos_to_next_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 7 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_paragraph__regular(UT_State *s)
@@ -719,6 +992,8 @@ void test__cursor_pos_to_prev_start_of_paragraph__regular(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_paragraph__skip_current(UT_State *s)
@@ -736,6 +1011,8 @@ void test__cursor_pos_to_prev_start_of_paragraph__skip_current(UT_State *s)
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 void test__cursor_pos_to_prev_start_of_paragraph__start_at_first_white_lines(UT_State *s)
@@ -755,6 +1032,8 @@ void test__cursor_pos_to_prev_start_of_paragraph__start_at_first_white_lines(UT_
     Cursor_Pos new_pos = cursor_pos_to_prev_start_of_paragraph(text_buffer, pos);
 
     UNIT_TESTS_RUN_CHECK(new_pos.line == 0 && new_pos.col == 0);
+
+    text_buffer_destroy(&text_buffer);
 }
 
 // ---------------------------------------------------------------------
@@ -776,7 +1055,17 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "TEXT BUFFER TESTS:");
-    test__text_buffer_create_from_lines(&s);
+    test__text_buffer_create_from_lines__regular(&s);
+    test__text_buffer_append_line__regular(&s);
+    test__text_buffer_append_line__empty(&s);
+    test__text_buffer_insert_line__regular(&s);
+    test__text_buffer_insert_line__at_start(&s);
+    test__text_buffer_insert_line__at_end(&s);
+    test__text_buffer_insert_line__empty(&s);
+    test__text_buffer_remove_line__regular(&s);
+    test__text_buffer_remove_line__at_start(&s);
+    test__text_buffer_remove_line__at_end(&s);
+    test__text_buffer_remove_line__only_line(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "CURSOR POS TESTS:");

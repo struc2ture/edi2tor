@@ -340,9 +340,9 @@ void text_line_resize(Text_Line *text_line, int new_size);
 Text_Buffer text_buffer_create_from_lines(const char *first, ...);
 void text_buffer_destroy(Text_Buffer *text_buffer);
 void text_buffer_validate(Text_Buffer *text_buffer);
+void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
 void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
 void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
-void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
 void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
 
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
