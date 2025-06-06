@@ -20,9 +20,9 @@
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 #define FONT_SIZE 20.0f
 
-#define FILE_PATH1 "src/editor.c"
+#define FILE_PATH1 "res/mock5.txt"
 // #define FILE_PATH1 "res/mock4.txt"
-#define FILE_PATH2 "res/mock5.txt"
+#define FILE_PATH2 "src/editor.c"
 
 typedef struct {
     float x, y;

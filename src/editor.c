@@ -63,7 +63,7 @@ void _render(GLFWwindow *window, void *_state)
         draw_buffer_view(buffer_view, is_active, state->canvas_viewport, &state->render_state, state->delta_time);
     }
 
-    // draw_status_bar(window, state, &state->render_state);
+    draw_status_bar(window, state, &state->render_state);
 
     handle_mouse_input(window, state);
 
@@ -1011,14 +1011,17 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *rend
     float status_str_y = status_bar_rect.y + y_padding;
 
     Buffer_View *active_view = state->active_buffer_view;
-    snprintf(status_str_buf, sizeof(status_str_buf),
-        "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d",
-        active_view->cursor.pos.line,
-        active_view->cursor.pos.col,
-        active_view->buffer->text_buffer.lines[active_view->cursor.pos.line].len,
-        active_view->buffer->text_buffer.line_count);
-    draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
-    status_str_y += font_line_height;
+    if (active_view)
+    {
+        snprintf(status_str_buf, sizeof(status_str_buf),
+            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d",
+            active_view->cursor.pos.line,
+            active_view->cursor.pos.col,
+            active_view->buffer->text_buffer.lines[active_view->cursor.pos.line].len,
+            active_view->buffer->text_buffer.line_count);
+        draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
+        status_str_y += font_line_height;
+    }
 
     snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f", state->fps, state->delta_time);
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
@@ -2037,6 +2040,15 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             {
                 buffer_view_destroy(state->active_buffer_view, state);
             }
+        } break;
+        case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            buffer_view_open_file(
+                FILE_PATH1,
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
         } break;
         case GLFW_KEY_O: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
