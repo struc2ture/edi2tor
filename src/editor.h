@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdarg.h>
 #include <stdbool.h>
 
 #include <OpenGL/gl3.h>
@@ -330,11 +331,18 @@ Cursor_Pos cursor_pos_to_prev_start_of_word(Text_Buffer text_buffer, Cursor_Pos 
 Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
 Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
 
-Text_Line make_text_line_dup(const char *line);
-Text_Line copy_text_line(Text_Line source, int start, int end);
-void resize_text_line(Text_Line *text_line, int new_size);
-void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
-void remove_line(Text_Buffer *text_buffer, int remove_at);
+Text_Line text_line_make_dup(const char *line);
+Text_Line text_line_make_va(const char *fmt, va_list args);
+Text_Line text_line_make_f(const char *fmt, ...);
+Text_Line text_line_copy(Text_Line source, int start, int end);
+void text_line_resize(Text_Line *text_line, int new_size);
+
+void text_buffer_destroy(Text_Buffer *text_buffer);
+void text_buffer_validate(Text_Buffer *text_buffer);
+void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
+void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
+void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
+void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
 
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
@@ -359,10 +367,6 @@ void delete_selected(Editor_State *state);
 
 void copy_at_selection(Editor_State *state);
 void paste_from_copy_buffer(Editor_State *state);
-
-void text_buffer_destroy(Text_Buffer *text_buffer);
-void text_buffer_validate(Text_Buffer *text_buffer);
-void text_buffer_append(Text_Buffer *text_buffer, const char *fmt, ...);
 
 void rebuild_dl();
 void insert_go_to_line_char(Editor_State *state, char c);

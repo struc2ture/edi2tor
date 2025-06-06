@@ -337,8 +337,8 @@ Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Ed
 
     char prompt_line_buf[MAX_CHARS_PER_LINE];
     snprintf(prompt_line_buf, sizeof(prompt_line_buf), "%s\n", prompt_text);
-    buffer->text_buffer.lines[0] = make_text_line_dup(prompt_text);
-    buffer->text_buffer.lines[1] = make_text_line_dup("\n");
+    buffer->text_buffer.lines[0] = text_line_make_dup(prompt_text);
+    buffer->text_buffer.lines[1] = text_line_make_dup("\n");
 
     *new_slot = buffer;
     return *new_slot;
@@ -1556,7 +1556,7 @@ Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor
     return cursor_pos_to_start_of_buffer(text_buffer, pos);
 }
 
-Text_Line make_text_line_dup(const char *line)
+Text_Line text_line_make_dup(const char *line)
 {
     Text_Line r;
     r.str = xstrdup(line);
@@ -1565,7 +1565,30 @@ Text_Line make_text_line_dup(const char *line)
     return r;
 }
 
-Text_Line copy_text_line(Text_Line source, int start, int end)
+Text_Line text_line_make_va(const char *fmt, va_list args)
+{
+    char str_buf[MAX_CHARS_PER_LINE];
+    int written_length = vsnprintf(str_buf, sizeof(str_buf) - 1, fmt, args);
+    if (written_length < 0) written_length = 0;
+    if (written_length >= (int)(sizeof(str_buf) - 1)) written_length = sizeof(str_buf) - 2;
+
+    str_buf[written_length] = '\n';
+    str_buf[written_length + 1] = '\0';
+
+    Text_Line line = text_line_make_dup(str_buf);
+    return line;
+}
+
+Text_Line text_line_make_f(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    Text_Line text_line = text_line_make_va(fmt, args);
+    va_end(args);
+    return text_line;
+}
+
+Text_Line text_line_copy(Text_Line source, int start, int end)
 {
     Text_Line r;
     if (end < 0) end = source.len;
@@ -1577,7 +1600,7 @@ Text_Line copy_text_line(Text_Line source, int start, int end)
     return r;
 }
 
-void resize_text_line(Text_Line *text_line, int new_size) {
+void text_line_resize(Text_Line *text_line, int new_size) {
     bassert(new_size <= MAX_CHARS_PER_LINE);
     text_line->str = xrealloc(text_line->str, new_size + 1);
     text_line->buf_len = new_size + 1;
@@ -1585,7 +1608,30 @@ void resize_text_line(Text_Line *text_line, int new_size) {
     text_line->str[new_size] = '\0';
 }
 
-void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at)
+void text_buffer_destroy(Text_Buffer *text_buffer)
+{
+    for (int i = 0; i < text_buffer->line_count; i++)
+    {
+        free(text_buffer->lines[i].str);
+    }
+    free(text_buffer->lines);
+    text_buffer->lines = NULL;
+    text_buffer->line_count = 0;
+}
+
+void text_buffer_validate(Text_Buffer *text_buffer)
+{
+    for (int i = 0; i < text_buffer->line_count; i++) {
+        int actual_len = strlen(text_buffer->lines[i].str);
+        bassert(actual_len > 0);
+        bassert(actual_len == text_buffer->lines[i].len);
+        bassert(text_buffer->lines[i].buf_len == text_buffer->lines[i].len + 1);
+        bassert(text_buffer->lines[i].str[actual_len] == '\0');
+        bassert(text_buffer->lines[i].str[actual_len - 1] == '\n');
+    }
+}
+
+void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at)
 {
     text_buffer->lines = xrealloc(text_buffer->lines, (text_buffer->line_count + 1) * sizeof(text_buffer->lines[0]));
     for (int i = text_buffer->line_count - 1; i >= insert_at ; i--) {
@@ -1595,7 +1641,7 @@ void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at)
     text_buffer->lines[insert_at] = new_line;
 }
 
-void remove_line(Text_Buffer *text_buffer, int remove_at)
+void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at)
 {
     free(text_buffer->lines[remove_at].str);
     for (int i = remove_at + 1; i <= text_buffer->line_count - 1; i++) {
@@ -1605,13 +1651,29 @@ void remove_line(Text_Buffer *text_buffer, int remove_at)
     text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
 }
 
+void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line)
+{
+    text_buffer->line_count++;
+    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+    text_buffer->lines[text_buffer->line_count - 1] = text_line;
+}
+
+void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    Text_Line text_line =  text_line_make_va(fmt, args);
+    va_end(args);
+    text_buffer_append_line(text_buffer, text_line);
+}
+
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent)
 {
     Buffer_View *active_view = state->active_buffer_view;
     if (c == '\n') {
-        Text_Line new_line = make_text_line_dup(text_buffer->lines[cursor->pos.line].str + cursor->pos.col);
-        insert_line(text_buffer, new_line, cursor->pos.line + 1);
-        resize_text_line(&text_buffer->lines[cursor->pos.line], cursor->pos.col + 1);
+        Text_Line new_line = text_line_make_dup(text_buffer->lines[cursor->pos.line].str + cursor->pos.col);
+        text_buffer_insert_line(text_buffer, new_line, cursor->pos.line + 1);
+        text_line_resize(&text_buffer->lines[cursor->pos.line], cursor->pos.col + 1);
         text_buffer->lines[cursor->pos.line].str[cursor->pos.col] = '\n';
         cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, +1, true);
         if (auto_indent)
@@ -1624,7 +1686,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
         }
 
     } else {
-        resize_text_line(&text_buffer->lines[cursor->pos.line], text_buffer->lines[cursor->pos.line].len + 1);
+        text_line_resize(&text_buffer->lines[cursor->pos.line], text_buffer->lines[cursor->pos.line].len + 1);
         Text_Line *line = &text_buffer->lines[cursor->pos.line];
         for (int i = line->len - 1; i >= cursor->pos.col; i--) {
             line->str[i + 1] = line->str[i];
@@ -1648,16 +1710,16 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         Text_Line *line0 = &text_buffer->lines[cursor->pos.line - 1];
         Text_Line *line1 = &text_buffer->lines[cursor->pos.line];
         int line0_old_len = line0->len;
-        resize_text_line(line0, line0_old_len - 1 + line1->len);
+        text_line_resize(line0, line0_old_len - 1 + line1->len);
         strcpy(line0->str + line0_old_len - 1, line1->str);
-        remove_line(text_buffer, cursor->pos.line);
+        text_buffer_remove_line(text_buffer, cursor->pos.line);
         cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){cursor->pos.line - 1, line0_old_len - 1});
     } else {
         Text_Line *line = &text_buffer->lines[cursor->pos.line];
         for (int i = cursor->pos.col; i <= line->len; i++) {
             line->str[i - 1] = line->str[i];
         }
-        resize_text_line(&text_buffer->lines[cursor->pos.line], line->len - 1);
+        text_line_resize(&text_buffer->lines[cursor->pos.line], line->len - 1);
         cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, -1, true);
     }
     if (active_view->buffer->kind == BUFFER_FILE)
@@ -1775,7 +1837,7 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
 void delete_current_line(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
-    remove_line(&active_view->buffer->text_buffer, active_view->cursor.pos.line);
+    text_buffer_remove_line(&active_view->buffer->text_buffer, active_view->cursor.pos.line);
     active_view->cursor.pos = cursor_pos_to_start_of_line(active_view->buffer->text_buffer, active_view->cursor.pos);
 }
 
@@ -1803,7 +1865,7 @@ File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
         text_buffer->line_count++;
         bassert(text_buffer->line_count <= MAX_LINES);
         text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
-        text_buffer->lines[text_buffer->line_count - 1] = make_text_line_dup(buf);
+        text_buffer->lines[text_buffer->line_count - 1] = text_line_make_dup(buf);
     }
     fclose(f);
     return file_info;
@@ -1818,47 +1880,6 @@ void file_write(Text_Buffer text_buffer, const char *path)
     }
     fclose(f);
     trace_log("Saved file to %s", path);
-}
-
-void text_buffer_destroy(Text_Buffer *text_buffer)
-{
-    for (int i = 0; i < text_buffer->line_count; i++)
-    {
-        free(text_buffer->lines[i].str);
-    }
-    free(text_buffer->lines);
-    text_buffer->lines = NULL;
-    text_buffer->line_count = 0;
-}
-
-void text_buffer_validate(Text_Buffer *text_buffer)
-{
-    for (int i = 0; i < text_buffer->line_count; i++) {
-        int actual_len = strlen(text_buffer->lines[i].str);
-        bassert(actual_len > 0);
-        bassert(actual_len == text_buffer->lines[i].len);
-        bassert(text_buffer->lines[i].buf_len == text_buffer->lines[i].len + 1);
-        bassert(text_buffer->lines[i].str[actual_len] == '\0');
-        bassert(text_buffer->lines[i].str[actual_len - 1] == '\n');
-    }
-}
-
-void text_buffer_append(Text_Buffer *text_buffer, const char *fmt, ...)
-{
-    char line[MAX_CHARS_PER_LINE];
-    va_list args;
-    va_start(args, fmt);
-    int written_length = vsnprintf(line, sizeof(line) - 1, fmt, args);
-    va_end(args);
-
-    if (written_length < 0) written_length = 0;
-    if (written_length >= (int)(sizeof(line) - 1)) written_length = sizeof(line) - 2;
-    line[written_length] = '\n';
-    line[written_length + 1] = '\0';
-
-    text_buffer->line_count++;
-    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
-    text_buffer->lines[text_buffer->line_count - 1] = make_text_line_dup(line);
 }
 
 void start_selection_at_cursor(Editor_State *state)
@@ -1996,7 +2017,7 @@ void copy_at_selection(Editor_State *state)
                 start_c = 0;
                 end_c = -1;
             }
-            state->copy_buffer.lines[copy_buffer_i++] = copy_text_line(active_view->buffer->text_buffer.lines[i], start_c, end_c);
+            state->copy_buffer.lines[copy_buffer_i++] = text_line_copy(active_view->buffer->text_buffer.lines[i], start_c, end_c);
         }
         trace_log("Copied at selection");
     }
