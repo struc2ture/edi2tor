@@ -1533,7 +1533,10 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         resize_text_line(&text_buffer->lines[cursor->pos.line], line->len - 1);
         move_cursor_to_col(active_view, text_buffer, cursor, state, cursor->pos.col - 1, true, false);
     }
-    active_view->buffer->file.info.has_been_modified = true;
+    if (active_view->buffer->kind == BUFFER_FILE)
+    {
+        active_view->buffer->file.info.has_been_modified = true;
+    }
 }
 
 void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state)
@@ -1984,7 +1987,10 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_S: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
             file_write(active_view->buffer->text_buffer, active_view->buffer->file.info);
-            active_view->buffer->file.info.has_been_modified = false;
+            if (active_view->buffer->kind == BUFFER_FILE)
+            {
+                active_view->buffer->file.info.has_been_modified = false;
+            }
         } break;
         case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
