@@ -78,6 +78,11 @@ typedef struct {
 } Cursor_Pos;
 
 typedef struct {
+    const Text_Buffer *buf;
+    Cursor_Pos pos;
+} Cursor_Iterator;
+
+typedef struct {
     Cursor_Pos pos;
     float blink_time;
 } Display_Cursor;
@@ -305,8 +310,21 @@ bool is_cursor_pos_valid(Text_Buffer tb, Cursor_Pos bp);
 bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b);
 void cancel_selection(Editor_State *state);
 
+bool cursor_iterator_next(Cursor_Iterator *it);
+bool cursor_iterator_prev(Cursor_Iterator *it);
+char cursor_iterator_get_char(Cursor_Iterator it);
+
+Cursor_Pos cursor_pos_clamp(Text_Buffer text_buffer, Cursor_Pos pos);
 Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int dir, bool can_switch_lines);
 Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int dir);
+Cursor_Pos cursor_pos_to_start_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos);
+Cursor_Pos cursor_pos_to_end_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos);
+Cursor_Pos cursor_pos_to_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos);
+Cursor_Pos cursor_pos_to_end_of_line(Text_Buffer text_buffer, Cursor_Pos pos);
+Cursor_Pos cursor_pos_to_next_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos);
+Cursor_Pos cursor_pos_to_prev_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos);
+Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
+Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
 
 void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
 void move_cursor_to_col(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line);

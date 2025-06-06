@@ -1293,6 +1293,83 @@ bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b)
     return a.line == b.line && a.col == b.col;
 }
 
+bool cursor_iterator_next(Cursor_Iterator *it)
+{
+    int line = it->pos.line;
+    int col = it->pos.col;
+    col++;
+    if (col > it->buf->lines[line].len - 1)
+    {
+        if (line < it->buf->line_count - 1)
+        {
+            line++;
+            col = 0;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    it->pos.line = line;
+    it->pos.col = col;
+    return true;
+}
+
+bool cursor_iterator_prev(Cursor_Iterator *it)
+{
+    int line = it->pos.line;
+    int col = it->pos.col;
+    col--;
+    if (col < 0)
+    {
+        if (line > 0)
+        {
+            line--;
+            col = it->buf->lines[line].len - 1;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    it->pos.line = line;
+    it->pos.col = col;
+    return true;
+}
+
+char cursor_iterator_get_char(Cursor_Iterator it)
+{
+    char c = it.buf->lines[it.pos.line].str[it.pos.col];
+    return c;
+}
+
+Cursor_Pos cursor_pos_clamp(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    if (pos.line < 0)
+    {
+        pos.line = 0;
+        pos.col = 0;
+        return pos;
+    }
+    if (pos.line > text_buffer.line_count - 1)
+    {
+        pos.line = text_buffer.line_count - 1;
+        pos.col = text_buffer.lines[pos.line].len - 1;
+        return pos;
+    }
+    if (pos.col < 0)
+    {
+        pos.col = 0;
+        return pos;
+    }
+    if (pos.col > text_buffer.lines[pos.line].len - 1)
+    {
+        pos.col = text_buffer.lines[pos.line].len - 1;
+        return pos;
+    }
+    return pos;
+}
+
 Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int dir, bool can_switch_lines)
 {
     int line = pos.line;
@@ -1367,6 +1444,98 @@ Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int 
         }
     }
     return (Cursor_Pos){line, col};
+}
+
+Cursor_Pos cursor_pos_to_start_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos)
+{
+    (void)text_buffer; (void)cursor_pos;
+    Cursor_Pos pos = {0};
+    return pos;
+}
+
+Cursor_Pos cursor_pos_to_end_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos)
+{
+    (void)cursor_pos;
+    Cursor_Pos pos;
+    pos.line = text_buffer.line_count - 1;
+    pos.col = text_buffer.lines[pos.line].len - 1;
+    return pos;
+}
+
+Cursor_Pos cursor_pos_to_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    (void)text_buffer;
+    Cursor_Pos new_pos;
+    new_pos.line = pos.line;
+    new_pos.col = 0;
+    return new_pos;
+}
+
+Cursor_Pos cursor_pos_to_end_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    Cursor_Pos new_pos;
+    new_pos.line = pos.line;
+    new_pos.col = text_buffer.lines[new_pos.line].len - 1;
+    return new_pos;
+}
+
+Cursor_Pos cursor_pos_to_next_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    Cursor_Iterator curr_it = { .buf = &text_buffer, .pos = pos };
+    Cursor_Iterator prev_it = curr_it;
+    while (cursor_iterator_next(&curr_it))
+    {
+        char curr = cursor_iterator_get_char(curr_it);
+        char prev = cursor_iterator_get_char(prev_it);
+        if ((isspace(prev) || ispunct(prev)) && isalnum(curr))
+        {
+            return curr_it.pos;
+        }
+        prev_it = curr_it;
+    }
+    return cursor_pos_to_end_of_buffer(text_buffer, pos);
+}
+
+Cursor_Pos cursor_pos_to_prev_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    Cursor_Iterator curr_it = { .buf = &text_buffer, .pos = pos };
+    cursor_iterator_prev(&curr_it);
+    Cursor_Iterator prev_it = curr_it;
+    while (cursor_iterator_prev(&curr_it))
+    {
+        char curr = cursor_iterator_get_char(curr_it);
+        char prev = cursor_iterator_get_char(prev_it);
+        if ((isspace(curr) || ispunct(curr)) && isalnum(prev))
+        {
+            return prev_it.pos;
+        }
+        prev_it = curr_it;
+    }
+    return cursor_pos_to_start_of_buffer(text_buffer, pos);
+}
+
+Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    for (int line = pos.line + 1; line < text_buffer.line_count; line++)
+    {
+        if (is_white_line(text_buffer.lines[line - 1]) && !is_white_line(text_buffer.lines[line - 1]))
+        {
+            return cursor_pos_clamp(text_buffer, (Cursor_Pos){line, pos.col});
+        }
+    }
+    return cursor_pos_to_end_of_buffer(text_buffer, pos);
+}
+
+Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    for (int line = pos.line - 1; line > 0; line--)
+    {
+        if (is_white_line(text_buffer.lines[line - 1]) && !is_white_line(text_buffer.lines[line]))
+        {
+            return cursor_pos_clamp(text_buffer, (Cursor_Pos){line, pos.col});
+        }
+    }
+    return cursor_pos_to_start_of_buffer(text_buffer, pos);
 }
 
 void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport)
@@ -2249,57 +2418,32 @@ void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir d
     {
         case CURSOR_MOVE_LEFT:
         {
-            if (big_steps) move_cursor_to_prev_start_of_word(state);
-            else if (start_end) move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, 0, true, false);
-            else
-            {
-                buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
-                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
-                buffer_view->cursor.blink_time = 0.0f;
-            }
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
         } break;
         case CURSOR_MOVE_RIGHT:
         {
-            if (big_steps) move_cursor_to_next_end_of_word(state);
-            else if (start_end) move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            else
-            {
-                buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
-                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
-                buffer_view->cursor.blink_time = 0.0f;
-            }
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
         } break;
         case CURSOR_MOVE_UP:
         {
-            if (big_steps) move_cursor_to_prev_white_line(state);
-            else if (start_end)
-            {
-                move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, 0, true);
-                move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, 0, true, false);
-            }
-            else
-            {
-                buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1);
-                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
-                buffer_view->cursor.blink_time = 0.0f;
-            }
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_paragraph(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_buffer(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1);
         } break;
         case CURSOR_MOVE_DOWN:
         {
-            if (big_steps) move_cursor_to_next_white_line(state);
-            else if (start_end)
-            {
-                move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, MAX_LINES, true);
-                move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            }
-            else
-            {
-                buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1);
-                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
-                buffer_view->cursor.blink_time = 0.0f;
-            }
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_paragraph(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_buffer(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1);
         } break;
     }
+
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+    buffer_view->cursor.blink_time = 0.0f;
 
     if (with_selection) extend_selection_to_cursor(state);
     else cancel_selection(state);
