@@ -1293,6 +1293,82 @@ bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b)
     return a.line == b.line && a.col == b.col;
 }
 
+Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int dir, bool can_switch_lines)
+{
+    int line = pos.line;
+    int col = pos.col;
+    if (dir > 0)
+    {
+        col++;
+        if (col > text_buffer.lines[line].len - 1)
+        {
+            if (can_switch_lines && line < text_buffer.line_count - 1)
+            {
+                line++;
+                col = 0;
+            }
+            else
+            {
+                col = text_buffer.lines[line].len - 1;
+            }
+        }
+    }
+    else
+    {
+        col--;
+        if (col < 0)
+        {
+            if (can_switch_lines && line > 0)
+            {
+                line--;
+                col = text_buffer.lines[line].len - 1;
+            }
+            else
+            {
+                col = 0;
+            }
+        }
+    }
+    return (Cursor_Pos){line, col};
+}
+
+Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int dir)
+{
+    int line = pos.line;
+    int col = pos.col;
+    if (dir > 0)
+    {
+        if (line < text_buffer.line_count - 1)
+        {
+            line++;
+            if (col > text_buffer.lines[line].len - 1)
+            {
+                col = text_buffer.lines[line].len - 1;
+            }
+        }
+        else
+        {
+            col = text_buffer.lines[line].len - 1;
+        }
+    }
+    else
+    {
+        if (line > 0)
+        {
+            line--;
+            if (col > text_buffer.lines[line].len - 1)
+            {
+                col = text_buffer.lines[line].len - 1;
+            }
+        }
+        else
+        {
+            col = 0;
+        }
+    }
+    return (Cursor_Pos){line, col};
+}
+
 void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport)
 {
     int orig_cursor_line = cursor->pos.line;
@@ -2175,31 +2251,53 @@ void handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir d
         {
             if (big_steps) move_cursor_to_prev_start_of_word(state);
             else if (start_end) move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, 0, true, false);
-            else move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col - 1, true, true);
+            else
+            {
+                buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
+                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+                buffer_view->cursor.blink_time = 0.0f;
+            }
         } break;
         case CURSOR_MOVE_RIGHT:
         {
             if (big_steps) move_cursor_to_next_end_of_word(state);
             else if (start_end) move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-            else move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.col + 1, true, true);
+            else
+            {
+                buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
+                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+                buffer_view->cursor.blink_time = 0.0f;
+            }
         } break;
         case CURSOR_MOVE_UP:
         {
             if (big_steps) move_cursor_to_prev_white_line(state);
-            else if (start_end) {
+            else if (start_end)
+            {
                 move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, 0, true);
                 move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, 0, true, false);
             }
-            else move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line - 1, true);
+            else
+            {
+                buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1);
+                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+                buffer_view->cursor.blink_time = 0.0f;
+            }
         } break;
         case CURSOR_MOVE_DOWN:
         {
             if (big_steps) move_cursor_to_next_white_line(state);
-            else if (start_end) {
+            else if (start_end)
+            {
                 move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, MAX_LINES, true);
                 move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
             }
-            else move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, buffer_view->cursor.pos.line + 1, true);
+            else
+            {
+                buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1);
+                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+                buffer_view->cursor.blink_time = 0.0f;
+            }
         } break;
     }
 

@@ -20,7 +20,7 @@
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 #define FONT_SIZE 20.0f
 
-#define FILE_PATH1 "res/mock5.txt"
+#define FILE_PATH1 "res/mock6.txt"
 // #define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "src/editor.c"
 
@@ -304,6 +304,9 @@ void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Vie
 bool is_cursor_pos_valid(Text_Buffer tb, Cursor_Pos bp);
 bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b);
 void cancel_selection(Editor_State *state);
+
+Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int dir, bool can_switch_lines);
+Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int dir);
 
 void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
 void move_cursor_to_col(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line);
