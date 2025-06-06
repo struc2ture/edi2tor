@@ -1536,9 +1536,9 @@ Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor
 {
     for (int line = pos.line + 1; line < text_buffer.line_count; line++)
     {
-        if (is_white_line(text_buffer.lines[line - 1]) && !is_white_line(text_buffer.lines[line - 1]))
+        if (is_white_line(text_buffer.lines[line - 1]) && !is_white_line(text_buffer.lines[line]))
         {
-            return cursor_pos_clamp(text_buffer, (Cursor_Pos){line, pos.col});
+            return (Cursor_Pos){line, 0};
         }
     }
     return cursor_pos_to_end_of_buffer(text_buffer, pos);
@@ -1550,7 +1550,7 @@ Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor
     {
         if (is_white_line(text_buffer.lines[line - 1]) && !is_white_line(text_buffer.lines[line]))
         {
-            return cursor_pos_clamp(text_buffer, (Cursor_Pos){line, pos.col});
+            return (Cursor_Pos){line, 0};
         }
     }
     return cursor_pos_to_start_of_buffer(text_buffer, pos);
@@ -1606,6 +1606,21 @@ void text_line_resize(Text_Line *text_line, int new_size) {
     text_line->buf_len = new_size + 1;
     text_line->len = new_size;
     text_line->str[new_size] = '\0';
+}
+
+Text_Buffer text_buffer_create_from_lines(const char *first, ...)
+{
+    Text_Buffer text_buffer = {0};
+    va_list args;
+    va_start(args, first);
+    const char *line = first;
+    while (line)
+    {
+        text_buffer_append_f(&text_buffer, "%s", line);
+        line = va_arg(args, const char *);
+    }
+    va_end(args);
+    return text_buffer;
 }
 
 void text_buffer_destroy(Text_Buffer *text_buffer)
@@ -2136,6 +2151,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             unit_tests_run(&log_buffer, true);
             Buffer_View *view = buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
             view->cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, view->cursor.pos);
+            viewport_snap_to_cursor(log_buffer, view->cursor, &view->viewport, &state->render_state);
         } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {

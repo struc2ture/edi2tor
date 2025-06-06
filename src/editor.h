@@ -337,6 +337,7 @@ Text_Line text_line_make_f(const char *fmt, ...);
 Text_Line text_line_copy(Text_Line source, int start, int end);
 void text_line_resize(Text_Line *text_line, int new_size);
 
+Text_Buffer text_buffer_create_from_lines(const char *first, ...);
 void text_buffer_destroy(Text_Buffer *text_buffer);
 void text_buffer_validate(Text_Buffer *text_buffer);
 void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
