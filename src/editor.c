@@ -386,8 +386,6 @@ Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_Stat
     Buffer_View *new_view = buffer_view_create(rect, state);
     Buffer *new_buffer = buffer_create_read_file(file_path, state);
     new_view->buffer = new_buffer;
-    move_cursor_to_line(new_view, &new_buffer->text_buffer, &new_view->cursor, state, new_view->cursor.pos.line, false);
-    move_cursor_to_col(new_view, &new_buffer->text_buffer, &new_view->cursor, state, new_view->cursor.pos.col, false, false);
     buffer_view_set_active(new_view, state);
     return new_view;
 }
@@ -397,8 +395,7 @@ Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context,
     Buffer_View *new_view = buffer_view_create(rect, state);
     Buffer *new_buffer = buffer_create_prompt(prompt_text, context, state);
     new_view->buffer = new_buffer;
-    move_cursor_to_line(new_view, &new_buffer->text_buffer, &new_view->cursor, state, 1, false);
-    move_cursor_to_col(new_view, &new_buffer->text_buffer, &new_view->cursor, state, 0, false, false);
+    new_view->cursor.pos = cursor_pos_clamp(new_view->buffer->text_buffer, (Cursor_Pos){2, 0});
     buffer_view_set_active(new_view, state);
     return new_view;
 }
@@ -585,7 +582,9 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             if (buffer_view_exists(context.go_to_line.for_view, state))
             {
                 int go_to_line = xstrtoint(result.str);
-                display_cursor_move(context.go_to_line.for_view, (Cursor_Pos){go_to_line - 1, 0}, state);
+                context.go_to_line.for_view->cursor.pos = cursor_pos_clamp(context.go_to_line.for_view->buffer->text_buffer, (Cursor_Pos){go_to_line - 1, 0});
+                viewport_snap_to_cursor(context.go_to_line.for_view->buffer->text_buffer, context.go_to_line.for_view->cursor, &context.go_to_line.for_view->viewport, &state->render_state);
+                context.go_to_line.for_view->cursor.blink_time = 0.0f;
             }
             else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer %p does not exist", context.go_to_line.for_view);
         } break;
@@ -1538,159 +1537,6 @@ Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor
     return cursor_pos_to_start_of_buffer(text_buffer, pos);
 }
 
-void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport)
-{
-    int orig_cursor_line = cursor->pos.line;
-    cursor->pos.line = to_line;
-    if (cursor->pos.line < 0)
-    {
-        cursor->pos.line = 0;
-        cursor->pos.col = 0;
-    }
-    if (cursor->pos.line >= text_buffer->line_count)
-    {
-        cursor->pos.line = text_buffer->line_count - 1;
-        cursor->pos.col = text_buffer->lines[cursor->pos.line].len - 1;
-    }
-    if (cursor->pos.line != orig_cursor_line)
-    {
-        if (cursor->pos.col >= text_buffer->lines[cursor->pos.line].len)
-        {
-            cursor->pos.col = text_buffer->lines[cursor->pos.line].len - 1;
-        }
-        cursor->blink_time = 0.0f;
-        if (snap_viewport)
-        {
-            viewport_snap_to_cursor(*text_buffer, *cursor, &buffer_view->viewport, &state->render_state);
-        }
-    }
-}
-
-void move_cursor_to_col(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line)
-{
-    int prev_cursor_char = cursor->pos.col;
-    (void)state;
-    cursor->pos.col = to_col;
-    if (cursor->pos.col < 0)
-    {
-        if (cursor->pos.line > 0 && can_switch_line)
-        {
-            cursor->pos.line--;
-            cursor->pos.col = text_buffer->lines[cursor->pos.line].len - 1;
-        }
-        else
-        {
-            cursor->pos.col = 0;
-        }
-    }
-    if (cursor->pos.col >= text_buffer->lines[cursor->pos.line].len)
-    {
-        if (cursor->pos.line < text_buffer->line_count - 1 && can_switch_line)
-        {
-            cursor->pos.line++;
-            cursor->pos.col = 0;
-        }
-        else
-        {
-            cursor->pos.col = text_buffer->lines[cursor->pos.line].len - 1;
-        }
-    }
-    if (cursor->pos.col != prev_cursor_char)
-    {
-        cursor->blink_time = 0.0f;
-        if (snap_viewport)
-        {
-            viewport_snap_to_cursor(*text_buffer, *cursor, &buffer_view->viewport, &state->render_state);
-        }
-    }
-}
-
-void move_cursor_to_next_end_of_word(Editor_State *state)
-{
-    Buffer_View *active_view = state->active_buffer_view;
-    Text_Line *current_line = &active_view->buffer->text_buffer.lines[active_view->cursor.pos.line];
-    int end_of_word = -1;
-    for (int i = active_view->cursor.pos.col + 1; i < current_line->len - 1; i++)
-    {
-        if (isalnum(current_line->str[i]) && (isspace(current_line->str[i + 1]) || ispunct(current_line->str[i + 1])))
-        {
-            end_of_word = i + 1;
-            break;
-        }
-    }
-    if (end_of_word == -1)
-    {
-        move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line + 1, true);
-        move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, true, false);
-    }
-    else
-    {
-        move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, end_of_word, true, false);
-    }
-}
-
-void move_cursor_to_prev_start_of_word(Editor_State *state)
-{
-    Buffer_View *active_view = state->active_buffer_view;
-    Text_Line *current_line = &active_view->buffer->text_buffer.lines[active_view->cursor.pos.line];
-    int start_of_word = -1;
-    for (int i = active_view->cursor.pos.col - 1; i > 0; i--)
-    {
-        if (isalnum(current_line->str[i]) && (isspace(current_line->str[i - 1]) || ispunct(current_line->str[i - 1])))
-        {
-            start_of_word = i;
-            break;
-        }
-    }
-    if (start_of_word == -1)
-    {
-        move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line - 1, true);
-        move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-    }
-    else
-    {
-        move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, start_of_word, true, false);
-    }
-}
-
-void move_cursor_to_next_white_line(Editor_State *state)
-{
-    Buffer_View *active_view = state->active_buffer_view;
-    for (int i = active_view->cursor.pos.line + 1; i < active_view->buffer->text_buffer.line_count; i++)
-    {
-        if (is_white_line(active_view->buffer->text_buffer.lines[i]))
-        {
-            move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, i, true);
-            move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, true, false);
-            return;
-        }
-    }
-    move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, MAX_LINES, true);
-    move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, MAX_CHARS_PER_LINE, true, false);
-}
-
-void move_cursor_to_prev_white_line(Editor_State *state)
-{
-    Buffer_View *active_view = state->active_buffer_view;
-    for (int i = active_view->cursor.pos.line - 1; i >= 0; i--)
-    {
-        if (is_white_line(active_view->buffer->text_buffer.lines[i]))
-        {
-            move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, i, true);
-            move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, true, false);
-            return;
-        }
-    }
-    move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, true);
-    move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, true, false);
-}
-
-void display_cursor_move(Buffer_View *buffer_view, Cursor_Pos cursor, Editor_State *state)
-{
-    move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, cursor.line, true);
-    move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, cursor.col, true, false);
-}
-
 Text_Line make_text_line_dup(const char *line)
 {
     Text_Line r;
@@ -1748,8 +1594,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
         insert_line(text_buffer, new_line, cursor->pos.line + 1);
         resize_text_line(&text_buffer->lines[cursor->pos.line], cursor->pos.col + 1);
         text_buffer->lines[cursor->pos.line].str[cursor->pos.col] = '\n';
-        move_cursor_to_line(active_view, text_buffer, cursor, state, cursor->pos.line + 1, true);
-        move_cursor_to_col(active_view, text_buffer, cursor, state, 0, true, false);
+        cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, +1, true);
         if (auto_indent)
         {
             int indent_spaces = get_line_indent(text_buffer->lines[cursor->pos.line - 1]);
@@ -1766,7 +1611,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
             line->str[i + 1] = line->str[i];
         }
         line->str[cursor->pos.col] = c;
-        move_cursor_to_col(active_view, text_buffer, cursor, state, cursor->pos.col + 1, true, false);
+        cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, +1, true);
     }
     if (active_view->buffer->kind == BUFFER_FILE)
     {
@@ -1787,15 +1632,14 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         resize_text_line(line0, line0_old_len - 1 + line1->len);
         strcpy(line0->str + line0_old_len - 1, line1->str);
         remove_line(text_buffer, cursor->pos.line);
-        move_cursor_to_line(active_view, text_buffer, cursor, state, cursor->pos.line - 1, true);
-        move_cursor_to_col(active_view, text_buffer, cursor, state, line0_old_len - 1, true, false);
+        cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){cursor->pos.line - 1, line0_old_len - 1});
     } else {
         Text_Line *line = &text_buffer->lines[cursor->pos.line];
         for (int i = cursor->pos.col; i <= line->len; i++) {
             line->str[i - 1] = line->str[i];
         }
         resize_text_line(&text_buffer->lines[cursor->pos.line], line->len - 1);
-        move_cursor_to_col(active_view, text_buffer, cursor, state, cursor->pos.col - 1, true, false);
+        cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, -1, true);
     }
     if (active_view->buffer->kind == BUFFER_FILE)
     {
@@ -1837,7 +1681,7 @@ void decrease_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor
     {
         chars_to_remove = 4;
     }
-    move_cursor_to_col(state->active_buffer_view, text_buffer, cursor, state, indent, false, false);
+    cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){cursor->pos.line, indent});
     for (int i = 0; i < chars_to_remove; i++)
     {
         remove_char(text_buffer, cursor, state);
@@ -1859,12 +1703,11 @@ void decrease_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
         }
         for (int i = start.line; i <= end.line; i++)
         {
-            move_cursor_to_line(active_view, text_buffer, cursor, state, i, false);
+            cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){i, 0});
             decrease_indent_level_line(text_buffer, cursor, state);
         }
-        move_cursor_to_line(active_view, text_buffer, cursor, state, start.line, false);
-        int indent = get_line_indent(text_buffer->lines[cursor->pos.line]);
-        move_cursor_to_col(active_view, text_buffer, cursor, state, indent, false, false);
+        int indent = get_line_indent(text_buffer->lines[start.line]);
+        cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){start.line, indent});
     }
     else
     {
@@ -1876,7 +1719,7 @@ void increase_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor
 {
     int indent = get_line_indent(text_buffer->lines[cursor->pos.line]);
     int chars_to_add = INDENT_SPACES - (indent % INDENT_SPACES);
-    move_cursor_to_col(state->active_buffer_view, text_buffer, cursor, state, indent, false, false);
+    cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){cursor->pos.line, indent});
     for (int i = 0; i < chars_to_add; i++)
     {
         insert_char(text_buffer, ' ', cursor, state, false);
@@ -1898,12 +1741,11 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
         }
         for (int i = start.line; i <= end.line; i++)
         {
-            move_cursor_to_line(active_view, text_buffer, cursor, state, i, false);
+            cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){i, 0});
             increase_indent_level_line(text_buffer, cursor, state);
         }
-        move_cursor_to_line(active_view, text_buffer, cursor, state, start.line, false);
         int indent = get_line_indent(text_buffer->lines[cursor->pos.line]);
-        move_cursor_to_col(active_view, text_buffer, cursor, state, indent, false, false);
+        cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){start.line, indent});
     }
     else
     {
@@ -1915,8 +1757,7 @@ void delete_current_line(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
     remove_line(&active_view->buffer->text_buffer, active_view->cursor.pos.line);
-    move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, active_view->cursor.pos.line, false);
-    move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, 0, false, false);
+    active_view->cursor.pos = cursor_pos_to_start_of_line(active_view->buffer->text_buffer, active_view->cursor.pos);
 }
 
 bool is_white_line(Text_Line line)
@@ -2064,8 +1905,7 @@ void delete_selected(Editor_State *state)
             start = end;
             end = temp;
         }
-        move_cursor_to_line(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, end.line, false);
-        move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, end.col, false, false);
+        active_view->cursor.pos = cursor_pos_clamp(active_view->buffer->text_buffer, end);
         for (int i = 0; i < char_count; i++)
         {
             remove_char(&active_view->buffer->text_buffer, &active_view->cursor, state);
@@ -2207,7 +2047,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             if (mods == GLFW_MOD_ALT)
             {
                 int indent_i = get_line_indent(active_view->buffer->text_buffer.lines[active_view->cursor.pos.line]);
-                move_cursor_to_col(active_view, &active_view->buffer->text_buffer, &active_view->cursor, state, indent_i, true, false);
+                active_view->cursor.pos = cursor_pos_clamp(active_view->buffer->text_buffer, (Cursor_Pos){active_view->cursor.pos.line, indent_i});
             }
             else insert_indent(&active_view->buffer->text_buffer, &active_view->cursor, state);
         } break;
@@ -2457,8 +2297,7 @@ void handle_mouse_text_area_click(Buffer_View *buffer_view, bool with_selection,
     }
     Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
     Cursor_Pos mouse_cursor = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, &state->render_state);
-    move_cursor_to_line(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, mouse_cursor.line, false);
-    move_cursor_to_col(buffer_view, &buffer_view->buffer->text_buffer, &buffer_view->cursor, state, mouse_cursor.col, false, false);
+    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, mouse_cursor);
     extend_selection_to_cursor(state);
     if (!with_selection && just_pressed)
     {

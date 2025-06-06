@@ -326,16 +326,6 @@ Cursor_Pos cursor_pos_to_prev_start_of_word(Text_Buffer text_buffer, Cursor_Pos 
 Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
 Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
 
-void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
-void move_cursor_to_col(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line);
-
-void move_cursor_to_next_end_of_word(Editor_State *state);
-void move_cursor_to_prev_start_of_word(Editor_State *state);
-void move_cursor_to_next_white_line(Editor_State *state);
-void move_cursor_to_prev_white_line(Editor_State *state);
-
-void display_cursor_move(Buffer_View *buffer_view, Cursor_Pos cursor, Editor_State *state);
-
 Text_Line make_text_line_dup(const char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);
 void resize_text_line(Text_Line *text_line, int new_size);
