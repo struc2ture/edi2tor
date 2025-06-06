@@ -12,6 +12,8 @@
 #include "shaders.h"
 #include "util.h"
 
+#include "unit_tests.c"
+
 void _init(GLFWwindow *window, void *_state)
 {
     (void)window; Editor_State *state = _state; (void)state;
@@ -1824,6 +1826,24 @@ void text_buffer_validate(Text_Buffer *text_buffer)
     }
 }
 
+void text_buffer_append(Text_Buffer *text_buffer, const char *fmt, ...)
+{
+    char line[MAX_CHARS_PER_LINE];
+    va_list args;
+    va_start(args, fmt);
+    int written_length = vsnprintf(line, sizeof(line) - 1, fmt, args);
+    va_end(args);
+
+    if (written_length < 0) written_length = 0;
+    if (written_length >= (int)(sizeof(line) - 1)) written_length = sizeof(line) - 2;
+    line[written_length] = '\n';
+    line[written_length + 1] = '\0';
+
+    text_buffer->line_count++;
+    text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+    text_buffer->lines[text_buffer->line_count - 1] = make_text_line_dup(line);
+}
+
 void start_selection_at_cursor(Editor_State *state)
 {
     Buffer_View *active_view = state->active_buffer_view;
@@ -2070,6 +2090,11 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_X: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
             delete_current_line(state);
+        } break;
+        case GLFW_KEY_F1: if (action == GLFW_PRESS)
+        {
+            Text_Buffer log_buffer = {0};
+            unit_tests_run(&log_buffer);
         } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {

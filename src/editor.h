@@ -358,6 +358,7 @@ void paste_from_copy_buffer(Editor_State *state);
 
 void text_buffer_destroy(Text_Buffer *text_buffer);
 void text_buffer_validate(Text_Buffer *text_buffer);
+void text_buffer_append(Text_Buffer *text_buffer, const char *fmt, ...);
 
 void rebuild_dl();
 void insert_go_to_line_char(Editor_State *state, char c);
