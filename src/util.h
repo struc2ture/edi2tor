@@ -23,6 +23,16 @@ static void trace_log(const char *fmt, ...)
     putchar('\n');
 }
 
+static void log_warning(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    printf("[EDITOR][WARNING] ");
+    vprintf(fmt, args);
+    va_end(args);
+    putchar('\n');
+}
+
 static void fatal(const char *fmt, ...)
 {
     va_list args;
@@ -60,6 +70,17 @@ static char *xstrdup(const char *str)
     char *new_str = strdup(str);
     if (!new_str) fatal("strdup failed");
     return new_str;
+}
+
+static int xstrtoint(const char *str)
+{
+    int x;
+    char *end;
+    x = (int)strtol(str, &end, 10);
+    if (*end != '\0') {
+        log_warning("xstrtoint: Could not convert '%s' to int. Returning %d", str, x);
+    }
+    return x;
 }
 
 static void flip_bitmap(void *bitmap_bytes, int pitch, int height)

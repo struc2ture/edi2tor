@@ -121,17 +121,60 @@ typedef struct {
     float buffer_view_resize_handle_radius;
 } Render_State;
 
+typedef enum {
+    PROMPT_OPEN_FILE,
+    PROMPT_SAVE_AS,
+    PROMPT_GO_TO_LINE
+} Prompt_Kind;
+
+typedef struct Buffer_View Buffer_View;
 typedef struct {
-    Rect outer_rect;
-    File_Info file_info;
+    Prompt_Kind kind;
+    union {
+    struct {/* nothing for open_file */} open_file;
+    struct {
+        Buffer_View *for_view;
+    } go_to_line;
+    struct {
+        Buffer_View *for_view;
+    } save_as;
+    };
+} Prompt_Context;
+
+typedef struct {
+    char str[MAX_CHARS_PER_LINE];
+} Prompt_Result;
+
+typedef enum {
+    BUFFER_FILE,
+    BUFFER_PROMPT
+} Buffer_Kind;
+
+typedef struct {
+    Buffer_Kind kind;
     Text_Buffer text_buffer;
+    union {
+    struct {
+        File_Info info;
+    } file;
+    struct {
+        Prompt_Context context;
+    } prompt;
+    };
+} Buffer;
+
+struct Buffer_View {
+    Rect outer_rect;
+    Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
     Text_Selection selection;
-} Buffer_View;
+};
 
 typedef struct {
     Render_State render_state;
+    Buffer **buffers;
+    int buffer_count;
     Buffer_View **buffer_views;
     int buffer_view_count;
     Buffer_View *active_buffer_view;
@@ -181,10 +224,19 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
+Buffer **buffer_create_new_slot(Editor_State *state);
+void buffer_free_slot(Buffer *buffer, Editor_State *state);
+Buffer *buffer_create_read_file(const char *path, Editor_State *state);
+Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state);
+int buffer_get_index(Buffer *buffer, Editor_State *state);
+void buffer_destroy(Buffer *buffer, Editor_State *state);
+
 Buffer_View *buffer_view_create(Rect rect, Editor_State *state);
 Buffer_View *buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
+Buffer_View *buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 void buffer_view_destroy(Buffer_View *buffer_view, Editor_State *state);
 int buffer_view_get_index(Buffer_View *buffer_view, Editor_State *state);
+bool buffer_view_exists(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_set_active(Buffer_View *buffer_view, Editor_State *state);
 Rect buffer_view_get_text_area_rect(Buffer_View buffer_view, const Render_State *render_state);
 Rect buffer_view_get_line_num_col_rect(Buffer_View buffer_view, const Render_State *render_state);
@@ -193,6 +245,12 @@ Rect buffer_view_get_resize_handle_rect(Buffer_View buffer_view, const Render_St
 void buffer_view_set_rect(Buffer_View *buffer_view, Rect rect, const Render_State *render_state);
 Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Vec_2 canvas_pos, const Render_State *render_state);
 Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos);
+
+Prompt_Context prompt_create_context_open_file();
+Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_view);
+Prompt_Context prompt_create_context_save_as(Buffer_View *for_view);
+Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
+void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);
@@ -237,6 +295,7 @@ void transform_set_screen_space(Render_State *render_state);
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
 Vec_2 get_mouse_screen_pos(GLFWwindow *window);
+Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state);
 Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
 Buffer_View *get_buffer_view_at_pos(Vec_2 pos, Editor_State *state);
 Cursor buffer_pos_to_cursor(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
@@ -246,15 +305,17 @@ bool is_cursor_valid(Text_Buffer tb, Cursor bp);
 bool is_cursor_equal(Cursor a, Cursor b);
 void cancel_selection(Editor_State *state);
 
-void move_cursor_to_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
-void move_cursor_to_col(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_char, bool snap_viewport, bool can_switch_line);
+void move_cursor_to_line(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_line, bool snap_viewport);
+void move_cursor_to_col(Buffer_View *buffer_view, Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state, int to_col, bool snap_viewport, bool can_switch_line);
 
 void move_cursor_to_next_end_of_word(Editor_State *state);
 void move_cursor_to_prev_start_of_word(Editor_State *state);
 void move_cursor_to_next_white_line(Editor_State *state);
 void move_cursor_to_prev_white_line(Editor_State *state);
 
-Text_Line make_text_line_dup(char *line);
+void display_cursor_move(Buffer_View *buffer_view, Cursor cursor, Editor_State *state);
+
+Text_Line make_text_line_dup(const char *line);
 Text_Line copy_text_line(Text_Line source, int start, int end);
 void resize_text_line(Text_Line *text_line, int new_size);
 void insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
@@ -271,9 +332,8 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
 void delete_current_line(Editor_State *state);
 bool is_white_line(Text_Line line);
 
-void open_file_for_edit(const char *path, Buffer_View *buffer_view, Editor_State *state);
-File_Info read_file(const char *path, Text_Buffer *text_buffer);
-void write_file(Text_Buffer text_buffer, File_Info file_info);
+File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
+void file_write(Text_Buffer text_buffer, const char *path);
 
 void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);
