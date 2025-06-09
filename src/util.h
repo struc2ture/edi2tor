@@ -140,3 +140,28 @@ inline static bool rect_p_intersect(Vec_2 p, Rect rect)
         p.y > min_y && p.y < max_y;
     return intersect;
 }
+
+static int str_get_line_segment_count(const char *str)
+{
+    int newline_count = 0;
+    while (*str != '\0')
+    {
+        if (*str == '\n') newline_count++;
+        str++;
+    }
+    return newline_count + 1;
+}
+
+static int str_find_next_new_line(const char *str, int start_at)
+{
+    const char *s = str + start_at;
+    int index = start_at;
+    while (*s != '\0')
+    {
+        if (*s == '\n')
+            return index;
+        s++;
+        index++;
+    }
+    return index;
+}

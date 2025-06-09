@@ -346,10 +346,10 @@ Text_Line text_line_make_dup_range(const char *str, int start, int count);
 Text_Line text_line_make_va(const char *fmt, va_list args);
 Text_Line text_line_make_f(const char *fmt, ...);
 Text_Line text_line_copy(Text_Line source, int start, int end);
-void text_line_resize(Text_Line *text_line, int new_size);
+void text_line___resize(Text_Line *text_line, int new_size);
 void text_line_insert_char(Text_Line *text_line, char c, int insert_index);
 void text_line_remove_char(Text_Line *text_line, int remove_index);
-void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index);
+void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index, int insert_count);
 void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...);
@@ -359,8 +359,11 @@ void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
 void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
 void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
 void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
+void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos);
 void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
 void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
+void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
+void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);

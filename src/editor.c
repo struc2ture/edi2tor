@@ -1634,7 +1634,7 @@ Text_Line text_line_copy(Text_Line source, int start, int end)
     return r;
 }
 
-void text_line_resize(Text_Line *text_line, int new_size)
+void text_line___resize(Text_Line *text_line, int new_size)
 {
     text_line->str = xrealloc(text_line->str, new_size + 1);
     text_line->buf_len = new_size + 1;
@@ -1646,7 +1646,7 @@ void text_line_insert_char(Text_Line *text_line, char c, int insert_index)
 {
     bassert(insert_index >= 0);
     bassert(insert_index <= text_line->len);
-    text_line_resize(text_line, text_line->len + 1);
+    text_line___resize(text_line, text_line->len + 1);
     for (int i = text_line->len; i > insert_index; i--)
     {
         text_line->str[i] = text_line->str[i - 1];
@@ -1662,20 +1662,20 @@ void text_line_remove_char(Text_Line *text_line, int remove_index)
     {
         text_line->str[i] = text_line->str[i + 1];
     }
-    text_line_resize(text_line, text_line->len - 1);
+    text_line___resize(text_line, text_line->len - 1);
 }
 
-void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index)
+void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index, int insert_count)
 {
     bassert(insert_index >= 0);
     bassert(insert_index <= text_line->len);
-    int range_len = strlen(range);
-    text_line_resize(text_line, text_line->len + range_len);
-    for (int i = text_line->len; i >= insert_index + range_len; i--)
+    bassert(insert_count <= (int)strlen(range));
+    text_line___resize(text_line, text_line->len + insert_count);
+    for (int i = text_line->len; i >= insert_index + insert_count; i--)
     {
-        text_line->str[i] = text_line->str[i - range_len];
+        text_line->str[i] = text_line->str[i - insert_count];
     }
-    for (int i = 0; i < range_len; i++)
+    for (int i = 0; i < insert_count; i++)
     {
         text_line->str[insert_index + i] = *range++;
     }
@@ -1689,7 +1689,7 @@ void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_c
     {
         text_line->str[i] = text_line->str[i + remove_count];
     }
-    text_line_resize(text_line, text_line->len - remove_count);
+    text_line___resize(text_line, text_line->len - remove_count);
 }
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...)
@@ -1775,17 +1775,22 @@ void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...)
     text_buffer_append_line(text_buffer, text_line);
 }
 
+void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos)
+{
+    Text_Line *current_line = &text_buffer->lines[pos.line];
+    int chars_moved_to_next_line = current_line->len - pos.col;
+    Text_Line new_line = text_line_make_dup_range(current_line->str, pos.col, chars_moved_to_next_line);
+    text_line_remove_range(current_line, pos.col, chars_moved_to_next_line);
+    text_buffer_insert_line(text_buffer, new_line, pos.line + 1);
+}
+
 void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos)
 {
     bassert(pos.line < text_buffer->line_count);
     bassert(pos.col < text_buffer->lines[pos.line].len);
     if (c == '\n')
     {
-        Text_Line *current_line = &text_buffer->lines[pos.line];
-        int chars_moved_to_next_line = current_line->len - pos.col;
-        Text_Line new_line = text_line_make_dup_range(current_line->str, pos.col, chars_moved_to_next_line);
-        text_line_remove_range(current_line, pos.col, chars_moved_to_next_line);
-        text_buffer_insert_line(text_buffer, new_line, pos.line + 1);
+        text_buffer___split_line(text_buffer, pos);
     }
     text_line_insert_char(&text_buffer->lines[pos.line], c, pos.col);
 }
@@ -1802,13 +1807,78 @@ void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos)
         {
             text_line_remove_char(this_line, pos.col);
             Text_Line *next_line = &text_buffer->lines[pos.line + 1];
-            text_line_insert_range(this_line, next_line->str, this_line->len);
+            text_line_insert_range(this_line, next_line->str, this_line->len, next_line->len);
             text_buffer_remove_line(text_buffer, pos.line + 1);
         }
     }
     else
     {
         text_line_remove_char(this_line, pos.col);
+    }
+}
+
+void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos)
+{
+    bassert(pos.line < text_buffer->line_count);
+    bassert(pos.col < text_buffer->lines[pos.line].len);
+    int range_len = strlen(range);
+    int segment_count = str_get_line_segment_count(range);
+
+    if (segment_count == 1)
+    {
+        text_line_insert_range(&text_buffer->lines[pos.line], range, pos.col, range_len);
+    }
+    else
+    {
+        text_buffer___split_line(text_buffer, pos);
+        int dest_line_i = pos.line;
+        int segment_start = 0;
+        for (int i = 0; i < segment_count; i++)
+        {
+            int segment_end = str_find_next_new_line(range, segment_start);
+            if (segment_end != range_len) segment_end++; // If new line, copy the new line char too
+            int segment_len = segment_end - segment_start;
+            if (i == 0) // first segment
+            {
+                text_line_insert_range(&text_buffer->lines[dest_line_i], range, pos.col, segment_len);
+            }
+            else if (i == segment_count - 1) // last segment
+            {
+                text_line_insert_range(&text_buffer->lines[dest_line_i], range + segment_start, 0, segment_len);
+            }
+            else // middle segments
+            {
+                Text_Line new_line = text_line_make_dup_range(range, segment_start, segment_len);
+                text_buffer_insert_line(text_buffer, new_line, dest_line_i);
+            }
+            dest_line_i++;
+            segment_start = segment_end;
+        }
+    }
+}
+
+void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end)
+{
+    bassert(start.line < text_buffer->line_count);
+    bassert(start.col < text_buffer->lines[start.line].len);
+    bassert(end.line < text_buffer->line_count);
+    bassert(end.col < text_buffer->lines[end.line].len);
+    bassert((end.line == start.line && end.col > start.col) || end.line > start.line);
+    if (start.line == end.line)
+    {
+        text_line_remove_range(&text_buffer->lines[start.line], start.col, end.col - start.col);
+    }
+    else
+    {
+        Text_Line *start_text_line = &text_buffer->lines[start.line];
+        Text_Line *end_text_line = &text_buffer->lines[end.line];
+        text_line_remove_range(start_text_line, start.col, start_text_line->len - start.col);
+        text_line_insert_range(start_text_line, end_text_line->str + end.col, start.col, end_text_line->len - end.col);
+        int lines_to_remove = end.line - start.line;
+        for (int i = 0; i < lines_to_remove; i++)
+        {
+            text_buffer_remove_line(text_buffer, start.line + 1); // Keep removing the same index, as lines get shifted up
+        }
     }
 }
 
@@ -1819,7 +1889,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
     if (c == '\n') {
         Text_Line new_line = text_line_make_dup(text_buffer->lines[cursor->pos.line].str + cursor->pos.col);
         text_buffer_insert_line(text_buffer, new_line, cursor->pos.line + 1);
-        text_line_resize(&text_buffer->lines[cursor->pos.line], cursor->pos.col + 1);
+        text_line___resize(&text_buffer->lines[cursor->pos.line], cursor->pos.col + 1);
         text_buffer->lines[cursor->pos.line].str[cursor->pos.col] = '\n';
         cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, +1, true);
         if (auto_indent)
@@ -1832,7 +1902,7 @@ void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Edito
         }
 
     } else {
-        text_line_resize(&text_buffer->lines[cursor->pos.line], text_buffer->lines[cursor->pos.line].len + 1);
+        text_line___resize(&text_buffer->lines[cursor->pos.line], text_buffer->lines[cursor->pos.line].len + 1);
         Text_Line *line = &text_buffer->lines[cursor->pos.line];
         for (int i = line->len - 1; i >= cursor->pos.col; i--) {
             line->str[i + 1] = line->str[i];
@@ -1857,7 +1927,7 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         Text_Line *line0 = &text_buffer->lines[cursor->pos.line - 1];
         Text_Line *line1 = &text_buffer->lines[cursor->pos.line];
         int line0_old_len = line0->len;
-        text_line_resize(line0, line0_old_len - 1 + line1->len);
+        text_line___resize(line0, line0_old_len - 1 + line1->len);
         strcpy(line0->str + line0_old_len - 1, line1->str);
         text_buffer_remove_line(text_buffer, cursor->pos.line);
         cursor->pos = cursor_pos_clamp(*text_buffer, (Cursor_Pos){cursor->pos.line - 1, line0_old_len - 1});
@@ -1866,7 +1936,7 @@ void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State 
         for (int i = cursor->pos.col; i <= line->len; i++) {
             line->str[i - 1] = line->str[i];
         }
-        text_line_resize(&text_buffer->lines[cursor->pos.line], line->len - 1);
+        text_line___resize(&text_buffer->lines[cursor->pos.line], line->len - 1);
         cursor->pos = cursor_pos_advance_char(*text_buffer, cursor->pos, -1, true);
     }
     if (active_view->buffer.buffer->kind == BUFFER_FILE)

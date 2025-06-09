@@ -139,27 +139,32 @@ void test__text_line_remove_char(UT_State *s)
 void test__text_line_insert_range(UT_State *s)
 {
     Text_Line text_line_a = text_line_make_dup("01234");
-    text_line_insert_range(&text_line_a, "ab", 0);
+    text_line_insert_range(&text_line_a, "ab", 0, 2);
     bool in_the_beginning = validate__text_line(text_line_a, "ab01234");
 
     Text_Line text_line_b = text_line_make_dup("01234");
-    text_line_insert_range(&text_line_b, "ab", 2);
+    text_line_insert_range(&text_line_b, "ab", 2, 2);
     bool in_the_middle = validate__text_line(text_line_b, "01ab234");
 
     Text_Line text_line_c = text_line_make_dup("01234");
-    text_line_insert_range(&text_line_c, "ab", 5);
+    text_line_insert_range(&text_line_c, "ab", 5, 2);
     bool in_the_end = validate__text_line(text_line_c, "01234ab");
 
     Text_Line text_line_d = text_line_make_dup("");
-    text_line_insert_range(&text_line_d, "ab", 0);
+    text_line_insert_range(&text_line_d, "ab", 0, 2);
     bool when_empty = validate__text_line(text_line_d, "ab");
 
-    UNIT_TESTS_RUN_CHECK(in_the_beginning && in_the_middle && in_the_end && when_empty);
+    Text_Line text_line_e = text_line_make_dup("01234");
+    text_line_insert_range(&text_line_e, "abcdef", 0, 2);
+    bool insert_partial = validate__text_line(text_line_e, "ab01234");
+
+    UNIT_TESTS_RUN_CHECK(in_the_beginning && in_the_middle && in_the_end && when_empty && insert_partial);
 
     free(text_line_a.str);
     free(text_line_b.str);
     free(text_line_c.str);
     free(text_line_d.str);
+    free(text_line_e.str);
 }
 
 void test__text_line_remove_range(UT_State *s)
@@ -517,11 +522,153 @@ void test__text_buffer_remove_char(UT_State *s)
         "\n",
         NULL);
 
-        UNIT_TESTS_RUN_CHECK(regular_char && newline_char && when_removing_the_only_newline_char);
+    UNIT_TESTS_RUN_CHECK(regular_char && newline_char && when_removing_the_only_newline_char);
 
     text_buffer_destroy(&text_buffer_a);
     text_buffer_destroy(&text_buffer_b);
     text_buffer_destroy(&text_buffer_c);
+}
+
+void test__text_buffer_insert_range(UT_State *s)
+{
+    Text_Buffer text_buffer_a = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_a, "01\n23\n45", (Cursor_Pos){0, 2});
+    bool insert_three_lines = validate__text_buffer(&text_buffer_a,
+        "ab01\n",
+        "23\n",
+        "45cd\n",
+        NULL);
+
+    Text_Buffer text_buffer_b = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_b, "\n23", (Cursor_Pos){0, 2});
+    bool insert_start_on_newline = validate__text_buffer(&text_buffer_b,
+        "ab\n",
+        "23cd\n",
+        NULL);
+
+    Text_Buffer text_buffer_c = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_c, "23\n", (Cursor_Pos){0, 2});
+    bool insert_end_on_newline = validate__text_buffer(&text_buffer_c,
+        "ab23\n",
+        "cd\n",
+        NULL);
+
+    Text_Buffer text_buffer_d = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_d, "\n\n", (Cursor_Pos){0, 2});
+    bool insert_two_newlines = validate__text_buffer(&text_buffer_d,
+        "ab\n",
+        "\n",
+        "cd\n",
+        NULL);
+
+    Text_Buffer text_buffer_e = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_e, "\n", (Cursor_Pos){0, 2});
+    bool insert_newline_char = validate__text_buffer(&text_buffer_e,
+        "ab\n",
+        "cd\n",
+        NULL);
+
+    Text_Buffer text_buffer_f = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_f, "0123", (Cursor_Pos){0, 2});
+    bool insert_no_newlines = validate__text_buffer(&text_buffer_f,
+        "ab0123cd\n",
+        NULL);
+
+    Text_Buffer text_buffer_g = text_buffer_create_from_lines(
+        "",
+        NULL);
+    text_buffer_insert_range(&text_buffer_g, "\n\n", (Cursor_Pos){0, 0});
+    bool insert_when_empty = validate__text_buffer(&text_buffer_g,
+        "\n",
+        "\n",
+        "\n",
+        NULL);
+
+    Text_Buffer text_buffer_h = text_buffer_create_from_lines(
+        "abcd",
+        NULL);
+    text_buffer_insert_range(&text_buffer_h, "01\n23\n45", (Cursor_Pos){0, 4});
+    bool insert_at_the_end = validate__text_buffer(&text_buffer_h,
+        "abcd01\n",
+        "23\n",
+        "45\n",
+        NULL);
+
+    UNIT_TESTS_RUN_CHECK(insert_three_lines && insert_start_on_newline && insert_end_on_newline && insert_two_newlines && insert_newline_char && insert_no_newlines && insert_when_empty && insert_at_the_end);
+
+    text_buffer_destroy(&text_buffer_a);
+    text_buffer_destroy(&text_buffer_b);
+    text_buffer_destroy(&text_buffer_c);
+    text_buffer_destroy(&text_buffer_d);
+    text_buffer_destroy(&text_buffer_e);
+    text_buffer_destroy(&text_buffer_f);
+    text_buffer_destroy(&text_buffer_g);
+    text_buffer_destroy(&text_buffer_h);
+}
+
+void test__text_buffer_remove_range(UT_State *s)
+{
+    Text_Buffer text_buffer_a = text_buffer_create_from_lines(
+        "abcd",
+        "efgh",
+        "ijkl",
+        NULL);
+    text_buffer_remove_range(&text_buffer_a, (Cursor_Pos){0, 2}, (Cursor_Pos){2, 2});
+    bool remove_across_three_linees = validate__text_buffer(&text_buffer_a,
+        "abkl\n",
+        NULL);
+
+    Text_Buffer text_buffer_b = text_buffer_create_from_lines(
+        "abcd",
+        "efgh",
+        "ijkl",
+        NULL);
+    text_buffer_remove_range(&text_buffer_b, (Cursor_Pos){1, 0}, (Cursor_Pos){1, 4});
+    bool remove_range_in_line = validate__text_buffer(&text_buffer_b,
+        "abcd\n",
+        "\n",
+        "ijkl\n",
+        NULL);
+
+    Text_Buffer text_buffer_c = text_buffer_create_from_lines(
+        "abcd",
+        "efgh",
+        "ijkl",
+        NULL);
+    text_buffer_remove_range(&text_buffer_c, (Cursor_Pos){1, 4}, (Cursor_Pos){2, 0});
+    bool join_two_lines = validate__text_buffer(&text_buffer_c,
+        "abcd\n",
+        "efghijkl\n",
+        NULL);
+
+    Text_Buffer text_buffer_d = text_buffer_create_from_lines(
+        "abcd",
+        "efgh",
+        "ijkl",
+        NULL);
+    text_buffer_remove_range(&text_buffer_d, (Cursor_Pos){0, 0}, (Cursor_Pos){2, 4});
+    bool remove_everything = validate__text_buffer(&text_buffer_d,
+        "\n",
+        NULL);
+
+    UNIT_TESTS_RUN_CHECK(remove_across_three_linees && remove_range_in_line && join_two_lines && remove_everything);
+
+    text_buffer_destroy(&text_buffer_a);
+    text_buffer_destroy(&text_buffer_b);
+    text_buffer_destroy(&text_buffer_c);
+    text_buffer_destroy(&text_buffer_d);
 }
 
 void test__cursor_pos_clamp__regular(UT_State *s)
@@ -1215,6 +1362,8 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     test__text_buffer_remove_line__only_line(&s);
     test__text_buffer_insert_char(&s);
     test__text_buffer_remove_char(&s);
+    test__text_buffer_insert_range(&s);
+    test__text_buffer_remove_range(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "CURSOR POS TESTS:");
