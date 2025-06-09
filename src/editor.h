@@ -348,6 +348,8 @@ Text_Line text_line_copy(Text_Line source, int start, int end);
 void text_line_resize(Text_Line *text_line, int new_size);
 void text_line_insert_char(Text_Line *text_line, char c, int insert_index);
 void text_line_remove_char(Text_Line *text_line, int remove_index);
+void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index);
+void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...);
 void text_buffer_destroy(Text_Buffer *text_buffer);

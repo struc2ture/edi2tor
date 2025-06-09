@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "editor.h"
@@ -132,6 +133,58 @@ void test__text_line_remove_char(UT_State *s)
 
     free(text_line.str);
     free(text_line_one_char.str);
+}
+
+void test__text_line_insert_range(UT_State *s)
+{
+    Text_Line text_line_a = text_line_make_dup("01234");
+    text_line_insert_range(&text_line_a, "ab", 0);
+    bool in_the_beginning = validate__text_line(text_line_a, "ab01234");
+
+    Text_Line text_line_b = text_line_make_dup("01234");
+    text_line_insert_range(&text_line_b, "ab", 2);
+    bool in_the_middle = validate__text_line(text_line_b, "01ab234");
+
+    Text_Line text_line_c = text_line_make_dup("01234");
+    text_line_insert_range(&text_line_c, "ab", 5);
+    bool in_the_end = validate__text_line(text_line_c, "01234ab");
+
+    Text_Line text_line_d = text_line_make_dup("");
+    text_line_insert_range(&text_line_d, "ab", 0);
+    bool when_empty = validate__text_line(text_line_d, "ab");
+
+    UNIT_TESTS_RUN_CHECK(in_the_beginning && in_the_middle && in_the_end && when_empty);
+
+    free(text_line_a.str);
+    free(text_line_b.str);
+    free(text_line_c.str);
+    free(text_line_d.str);
+}
+
+void test__text_line_remove_range(UT_State *s)
+{
+    Text_Line text_line_a = text_line_make_dup("01234");
+    text_line_remove_range(&text_line_a, 0, 2);
+    bool in_the_beginning = validate__text_line(text_line_a, "234");
+
+    Text_Line text_line_b = text_line_make_dup("01234");
+    text_line_remove_range(&text_line_b, 2, 2);
+    bool in_the_middle = validate__text_line(text_line_b, "014");
+
+    Text_Line text_line_c = text_line_make_dup("01234");
+    text_line_remove_range(&text_line_c, 3, 2);
+    bool in_the_end = validate__text_line(text_line_c, "012");
+
+    Text_Line text_line_d = text_line_make_dup("01234");
+    text_line_remove_range(&text_line_d, 0, 5);
+    bool the_whole_string = validate__text_line(text_line_d, "");
+
+    UNIT_TESTS_RUN_CHECK(in_the_beginning && in_the_middle && in_the_end && the_whole_string);
+
+    free (text_line_a.str);
+    free (text_line_b.str);
+    free (text_line_c.str);
+    free (text_line_d.str);
 }
 
 void test__text_buffer_create_from_lines__regular(UT_State *s)
@@ -1027,6 +1080,8 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     test__text_line_copy(&s);
     test__text_line_insert_char(&s);
     test__text_line_remove_char(&s);
+    test__text_line_insert_range(&s);
+    test__text_line_remove_range(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "TEXT BUFFER TESTS:");

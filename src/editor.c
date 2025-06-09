@@ -1656,6 +1656,33 @@ void text_line_remove_char(Text_Line *text_line, int remove_index)
     text_line_resize(text_line, text_line->len - 1);
 }
 
+void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index)
+{
+    bassert(insert_index >= 0);
+    bassert(insert_index <= text_line->len);
+    int range_len = strlen(range);
+    text_line_resize(text_line, text_line->len + range_len);
+    for (int i = text_line->len; i >= insert_index + range_len; i--)
+    {
+        text_line->str[i] = text_line->str[i - range_len];
+    }
+    for (int i = 0; i < range_len; i++)
+    {
+        text_line->str[insert_index + i] = *range++;
+    }
+}
+
+void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count)
+{
+    bassert(remove_index >= 0);
+    bassert(remove_index + remove_count <= text_line->len);
+    for (int i = remove_index; i <= text_line->len - remove_count; i++)
+    {
+        text_line->str[i] = text_line->str[i + remove_count];
+    }
+    text_line_resize(text_line, text_line->len - remove_count);
+}
+
 Text_Buffer text_buffer_create_from_lines(const char *first, ...)
 {
     Text_Buffer text_buffer = {0};
