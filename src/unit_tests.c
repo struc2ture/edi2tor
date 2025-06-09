@@ -34,127 +34,104 @@ void _unit_tests_finish(UT_State *s)
 
 // ---------------------------------------------------------------------
 
-void test__text_line_make_dup__regular_string(UT_State *s)
+bool validate__text_line(Text_Line text_line, const char *str)
+{
+    int len = strlen(str);
+    bool same_str = strcmp(text_line.str, str) == 0;
+    bool different_pointers = text_line.str != str;
+    bool correct_len = text_line.len == len;
+    bool correct_buf_len = text_line.buf_len == len + 1;
+    bool null_terminator = text_line.str[text_line.len] == '\0';
+    return same_str && different_pointers && correct_len && correct_buf_len && null_terminator;
+}
+
+void test__text_line_make_dup(UT_State *s)
 {
     char *str = "Hello!!!";
-    int len = strlen(str);
-
     Text_Line text_line = text_line_make_dup(str);
+    bool when_non_empty = validate__text_line(text_line, str);
 
-    bool str_exists = text_line.str != NULL;
-    bool different_pointers = text_line.str != str;
-    bool equal_len = text_line.len == len;
-    bool correct_buf_len = text_line.buf_len == len + 1;
-    bool null_terminator = text_line.str[text_line.len] == '\0';
-    bool str_equal = strcmp(text_line.str, str) == 0;
+    char *str_empty = "";
+    Text_Line text_line_empty = text_line_make_dup(str_empty);
+    bool when_empty = validate__text_line(text_line_empty, str_empty);
 
-    UNIT_TESTS_RUN_CHECK(str_exists && different_pointers && equal_len && correct_buf_len && null_terminator && str_equal);
+    UNIT_TESTS_RUN_CHECK(when_non_empty && when_empty);
 
     free(text_line.str);
+    free(text_line_empty.str);
 }
 
-void test__text_line_make_dup__empty_string(UT_State *s)
+void test__text_line_make_f(UT_State *s)
 {
-    char *str = "";
-    int len = strlen(str);
-
-    Text_Line text_line = text_line_make_dup(str);
-
-    bool str_exists = text_line.str != NULL;
-    bool different_pointers = text_line.str != str;
-    bool equal_len = text_line.len == len;
-    bool correct_buf_len = text_line.buf_len == len + 1;
-    bool null_terminator = text_line.str[text_line.len] == '\0';
-    bool str_equal = strcmp(text_line.str, str) == 0;
-
-    UNIT_TESTS_RUN_CHECK(str_exists && different_pointers && equal_len && correct_buf_len && null_terminator && str_equal);
-
-    free(text_line.str);
-}
-
-void test__text_line_make_f__regular_string(UT_State *s)
-{
-    char *str = "Hello 123 0.3\n";
-    int len = strlen(str);
-
     Text_Line text_line = text_line_make_f("%s %d %.1f", "Hello", 123, 0.3f);
+    bool correct = validate__text_line(text_line, "Hello 123 0.3\n");
 
-    bool str_exists = text_line.str != NULL;
-    bool equal_len = text_line.len == len;
-    bool correct_buf_len = text_line.buf_len == len + 1;
-    bool null_terminator = text_line.str[text_line.len] == '\0';
-    bool str_equal = strcmp(text_line.str, str) == 0;
-
-    UNIT_TESTS_RUN_CHECK(str_exists && equal_len && correct_buf_len && null_terminator && str_equal);
+    UNIT_TESTS_RUN_CHECK(correct);
 
     free(text_line.str);
 }
 
-void test__text_line_copy__whole(UT_State *s)
+void test__text_line_copy(UT_State *s)
 {
-    char *str = "Hello 123 0.3\n";
-    Text_Line original = text_line_make_dup(str);
+    Text_Line original = text_line_make_dup("Hello 123 0.3\n");
 
-    Text_Line copied = text_line_copy(original, 0, -1);
+    Text_Line copied_whole = text_line_copy(original, 0, -1);
+    bool when_whole = validate__text_line(copied_whole, "Hello 123 0.3\n");
 
-    bool str_exists = copied.str != NULL;
-    bool different_pointers = copied.str != original.str;
-    bool equal_len = copied.len == original.len;
-    bool equal_buf_len = copied.buf_len == original.buf_len;
-    bool null_terminator = copied.str[copied.len] == '\0';
-    bool str_equal = strcmp(copied.str, original.str) == 0;
+    Text_Line copied_range = text_line_copy(original, 6, 9);
+    bool when_range = validate__text_line(copied_range, "123");
 
-    UNIT_TESTS_RUN_CHECK(str_exists && different_pointers && equal_len && equal_buf_len && null_terminator && str_equal);
+    UNIT_TESTS_RUN_CHECK(when_whole && when_range);
+
+    free(original.str);
+    free(copied_whole.str);
+    free(copied_range.str);
 }
 
-void test__text_line_copy__range(UT_State *s)
+void test__text_line_insert_char(UT_State *s)
 {
-    char *str = "Hello 123 0.3\n";
-    Text_Line original = text_line_make_dup(str);
+    Text_Line text_line = text_line_make_dup("01234");
 
-    Text_Line copied = text_line_copy(original, 6, 9);
+    text_line_insert_char(&text_line, 'a', 0);
+    bool in_the_beginning = validate__text_line(text_line, "a01234");
 
-    bool str_exists = copied.str != NULL;
-    bool different_pointers = copied.str != original.str;
-    bool correct_len = copied.len == 3;
-    bool correct_buf_len = copied.buf_len == 4;
-    bool null_terminator = copied.str[copied.len] == '\0';
-    bool correct_str = strcmp(copied.str, "123") == 0;
+    text_line_insert_char(&text_line, 'b', 4);
+    bool in_the_middle = validate__text_line(text_line, "a012b34");
 
-    UNIT_TESTS_RUN_CHECK(str_exists && different_pointers && correct_len && correct_buf_len && null_terminator && correct_str);
+    text_line_insert_char(&text_line, 'c', 7);
+    bool in_the_end = validate__text_line(text_line, "a012b34c");
+
+    Text_Line text_line_empty = text_line_make_dup("");
+    text_line_insert_char(&text_line_empty, '0', 0);
+    bool when_empty = validate__text_line(text_line_empty, "0");
+
+    UNIT_TESTS_RUN_CHECK(in_the_beginning && in_the_middle && in_the_end && when_empty);
+
+    free(text_line.str);
+    free(text_line_empty.str);
 }
 
-void test__text_line_resize__shorten(UT_State *s)
+void test__text_line_remove_char(UT_State *s)
 {
-    char *str = "Test string 123456789";
-    int resize_to = 4;
-    Text_Line text_line = text_line_make_dup(str);
+    Text_Line text_line = text_line_make_dup("01234");
 
-    text_line_resize(&text_line, resize_to);
+    text_line_remove_char(&text_line, 0);
+    bool in_the_beginning = validate__text_line(text_line, "1234");
 
-    bool correct_len = text_line.len == resize_to;
-    bool correct_buf_len = text_line.buf_len == resize_to + 1;
-    bool null_terminator = text_line.str[text_line.len] == '\0';
-    bool correct_str = strcmp(text_line.str, "Test") == 0;
+    text_line_remove_char(&text_line, 2);
+    bool in_the_middle = validate__text_line(text_line, "124");
 
-    UNIT_TESTS_RUN_CHECK(correct_len && correct_buf_len && null_terminator && correct_str);
-}
+    text_line_remove_char(&text_line, 2);
+    bool in_the_end = validate__text_line(text_line, "12");
 
-void test__text_line_resize__lengthen(UT_State *s)
-{
-    char *str = "Test string 123456789";
-    int len = 21;
-    int resize_to = 25;
-    Text_Line text_line = text_line_make_dup(str);
+    Text_Line text_line_one_char = text_line_make_dup("0");
+    text_line_remove_char(&text_line_one_char, 0);
+    bool when_one_char = validate__text_line(text_line_one_char, "");
 
-    text_line_resize(&text_line, resize_to);
+    UNIT_TESTS_RUN_CHECK(in_the_beginning && in_the_middle && in_the_end && when_one_char);
 
-    bool correct_len = text_line.len == resize_to;
-    bool correct_buf_len = text_line.buf_len == resize_to + 1;
-    bool null_terminator = text_line.str[text_line.len] == '\0';
-    bool correct_str = strncmp(text_line.str, str, len) == 0;
-
-    UNIT_TESTS_RUN_CHECK(correct_len && correct_buf_len && null_terminator && correct_str);
+    free(text_line.str);
+    free(text_line_one_char.str);
 }
 
 void test__text_buffer_create_from_lines__regular(UT_State *s)
@@ -1045,13 +1022,11 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     s.break_on_failure = break_on_failure;
 
     text_buffer_append_f(s.log_buffer, "TEXT LINE TESTS:");
-    test__text_line_make_dup__regular_string(&s);
-    test__text_line_make_dup__empty_string(&s);
-    test__text_line_make_f__regular_string(&s);
-    test__text_line_copy__whole(&s);
-    test__text_line_copy__range(&s);
-    test__text_line_resize__shorten(&s);
-    test__text_line_resize__lengthen(&s);
+    test__text_line_make_dup(&s);
+    test__text_line_make_f(&s);
+    test__text_line_copy(&s);
+    test__text_line_insert_char(&s);
+    test__text_line_remove_char(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "TEXT BUFFER TESTS:");

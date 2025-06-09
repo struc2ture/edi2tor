@@ -1625,12 +1625,35 @@ Text_Line text_line_copy(Text_Line source, int start, int end)
     return r;
 }
 
-void text_line_resize(Text_Line *text_line, int new_size) {
-    bassert(new_size <= MAX_CHARS_PER_LINE);
+void text_line_resize(Text_Line *text_line, int new_size)
+{
     text_line->str = xrealloc(text_line->str, new_size + 1);
     text_line->buf_len = new_size + 1;
     text_line->len = new_size;
     text_line->str[new_size] = '\0';
+}
+
+void text_line_insert_char(Text_Line *text_line, char c, int insert_index)
+{
+    bassert(insert_index >= 0);
+    bassert(insert_index <= text_line->len);
+    text_line_resize(text_line, text_line->len + 1);
+    for (int i = text_line->len; i > insert_index; i--)
+    {
+        text_line->str[i] = text_line->str[i - 1];
+    }
+    text_line->str[insert_index] = c;
+}
+
+void text_line_remove_char(Text_Line *text_line, int remove_index)
+{
+    bassert(remove_index >= 0);
+    bassert(remove_index < text_line->len);
+    for (int i = remove_index; i < text_line->len; i++)
+    {
+        text_line->str[i] = text_line->str[i + 1];
+    }
+    text_line_resize(text_line, text_line->len - 1);
 }
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...)
