@@ -342,6 +342,7 @@ Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor
 Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
 
 Text_Line text_line_make_dup(const char *line);
+Text_Line text_line_make_dup_range(const char *str, int start, int count);
 Text_Line text_line_make_va(const char *fmt, va_list args);
 Text_Line text_line_make_f(const char *fmt, ...);
 Text_Line text_line_copy(Text_Line source, int start, int end);
@@ -358,6 +359,8 @@ void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
 void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
 void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
 void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
+void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
+void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);

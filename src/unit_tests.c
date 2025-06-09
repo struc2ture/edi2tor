@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -185,6 +186,38 @@ void test__text_line_remove_range(UT_State *s)
     free (text_line_b.str);
     free (text_line_c.str);
     free (text_line_d.str);
+}
+
+bool validate__text_buffer(Text_Buffer *text_buffer, ...)
+{
+    va_list args;
+    va_start(args, text_buffer);
+    const char *test_line = va_arg(args, const char *);
+    int line_count = 0;
+    while (test_line)
+    {
+        line_count++;
+        test_line = va_arg(args, const char *);
+    }
+    va_end(args);
+
+    if (line_count != text_buffer->line_count)
+    {
+        return false;
+    }
+
+    va_start(args, text_buffer);
+    for (int i = 0; i < line_count; i++)
+    {
+        const char *test_line = va_arg(args, const char *);
+        if (!validate__text_line(text_buffer->lines[i], test_line))
+        {
+            va_end(args);
+            return false;
+        }
+    }
+    va_end(args);
+    return true;
 }
 
 void test__text_buffer_create_from_lines__regular(UT_State *s)
@@ -405,6 +438,90 @@ void test__text_buffer_remove_line__only_line(UT_State *s)
     UNIT_TESTS_RUN_CHECK(correct_line_count && correct_line0);
 
     text_buffer_destroy(&text_buffer);
+}
+
+void test__text_buffer_insert_char(UT_State *s)
+{
+    Text_Buffer text_buffer_a = text_buffer_create_from_lines(
+        "Line one",
+        "Line two",
+        NULL);
+    text_buffer_insert_char(&text_buffer_a, 'a', (Cursor_Pos){0, 1});
+    bool regular_char = validate__text_buffer(&text_buffer_a, 
+        "Laine one\n",
+        "Line two\n",
+        NULL);
+
+    Text_Buffer text_buffer_b = text_buffer_create_from_lines(
+        "Line one",
+        "Line two",
+        NULL);
+    text_buffer_insert_char(&text_buffer_b, '\n', (Cursor_Pos){0, 4});
+    bool new_line_char = validate__text_buffer(&text_buffer_b,
+        "Line\n",
+        " one\n",
+        "Line two\n",
+        NULL);
+
+    Text_Buffer text_buffer_c = text_buffer_create_from_lines(
+        "",
+        NULL);
+    text_buffer_insert_char(&text_buffer_c, 'a', (Cursor_Pos){0, 0});
+    bool regular_char_when_empty = validate__text_buffer(&text_buffer_c,
+        "a\n",
+        NULL);
+
+    Text_Buffer text_buffer_d = text_buffer_create_from_lines(
+        "",
+        NULL);
+    text_buffer_insert_char(&text_buffer_d, '\n', (Cursor_Pos){0, 0});
+    bool new_line_char_when_empty = validate__text_buffer(&text_buffer_d,
+        "\n",
+        "\n",
+        NULL);
+
+    UNIT_TESTS_RUN_CHECK(regular_char && new_line_char && regular_char_when_empty && new_line_char_when_empty);
+
+    text_buffer_destroy(&text_buffer_a);
+    text_buffer_destroy(&text_buffer_b);
+    text_buffer_destroy(&text_buffer_c);
+    text_buffer_destroy(&text_buffer_d);
+}
+
+void test__text_buffer_remove_char(UT_State *s)
+{
+    Text_Buffer text_buffer_a = text_buffer_create_from_lines(
+        "Line one",
+        "Line two",
+        NULL);
+    text_buffer_remove_char(&text_buffer_a, (Cursor_Pos){0, 2});
+    bool regular_char = validate__text_buffer(&text_buffer_a,
+        "Lie one\n",
+        "Line two\n",
+        NULL);
+
+    Text_Buffer text_buffer_b = text_buffer_create_from_lines(
+        "Line one",
+        "Line two",
+        NULL);
+    text_buffer_remove_char(&text_buffer_b, (Cursor_Pos){0, 8});
+    bool newline_char = validate__text_buffer(&text_buffer_b,
+        "Line oneLine two\n",
+        NULL);
+
+    Text_Buffer text_buffer_c = text_buffer_create_from_lines(
+        "",
+        NULL);
+    text_buffer_remove_char(&text_buffer_c, (Cursor_Pos){0, 0});
+    bool when_removing_the_only_newline_char = validate__text_buffer(&text_buffer_c,
+        "\n",
+        NULL);
+
+        UNIT_TESTS_RUN_CHECK(regular_char && newline_char && when_removing_the_only_newline_char);
+
+    text_buffer_destroy(&text_buffer_a);
+    text_buffer_destroy(&text_buffer_b);
+    text_buffer_destroy(&text_buffer_c);
 }
 
 void test__cursor_pos_clamp__regular(UT_State *s)
@@ -1096,6 +1213,8 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     test__text_buffer_remove_line__at_start(&s);
     test__text_buffer_remove_line__at_end(&s);
     test__text_buffer_remove_line__only_line(&s);
+    test__text_buffer_insert_char(&s);
+    test__text_buffer_remove_char(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "CURSOR POS TESTS:");

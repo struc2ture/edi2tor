@@ -1581,10 +1581,19 @@ Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor
     return cursor_pos_to_start_of_buffer(text_buffer, pos);
 }
 
-Text_Line text_line_make_dup(const char *line)
+Text_Line text_line_make_dup(const char *str)
 {
     Text_Line r;
-    r.str = xstrdup(line);
+    r.str = xstrdup(str);
+    r.len = strlen(r.str);
+    r.buf_len = r.len + 1;
+    return r;
+}
+
+Text_Line text_line_make_dup_range(const char *str, int start, int count)
+{
+    Text_Line r;
+    r.str = xstrndup(str + start, count);
     r.len = strlen(r.str);
     r.buf_len = r.len + 1;
     return r;
@@ -1764,6 +1773,43 @@ void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...)
     Text_Line text_line =  text_line_make_va(fmt, args);
     va_end(args);
     text_buffer_append_line(text_buffer, text_line);
+}
+
+void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos)
+{
+    bassert(pos.line < text_buffer->line_count);
+    bassert(pos.col < text_buffer->lines[pos.line].len);
+    if (c == '\n')
+    {
+        Text_Line *current_line = &text_buffer->lines[pos.line];
+        int chars_moved_to_next_line = current_line->len - pos.col;
+        Text_Line new_line = text_line_make_dup_range(current_line->str, pos.col, chars_moved_to_next_line);
+        text_line_remove_range(current_line, pos.col, chars_moved_to_next_line);
+        text_buffer_insert_line(text_buffer, new_line, pos.line + 1);
+    }
+    text_line_insert_char(&text_buffer->lines[pos.line], c, pos.col);
+}
+
+void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos)
+{
+    bassert(pos.line < text_buffer->line_count);
+    bassert(pos.col < text_buffer->lines[pos.line].len);
+    bool deleting_line_break = pos.col == text_buffer->lines[pos.line].len - 1; // Valid text buffer will always have \n at len - 1
+    Text_Line *this_line = &text_buffer->lines[pos.line];
+    if (deleting_line_break)
+    {
+        if (pos.line < text_buffer->line_count - 1)
+        {
+            text_line_remove_char(this_line, pos.col);
+            Text_Line *next_line = &text_buffer->lines[pos.line + 1];
+            text_line_insert_range(this_line, next_line->str, this_line->len);
+            text_buffer_remove_line(text_buffer, pos.line + 1);
+        }
+    }
+    else
+    {
+        text_line_remove_char(this_line, pos.col);
+    }
 }
 
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent)

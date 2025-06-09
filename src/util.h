@@ -72,6 +72,13 @@ static char *xstrdup(const char *str)
     return new_str;
 }
 
+static char *xstrndup(const char *str, size_t size)
+{
+    char *new_str = strndup(str, size);
+    if (!new_str) fatal("strndup failed");
+    return new_str;
+}
+
 static int xstrtoint(const char *str)
 {
     int x;
