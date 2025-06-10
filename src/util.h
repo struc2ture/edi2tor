@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -164,4 +165,17 @@ static int str_find_next_new_line(const char *str, int start_at)
         index++;
     }
     return index;
+}
+
+static bool is_white_line(const char *str)
+{
+    while (*str)
+    {
+        if (!isspace(*str))
+        {
+            return false;
+        }
+        str++;
+    }
+    return true;
 }

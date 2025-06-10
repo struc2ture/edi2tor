@@ -133,16 +133,16 @@ typedef enum {
     PROMPT_GO_TO_LINE
 } Prompt_Kind;
 
-typedef struct View View;
+typedef struct Buffer_View Buffer_View;
 typedef struct {
     Prompt_Kind kind;
     union {
     struct {/* nothing for open_file */} open_file;
     struct {
-        View *for_view;
+        Buffer_View *for_buffer_view;
     } go_to_line;
     struct {
-        View *for_view;
+        Buffer_View *for_buffer_view;
     } save_as;
     };
 } Prompt_Context;
@@ -172,30 +172,48 @@ typedef struct {
 } Buffer;
 
 typedef enum  {
-    VIEW_BUFFER
+    VIEW_KIND_BUFFER,
+    VIEW_KIND_IMAGE,
 } View_Kind;
 
-struct View {
-    View_Kind kind;
-    Rect outer_rect;
-    union {
-    struct {
-        Buffer *buffer;
-        Viewport viewport;
-        Display_Cursor cursor;
-        Text_Selection selection;
-    } buffer;
-    };
+struct Buffer_View {
+    Buffer *buffer;
+    Viewport viewport;
+    Display_Cursor cursor;
+    Text_Selection selection;
 };
 
 typedef struct {
+    int a;
+} Image_View;
+
+typedef struct {
+    union {
+        Buffer_View bv;
+        Image_View iv;
+    };
+    View_Kind kind;
+} View;
+
+typedef struct {
+    Rect outer_rect;
+    View *view;
+} Frame;
+
+typedef struct {
     Render_State render_state;
+
     Buffer **buffers;
     int buffer_count;
     View **views;
     int view_count;
-    View *active_view;
+    Frame **frames;
+    int frame_count_;
+    Frame *active_frame;
+    Frame *scrolled_frame;
+
     Viewport canvas_viewport;
+
     Copy_Buffer copy_buffer;
     bool should_break;
     float delta_time;
@@ -207,11 +225,10 @@ typedef struct {
     bool left_mouse_down;
     bool left_mouse_handled;
     Vec_2 prev_mouse_pos;
-    bool is_buffer_view_drag;
-    bool is_buffer_view_resize;
-    bool is_buffer_view_text_area_click;
+    bool is_frame_drag;
+    bool is_frame_resize;
+    // bool is_buffer_view_text_area_click;
     float scroll_timeout;
-    View *scrolled_buffer_view;
 } Editor_State;
 
 typedef enum {
@@ -249,27 +266,40 @@ Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Ed
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
 
-int view_get_index(View *view, Editor_State *state);
-bool view_exists(View *view, Editor_State *state);
-void view_set_active(View *view, Editor_State *state);
-Rect view_get_resize_handle_rect(View view, const Render_State *render_state);
-void view_set_rect(View *view, Rect rect, const Render_State *render_state);
-View *view_at_pos(Vec_2 pos, Editor_State *state);
+int frame___get_index(Frame *frame, Editor_State *state);
+Frame **frame___create_new_slot(Editor_State *state);
+void frame___free_slot(Frame *frame, Editor_State *state);
+Frame *frame_create(View *view, Rect rect, Editor_State *state);
+void frame_destroy(Frame *frame, Editor_State *state);
+bool frame_exists(Frame *frame, Editor_State *state);
+void frame_set_active(Frame *frame, Editor_State *state);
+Rect frame_get_resize_handle_rect(Frame frame, const Render_State *render_state);
+void frame_set_rect(Frame *frame, Rect rect, const Render_State *render_state);
+Frame *frame_at_pos(Vec_2 pos, Editor_State *state);
+bool frame_handle_scroll(Frame *frame, float x_offset, float y_offset, const Render_State *render_state);
 
-View *view_buffer_create(Buffer *buffer, Rect rect, Editor_State *state);
-View *view_buffer_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state);
-View *view_buffer_open_file(const char *file_path, Rect rect, Editor_State *state);
-View *view_buffer_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
-void view_buffer_destroy(View *view, Editor_State *state);
-Rect view_buffer_get_text_area_rect(View view, const Render_State *render_state);
-Rect view_buffer_get_line_num_col_rect(View view, const Render_State *render_state);
-Rect view_buffer_get_name_rect(View view, const Render_State *render_state);
-Vec_2 view_buffer_canvas_pos_to_text_area_pos(View view, Vec_2 canvas_pos, const Render_State *render_state);
-Vec_2 view_buffer_text_area_pos_to_buffer_pos(View view, Vec_2 text_area_pos);
+Frame *frame_create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state);
+Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
+Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
+
+int view___get_index(View *view, Editor_State *state);
+View **view___create_new_slot(Editor_State *state);
+void view___free_slot(View *view, Editor_State *state);
+View *view_create(Editor_State *state);
+void view_destroy(View *view, Editor_State *state);
+bool view_exists(View *view, Editor_State *state);
+void view_set_rect(View *view, Rect rect, const Render_State *render_state);
+
+View *buffer_view_create(Buffer *buffer, Editor_State *state);
+Rect buffer_view_get_text_area_rect(Buffer_View buffer_view, Rect frame_rect, const Render_State *render_state);
+Rect buffer_view_get_line_num_col_rect(Buffer_View buffer_view, Rect frame_rect, const Render_State *render_state);
+Rect buffer_view_get_name_rect(Buffer_View buffer_view, Rect frame_rect, const Render_State *render_state);
+Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Rect frame_rect, Vec_2 canvas_pos, const Render_State *render_state);
+Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos);
 
 Prompt_Context prompt_create_context_open_file();
-Prompt_Context prompt_create_context_go_to_line(View *for_view);
-Prompt_Context prompt_create_context_save_as(View *for_view);
+Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
+Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view);
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
 void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
 
@@ -293,12 +323,14 @@ void draw_quad(Rect q, const unsigned char color[4]);
 
 void draw_grid(Viewport canvas_viewport, Render_State *render_state);
 
+void draw_frame(Frame frame, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+void draw_view(View view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+void draw_buffer_view(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
-void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
-void draw_view_buffer_line_numbers(View view, Viewport canvas_viewport, Render_State *render_state);
-void draw_view_buffer_name(View view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
-void draw_view_buffer(View view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+// void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
+void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Viewport canvas_viewport, Render_State *render_state);
+void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
@@ -307,8 +339,8 @@ void make_view(float offset_x, float offset_y, float scale, float *out);
 void make_viewport_transform(Viewport viewport, float *out);
 void make_mat4_identity(float *out);
 void mul_mat4(const float *a, const float *b, float *out);
-void transform_set_view_buffer_text_area(View view, Viewport canvas_viewport, Render_State *render_state);
-void transform_set_view_buffer_line_num_col(View view, Viewport canvas_viewport, Render_State *render_state);
+void transform_set_buffer_view_text_area(Buffer_View buffer_view, Rect frame_rect, Viewport canvas_viewport, Render_State *render_state);
+void transform_set_buffer_view_line_num_col(Buffer_View buffer_view, Rect frame_rect, Viewport canvas_viewport, Render_State *render_state);
 void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state);
 void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_state);
 void transform_set_screen_space(Render_State *render_state);
@@ -365,6 +397,7 @@ void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 
+#if 0
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
 void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
 void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
@@ -374,11 +407,12 @@ void decrease_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
 void increase_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
 void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
 void delete_current_line(Editor_State *state);
-bool is_white_line(Text_Line line);
+#endif
 
 File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
 void file_write(Text_Buffer text_buffer, const char *path);
 
+#if 0
 void start_selection_at_cursor(Editor_State *state);
 void extend_selection_to_cursor(Editor_State *state);
 void cancel_selection(Editor_State *state);
@@ -388,14 +422,17 @@ void delete_selected(Editor_State *state);
 
 void copy_at_selection(Editor_State *state);
 void paste_from_copy_buffer(Editor_State *state);
+#endif
 
 void rebuild_dl();
-void insert_go_to_line_char(Editor_State *state, char c);
 
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
+
 void handle_char_input(Editor_State *state, char c);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
-Cursor_Movement_Dir get_cursor_movement_dir_by_key(int key);
-void handle_cursor_movement_keys(View *view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
-void handle_mouse_text_area_click(View *view, bool with_selection, bool just_pressed, Vec_2 mouse_screen_pos, Editor_State *state);
+
+// void handle_mouse_text_area_click(View *view, bool with_selection, bool just_pressed, Vec_2 mouse_screen_pos, Editor_State *state);
