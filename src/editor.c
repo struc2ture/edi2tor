@@ -116,6 +116,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
             state->mouse_state.resized_frame = NULL;
             state->mouse_state.dragged_frame = NULL;
             state->mouse_state.scrolled_frame = NULL;
+            state->mouse_state.view_clicked_frame = NULL;
         }
     }
 }
@@ -2697,7 +2698,7 @@ void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State 
     if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
         mouse_state->resized_frame = frame;
     else if (will_propagate_to_view && view_handle_mouse_click(frame->view, frame->outer_rect, mouse_canvas_pos, render_state))
-        {}// state->is_buffer_view_text_area_click = true;
+        mouse_state->view_clicked_frame = frame;
     else
         mouse_state->dragged_frame = frame;
 }
@@ -2721,6 +2722,36 @@ void handle_mouse_click(GLFWwindow *window, Editor_State *state)
     }
 }
 
+void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state)
+{
+    Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*buffer_view, outer_rect, mouse_canvas_pos, render_state);
+    (void)is_shift_pressed;
+    // if (with_selection && just_pressed && !is_selection_valid(view->buffer.buffer->text_buffer, view->buffer.selection))
+    // {
+    //     start_selection_at_cursor(state);
+    // }
+    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
+    Cursor_Pos text_cursor_under_mouse = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, render_state);
+    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
+    // extend_selection_to_cursor(state);
+    // if (!with_selection && just_pressed)
+    // {
+    //     start_selection_at_cursor(state);
+    // }
+    // if (with_selection || !just_pressed)
+    // {
+    //     extend_selection_to_cursor(state);
+    // }
+}
+
+void view_handle_click_drag(View *view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state)
+{
+    if (view->kind == VIEW_KIND_BUFFER)
+    {
+        buffer_view_handle_click_drag(&view->bv, outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+    }
+}
+
 void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
 {
     Rect new_rect = frame->outer_rect;
@@ -2737,10 +2768,13 @@ void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_st
     frame_set_rect(frame, new_rect, render_state);
 }
 
-void handle_mouse_click_drag(GLFWwindow *window, Mouse_State *mouse_state, Render_State *render_state)
+void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
 {
-    Vec_2 mouse_delta = get_mouse_delta(window, mouse_state);
-    if (mouse_state->dragged_frame)
+    if (mouse_state->view_clicked_frame)
+    {
+        view_handle_click_drag(mouse_state->view_clicked_frame->view, mouse_state->view_clicked_frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+    }
+    else if (mouse_state->dragged_frame)
     {
         frame_handle_drag(mouse_state->dragged_frame, mouse_delta, render_state);
     }
@@ -2754,38 +2788,9 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
-        handle_mouse_click_drag(window, &state->mouse_state, &state->render_state);
-
-        // Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-        // Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-        // if (!state->left_mouse_handled && state->is_buffer_view_text_area_click)
-        // {
-        //     bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        //     Vec_2 mouse_text_area_pos = view_buffer_canvas_pos_to_text_area_pos(*active_view, mouse_canvas_pos, &state->render_state);
-        //     handle_mouse_text_area_click(active_view, is_shift_pressed, is_just_pressed, mouse_text_area_pos, state);
-        // }
+        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        Vec_2 mouse_delta = get_mouse_delta(window, &state->mouse_state);
+        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+        handle_mouse_click_drag(mouse_canvas_pos, mouse_delta, is_shift_pressed, &state->mouse_state, &state->render_state);
     }
 }
-
-#if 0
-void handle_mouse_text_area_click(View *view, bool with_selection, bool just_pressed, Vec_2 mouse_text_area_pos, Editor_State *state)
-{
-    bassert(view->kind == VIEW_KIND_BUFFER);
-    if (with_selection && just_pressed && !is_selection_valid(view->buffer.buffer->text_buffer, view->buffer.selection))
-    {
-        start_selection_at_cursor(state);
-    }
-    Vec_2 mouse_buffer_pos = view_buffer_text_area_pos_to_buffer_pos(*view, mouse_text_area_pos);
-    Cursor_Pos mouse_cursor = buffer_pos_to_cursor_pos(mouse_buffer_pos, view->buffer.buffer->text_buffer, &state->render_state);
-    view->buffer.cursor.pos = cursor_pos_clamp(view->buffer.buffer->text_buffer, mouse_cursor);
-    extend_selection_to_cursor(state);
-    if (!with_selection && just_pressed)
-    {
-        start_selection_at_cursor(state);
-    }
-    if (with_selection || !just_pressed)
-    {
-        extend_selection_to_cursor(state);
-    }
-}
-#endif

@@ -204,6 +204,7 @@ typedef struct {
     Frame *resized_frame;
     Frame *dragged_frame;
     Frame *scrolled_frame;
+    Frame *view_clicked_frame;
     Vec_2 prev_mouse_pos;
     float scroll_timeout;
 } Mouse_State;
@@ -439,10 +440,11 @@ void handle_char_input(Editor_State *state, char c);
 bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, Render_State *render_state);
 void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool will_propagate_to_view);
 void handle_mouse_click(GLFWwindow *window, Editor_State *state);
+
+void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
+void view_handle_click_drag(View *view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
 void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
 void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
-void handle_mouse_click_drag(GLFWwindow *window, Mouse_State *mouse_state, Render_State *render_state);
+void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state);
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
-
-// void handle_mouse_text_area_click(View *view, bool with_selection, bool just_pressed, Vec_2 mouse_screen_pos, Editor_State *state);
