@@ -90,8 +90,9 @@ void _render(GLFWwindow *window, void *_state)
 void char_callback(GLFWwindow *window, unsigned int codepoint)
 {
     (void)window; Editor_State *state = glfwGetWindowUserPointer(window);
-    if (codepoint < 128) {
-        handle_char_input(state, (char)codepoint);
+    if (state->active_frame != NULL && state->active_frame->view->kind == VIEW_KIND_BUFFER)
+    {
+        buffer_view_handle_char_input(&state->active_frame->view->bv, (char)codepoint, &state->render_state);
     }
 }
 
@@ -737,7 +738,7 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             {
                 int go_to_line = xstrtoint(result.str);
                 buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, (Cursor_Pos){go_to_line - 1, 0});
-                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+                viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
                 buffer_view->cursor.blink_time = 0.0f;
             }
             else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
@@ -931,12 +932,12 @@ int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x)
     return char_i;
 }
 
-Rect get_cursor_rect(Text_Buffer text_buffer, Display_Cursor cursor, Render_State *render_state)
+Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state)
 {
-    Rect cursor_rect = get_string_char_rect(text_buffer.lines[cursor.pos.line].str, render_state->font, cursor.pos.col);
+    Rect cursor_rect = get_string_char_rect(text_buffer.lines[cursor_pos.line].str, render_state->font, cursor_pos.col);
     float line_height = get_font_line_height(render_state->font);
     float x = 0;
-    float y = cursor.pos.line * line_height;
+    float y = cursor_pos.line * line_height;
     cursor_rect.x += x;
     cursor_rect.y += y;
     return cursor_rect;
@@ -1076,7 +1077,7 @@ void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewp
     cursor->blink_time += delta_time;
     if (cursor->blink_time < 0.5f)
     {
-        Rect cursor_rect = get_cursor_rect(text_buffer, *cursor, render_state);
+        Rect cursor_rect = get_cursor_rect(text_buffer, cursor->pos, render_state);
         bool is_seen = rect_intersect(cursor_rect, viewport.rect);
         if (is_seen)
             draw_quad(cursor_rect, (unsigned char[4]){0, 0, 255, 255});
@@ -1418,11 +1419,11 @@ Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, c
     return cursor;
 }
 
-void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Viewport *viewport, Render_State *render_state)
+void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state)
 {
     Rect viewport_r = viewport->rect;
     Rect_Bounds viewport_b = get_viewport_cursor_bounds(*viewport, render_state->font);
-    Rect_Bounds cursor_b = rect_get_bounds(get_cursor_rect(text_buffer, cursor, render_state));
+    Rect_Bounds cursor_b = rect_get_bounds(get_cursor_rect(text_buffer, cursor_pos, render_state));
     float font_space_width = get_char_width(' ', render_state->font);
     float font_line_height = get_font_line_height(render_state->font);
     if (cursor_b.max_y <= viewport_b.min_y || cursor_b.min_y >= viewport_b.max_y)
@@ -2426,7 +2427,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             unit_tests_run(&log_buffer, true);
             Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
             frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
-            viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor, &frame->view->bv.viewport, &state->render_state);
+            viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
         } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {
@@ -2502,35 +2503,36 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
             Cursor_Movement_Dir dir = CURSOR_MOVE_UP;
             switch (key)
             {
-                case GLFW_KEY_LEFT: dir = CURSOR_MOVE_LEFT;
-                case GLFW_KEY_RIGHT: dir = CURSOR_MOVE_RIGHT;
-                case GLFW_KEY_UP: dir = CURSOR_MOVE_UP;
-                case GLFW_KEY_DOWN: dir = CURSOR_MOVE_DOWN;
+                case GLFW_KEY_LEFT: dir = CURSOR_MOVE_LEFT; break;
+                case GLFW_KEY_RIGHT: dir = CURSOR_MOVE_RIGHT; break;
+                case GLFW_KEY_UP: dir = CURSOR_MOVE_UP; break;
+                case GLFW_KEY_DOWN: dir = CURSOR_MOVE_DOWN; break;
             }
             buffer_view_handle_cursor_movement_keys(buffer_view, dir, mods & GLFW_MOD_SHIFT, mods & GLFW_MOD_ALT, mods & GLFW_MOD_SUPER, state);
         } break;
-        // case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        // {
-        //     switch (active_view->buffer.buffer->kind)
-        //     {
-        //         case BUFFER_PROMPT:
-        //         {
-        //             Prompt_Result prompt_result = prompt_parse_result(active_view->buffer.buffer->text_buffer);
-        //             prompt_submit(active_view->buffer.buffer->prompt.context, prompt_result, active_view->outer_rect, window, state);
-        //             view_buffer_destroy(active_view, state);
-        //         } break;
+        case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            switch (buffer_view->buffer->kind)
+            {
+                // case BUFFER_PROMPT:
+                // {
+                //     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
+                //     prompt_submit(buffer_view->buffer->prompt.context, prompt_result, active_view->outer_rect, window, state);
+                //     view_buffer_destroy(active_view, state);
+                // } break;
 
-        //         default:
-        //         {
-        //             insert_char(&active_view->buffer.buffer->text_buffer, '\n', &active_view->buffer.cursor, state, true);
-        //         } break;
-        //     }
-        // } break;
-        // case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        // {
-        //     if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection)) delete_selected(state);
-        //     else remove_char(&active_view->buffer.buffer->text_buffer, &active_view->buffer.cursor, state);
-        // } break;
+                default:
+                {
+                    buffer_view_handle_char_input(buffer_view, '\n', &state->render_state);
+                } break;
+            }
+        } break;
+        case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            // if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection)) delete_selected(state);
+            // else remove_char(&active_view->buffer.buffer->text_buffer, &active_view->buffer.cursor, state);
+            buffer_view_handle_backspace(buffer_view, &state->render_state);
+        } break;
         // case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         // {
         //     if (mods == GLFW_MOD_ALT)
@@ -2637,23 +2639,29 @@ void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Mo
         } break;
     }
 
-    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor, &buffer_view->viewport, &state->render_state);
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     buffer_view->cursor.blink_time = 0.0f;
 
     // if (with_selection) extend_selection_to_cursor(state);
     // else cancel_selection(state);
 }
 
-void handle_char_input(Editor_State *state, char c)
+void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state)
 {
-    (void)c;
-    if (state->active_frame && state->active_frame->view->kind == VIEW_KIND_BUFFER)
+    text_buffer_insert_char(&buffer_view->buffer->text_buffer, c, buffer_view->cursor.pos);
+    buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
+    buffer_view->cursor.blink_time = 0.0f;
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+}
+
+void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state)
+{
+    if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
     {
-        // if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection))
-        // {
-        //     delete_selected(state);
-        // }
-        // insert_char(&active_view->buffer.buffer->text_buffer, c, &active_view->buffer.cursor, state, false);
+        buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
+        text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+        buffer_view->cursor.blink_time = 0.0f;
+        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
     }
 }
 

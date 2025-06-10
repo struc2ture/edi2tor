@@ -316,7 +316,7 @@ Rect get_string_rect(const char *str, Render_Font font, float x, float y);
 Rect get_string_range_rect(const char *str, Render_Font font, int start_char, int end_char);
 Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
-Rect get_cursor_rect(Text_Buffer text_buffer, Display_Cursor cursor, Render_State *render_state);
+Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state);
 
 void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4]);
 void draw_quad(Rect q, const unsigned char color[4]);
@@ -351,7 +351,7 @@ Vec_2 get_mouse_screen_pos(GLFWwindow *window);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state);
 Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
-void viewport_snap_to_cursor(Text_Buffer text_buffer, Display_Cursor cursor, Viewport *viewport, Render_State *render_state);
+void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
 
 bool is_cursor_pos_valid(Text_Buffer tb, Cursor_Pos bp);
 bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b);
@@ -430,7 +430,8 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
 void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state);
-
+void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state);
+void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void handle_char_input(Editor_State *state, char c);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
