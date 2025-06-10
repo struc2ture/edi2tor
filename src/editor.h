@@ -201,7 +201,16 @@ typedef struct {
 } Frame;
 
 typedef struct {
+    Frame *resized_frame;
+    Frame *dragged_frame;
+    Frame *scrolled_frame;
+    Vec_2 prev_mouse_pos;
+    float scroll_timeout;
+} Mouse_State;
+
+typedef struct {
     Render_State render_state;
+    Mouse_State mouse_state;
 
     Buffer **buffers;
     int buffer_count;
@@ -210,7 +219,6 @@ typedef struct {
     Frame **frames;
     int frame_count_;
     Frame *active_frame;
-    Frame *scrolled_frame;
 
     Viewport canvas_viewport;
 
@@ -222,13 +230,7 @@ typedef struct {
     int fps_frame_count;
     float fps;
     long long frame_count;
-    bool left_mouse_down;
-    bool left_mouse_handled;
-    Vec_2 prev_mouse_pos;
-    bool is_frame_drag;
-    bool is_frame_resize;
-    // bool is_buffer_view_text_area_click;
-    float scroll_timeout;
+
 } Editor_State;
 
 typedef enum {
@@ -349,7 +351,7 @@ Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
 Vec_2 get_mouse_screen_pos(GLFWwindow *window);
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state);
-Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state);
+Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
 
@@ -433,7 +435,14 @@ void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Mo
 void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state);
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void handle_char_input(Editor_State *state, char c);
-void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
+bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, Render_State *render_state);
+void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool will_propagate_to_view);
+void handle_mouse_click(GLFWwindow *window, Editor_State *state);
+void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
+void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
+void handle_mouse_click_drag(GLFWwindow *window, Mouse_State *mouse_state, Render_State *render_state);
+
+void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
 // void handle_mouse_text_area_click(View *view, bool with_selection, bool just_pressed, Vec_2 mouse_screen_pos, Editor_State *state);

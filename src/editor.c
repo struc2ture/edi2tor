@@ -69,15 +69,15 @@ void _render(GLFWwindow *window, void *_state)
 
     handle_mouse_input(window, state);
 
-    state->prev_mouse_pos = get_mouse_screen_pos(window);
+    state->mouse_state.prev_mouse_pos = get_mouse_screen_pos(window);
 
-    if (state->scroll_timeout > 0.0f)
+    if (state->mouse_state.scroll_timeout > 0.0f)
     {
-        state->scroll_timeout -= state->delta_time;
+        state->mouse_state.scroll_timeout -= state->delta_time;
     }
     else
     {
-        state->scrolled_frame = NULL;
+        state->mouse_state.scrolled_frame = NULL;
     }
 
     glfwSwapBuffers(window);
@@ -105,22 +105,35 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 {
     (void)window; (void)button; (void)action; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+    {
+        if (action == GLFW_PRESS)
+        {
+            handle_mouse_click(window, state);
+        }
+        else if (action == GLFW_RELEASE)
+        {
+            state->mouse_state.resized_frame = NULL;
+            state->mouse_state.dragged_frame = NULL;
+            state->mouse_state.scrolled_frame = NULL;
+        }
+    }
 }
 
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    if (state->scroll_timeout <= 0.0f)
+    if (state->mouse_state.scroll_timeout <= 0.0f)
     {
         Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
         Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-        state->scrolled_frame = frame_at_pos(mouse_canvas_pos, state);
+        state->mouse_state.scrolled_frame = frame_at_pos(mouse_canvas_pos, state);
     }
-    state->scroll_timeout = 0.1f;
+    state->mouse_state.scroll_timeout = 0.1f;
     bool scroll_handled_by_frame = false;
-    if (state->scrolled_frame)
+    if (state->mouse_state.scrolled_frame)
     {
-        scroll_handled_by_frame = frame_handle_scroll(state->scrolled_frame, x_offset, y_offset, &state->render_state);
+        scroll_handled_by_frame = frame_handle_scroll(state->mouse_state.scrolled_frame, x_offset, y_offset, &state->render_state);
     }
     if (!scroll_handled_by_frame)
     {
@@ -1396,12 +1409,12 @@ Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state)
     return p;
 }
 
-Vec_2 get_mouse_delta(GLFWwindow *window, Editor_State *state)
+Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state)
 {
     Vec_2 current_mouse_pos = get_mouse_screen_pos(window);
     Vec_2 delta_mouse_pos = {
-        .x = current_mouse_pos.x - state->prev_mouse_pos.x,
-        .y = current_mouse_pos.y - state->prev_mouse_pos.y
+        .x = current_mouse_pos.x - mouse_state->prev_mouse_pos.x,
+        .y = current_mouse_pos.y - mouse_state->prev_mouse_pos.y
     };
     return delta_mouse_pos;
 }
@@ -2665,66 +2678,92 @@ void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render
     }
 }
 
+bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, Render_State *render_state)
+{
+    if (view->kind == VIEW_KIND_BUFFER)
+    {
+        Rect text_area_rect = buffer_view_get_text_area_rect(view->bv, frame_rect, render_state);
+        if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool will_propagate_to_view)
+{
+    Rect resize_handle_rect = frame_get_resize_handle_rect(*frame, render_state);
+    if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+        mouse_state->resized_frame = frame;
+    else if (will_propagate_to_view && view_handle_mouse_click(frame->view, frame->outer_rect, mouse_canvas_pos, render_state))
+        {}// state->is_buffer_view_text_area_click = true;
+    else
+        mouse_state->dragged_frame = frame;
+}
+
+void handle_mouse_click(GLFWwindow *window, Editor_State *state)
+{
+    Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+    Frame *clicked_frame = frame_at_pos(mouse_canvas_pos, state);
+    if (clicked_frame != NULL)
+    {
+        if (state->active_frame != clicked_frame)
+        {
+            frame_set_active(clicked_frame, state);
+            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, false);
+        }
+        else
+        {
+            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, true);
+        }
+    }
+}
+
+void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
+{
+    Rect new_rect = frame->outer_rect;
+    new_rect.x += drag_delta.x;
+    new_rect.y += drag_delta.y;
+    frame_set_rect(frame, new_rect, render_state);
+}
+
+void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
+{
+    Rect new_rect = frame->outer_rect;
+    new_rect.w += drag_delta.x;
+    new_rect.h += drag_delta.y;
+    frame_set_rect(frame, new_rect, render_state);
+}
+
+void handle_mouse_click_drag(GLFWwindow *window, Mouse_State *mouse_state, Render_State *render_state)
+{
+    Vec_2 mouse_delta = get_mouse_delta(window, mouse_state);
+    if (mouse_state->dragged_frame)
+    {
+        frame_handle_drag(mouse_state->dragged_frame, mouse_delta, render_state);
+    }
+    else if (mouse_state->resized_frame)
+    {
+        frame_handle_resize(mouse_state->resized_frame, mouse_delta, render_state);
+    }
+}
+
 void handle_mouse_input(GLFWwindow *window, Editor_State *state)
 {
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
-        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-        bool is_just_pressed = !state->left_mouse_down;
-        state->left_mouse_down = true;
-        if (is_just_pressed)
-        {
-            Frame *clicked_frame = frame_at_pos(mouse_canvas_pos, state);
-            if (clicked_frame != NULL)
-            {
-                if (state->active_frame != clicked_frame)
-                {
-                    frame_set_active(clicked_frame, state);
-                    state->left_mouse_handled = true;
-                }
-                // Rect text_area_rect = buffer_view_get_text_area_rect(*clicked_view, &state->render_state);
-                Rect resize_handle_rect = frame_get_resize_handle_rect(*clicked_frame, &state->render_state);
-                if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-                    state->is_frame_resize = true;
-                // else if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
-                    // state->is_buffer_view_text_area_click = true;
-                else
-                    state->is_frame_drag = true;
-            }
-        }
+        handle_mouse_click_drag(window, &state->mouse_state, &state->render_state);
 
+        // Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+        // Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
         // if (!state->left_mouse_handled && state->is_buffer_view_text_area_click)
         // {
         //     bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
         //     Vec_2 mouse_text_area_pos = view_buffer_canvas_pos_to_text_area_pos(*active_view, mouse_canvas_pos, &state->render_state);
         //     handle_mouse_text_area_click(active_view, is_shift_pressed, is_just_pressed, mouse_text_area_pos, state);
         // }
-        // else
-        if (state->is_frame_drag)
-        {
-            Vec_2 mouse_delta = get_mouse_delta(window, state);
-            Rect new_rect = state->active_frame->outer_rect;
-            new_rect.x += mouse_delta.x;
-            new_rect.y += mouse_delta.y;
-            frame_set_rect(state->active_frame, new_rect, &state->render_state);
-        }
-        else if (state->is_frame_resize)
-        {
-            Vec_2 mouse_delta = get_mouse_delta(window, state);
-            Rect new_rect = state->active_frame->outer_rect;
-            new_rect.w += mouse_delta.x;
-            new_rect.h += mouse_delta.y;
-            frame_set_rect(state->active_frame, new_rect, &state->render_state);
-        }
-    }
-    else
-    {
-        state->left_mouse_down = false;
-        state->left_mouse_handled = false;
-        // state->is_buffer_view_text_area_click = false;
-        state->is_frame_drag = false;
-        state->is_frame_resize = false;
     }
 }
 
