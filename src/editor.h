@@ -337,7 +337,7 @@ void draw_view(View view, Rect frame_rect, bool is_active, Viewport canvas_viewp
 void draw_buffer_view(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
-// void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state);
+void draw_buffer_view_selection(Buffer_View buffer_view, Render_State *render_state);
 void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Viewport canvas_viewport, Render_State *render_state);
 void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state);
 
@@ -361,10 +361,6 @@ Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state);
 Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
-
-bool is_cursor_pos_valid(Text_Buffer tb, Cursor_Pos bp);
-bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b);
-void cancel_selection(Editor_State *state);
 
 bool cursor_iterator_next(Cursor_Iterator *it);
 bool cursor_iterator_prev(Cursor_Iterator *it);

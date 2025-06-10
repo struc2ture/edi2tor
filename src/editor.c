@@ -1060,8 +1060,10 @@ void draw_buffer_view(Buffer_View buffer_view, Rect frame_rect, bool is_active, 
     transform_set_buffer_view_text_area(buffer_view, frame_rect, canvas_viewport, render_state);
     draw_text_buffer(*text_buffer, *buffer_viewport, render_state);
     if (is_active)
+    {
         draw_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
-    // draw_selection(*text_buffer, *text_selection, *buffer_viewport, render_state);
+    }
+    draw_buffer_view_selection(buffer_view, render_state);
 
     draw_buffer_view_line_numbers(buffer_view, frame_rect, canvas_viewport, render_state);
     if (buffer_view.buffer->kind == BUFFER_FILE)
@@ -1098,20 +1100,14 @@ void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewp
     }
 }
 
-#if 0
-void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport viewport, Render_State *render_state)
+void draw_buffer_view_selection(Buffer_View buffer_view, Render_State *render_state)
 {
-    if (is_selection_valid(text_buffer, selection)) {
-        Cursor_Pos start = selection.start;
-        Cursor_Pos end = selection.end;
-        if (start.line > end.line || (start.line == end.line && start.col > end.col)) {
-            Cursor_Pos tmp = start;
-            start = end;
-            end = tmp;
-        }
+    if (buffer_view.mark.active && !cursor_pos_eq(buffer_view.mark.pos, buffer_view.cursor.pos)) {
+        Cursor_Pos start = cursor_pos_min(buffer_view.mark.pos, buffer_view.cursor.pos);
+        Cursor_Pos end = cursor_pos_max(buffer_view.mark.pos, buffer_view.cursor.pos);
         for (int i = start.line; i <= end.line; i++)
         {
-            Text_Line *line = &text_buffer.lines[i];
+            Text_Line *line = &buffer_view.buffer->text_buffer.lines[i];
             int h_start, h_end;
             if (i == start.line && i == end.line) {
                 h_start = start.col;
@@ -1130,13 +1126,12 @@ void draw_selection(Text_Buffer text_buffer, Text_Selection selection, Viewport 
             {
                 Rect selected_rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
                 selected_rect.y += i * get_font_line_height(render_state->font);
-                if (rect_intersect(selected_rect, viewport.rect))
+                if (rect_intersect(selected_rect, buffer_view.viewport.rect))
                     draw_quad(selected_rect, (unsigned char[4]){200, 200, 200, 130});
             }
         }
     }
 }
-#endif
 
 void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Viewport canvas_viewport, Render_State *render_state)
 {
@@ -1465,18 +1460,6 @@ void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Vie
             if (viewport->rect.x > buffer_max_x) viewport->rect.x = buffer_max_x;
         }
     }
-}
-
-bool is_cursor_pos_valid(Text_Buffer text_buf, Cursor_Pos buf_pos)
-{
-    bool is_valid = buf_pos.line >= 0 && buf_pos.line < text_buf.line_count &&
-        buf_pos.col >= 0 && buf_pos.col < text_buf.lines[buf_pos.line].len;
-    return is_valid;
-}
-
-bool is_cursor_pos_equal(Cursor_Pos a, Cursor_Pos b)
-{
-    return a.line == b.line && a.col == b.col;
 }
 
 bool cursor_iterator_next(Cursor_Iterator *it)
@@ -2747,7 +2730,7 @@ void handle_mouse_click(GLFWwindow *window, Editor_State *state)
 
 void buffer_view_handle_mouse_release(Buffer_View *buffer_view)
 {
-    if (buffer_view->mark.active && is_cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
+    if (buffer_view->mark.active && cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
     {
         buffer_view->mark.active = false;
     }

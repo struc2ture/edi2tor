@@ -180,8 +180,20 @@ static bool is_white_line(const char *str)
     return true;
 }
 
-inline static bool is_cursor_pos_eq(Cursor_Pos a, Cursor_Pos b)
+inline static bool cursor_pos_eq(Cursor_Pos a, Cursor_Pos b)
 {
     bool equal = a.line == b.line && a.col == b.col;
     return equal;
+}
+
+inline static Cursor_Pos cursor_pos_min(Cursor_Pos a, Cursor_Pos b)
+{
+    if (a.line < b.line || (a.line == b.line && a.col <= b.col)) return a;
+    else return b;
+}
+
+inline static Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b)
+{
+    if (a.line > b.line || (a.line == b.line && a.col >= b.col)) return a;
+    else return b;
 }
