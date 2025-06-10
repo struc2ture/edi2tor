@@ -113,10 +113,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         }
         else if (action == GLFW_RELEASE)
         {
-            state->mouse_state.resized_frame = NULL;
-            state->mouse_state.dragged_frame = NULL;
-            state->mouse_state.scrolled_frame = NULL;
-            state->mouse_state.view_clicked_frame = NULL;
+            handle_mouse_release(&state->mouse_state);
         }
     }
 }
@@ -2679,26 +2676,51 @@ void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render
     }
 }
 
-bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, Render_State *render_state)
+void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state)
 {
-    if (view->kind == VIEW_KIND_BUFFER)
+    Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*buffer_view, frame_rect, mouse_canvas_pos, render_state);
+    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
+    Cursor_Pos text_cursor_under_mouse = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, render_state);
+    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
+}
+
+void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
+{
+    buffer_view->mark.active = true;
+    buffer_view->mark.pos = pos;
+}
+
+bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+{
+    Rect text_area_rect = buffer_view_get_text_area_rect(*buffer_view, frame_rect, render_state);
+    if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
     {
-        Rect text_area_rect = buffer_view_get_text_area_rect(view->bv, frame_rect, render_state);
-        if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
+        buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+        if (!is_shift_pressed)
         {
-            return true;
+            buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
         }
+        return true;
     }
     return false;
 }
 
-void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool will_propagate_to_view)
+bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state)
+{
+    if (view->kind == VIEW_KIND_BUFFER)
+    {
+        return buffer_view_handle_mouse_click(&view->bv, frame_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+    }
+    return false;
+}
+
+void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool is_shift_pressed, bool will_propagate_to_view)
 {
     Rect resize_handle_rect = frame_get_resize_handle_rect(*frame, render_state);
     if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
         mouse_state->resized_frame = frame;
-    else if (will_propagate_to_view && view_handle_mouse_click(frame->view, frame->outer_rect, mouse_canvas_pos, render_state))
-        mouse_state->view_clicked_frame = frame;
+    else if (will_propagate_to_view && view_handle_mouse_click(frame->view, frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state))
+        mouse_state->drag_in_view_frame = frame;
     else
         mouse_state->dragged_frame = frame;
 }
@@ -2707,48 +2729,61 @@ void handle_mouse_click(GLFWwindow *window, Editor_State *state)
 {
     Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+    bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
     Frame *clicked_frame = frame_at_pos(mouse_canvas_pos, state);
     if (clicked_frame != NULL)
     {
         if (state->active_frame != clicked_frame)
         {
             frame_set_active(clicked_frame, state);
-            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, false);
+            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, is_shift_pressed, false);
         }
         else
         {
-            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, true);
+            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, is_shift_pressed, true);
         }
     }
 }
 
-void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state)
+void buffer_view_handle_mouse_release(Buffer_View *buffer_view)
 {
-    Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*buffer_view, outer_rect, mouse_canvas_pos, render_state);
-    (void)is_shift_pressed;
-    // if (with_selection && just_pressed && !is_selection_valid(view->buffer.buffer->text_buffer, view->buffer.selection))
-    // {
-    //     start_selection_at_cursor(state);
-    // }
-    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
-    Cursor_Pos text_cursor_under_mouse = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, render_state);
-    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
-    // extend_selection_to_cursor(state);
-    // if (!with_selection && just_pressed)
-    // {
-    //     start_selection_at_cursor(state);
-    // }
-    // if (with_selection || !just_pressed)
-    // {
-    //     extend_selection_to_cursor(state);
-    // }
+    if (buffer_view->mark.active && is_cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
+    {
+        buffer_view->mark.active = false;
+    }
 }
 
-void view_handle_click_drag(View *view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state)
+void view_handle_mouse_release(View *view)
 {
     if (view->kind == VIEW_KIND_BUFFER)
     {
-        buffer_view_handle_click_drag(&view->bv, outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+        buffer_view_handle_mouse_release(&view->bv);
+    }
+}
+
+void handle_mouse_release(Mouse_State *mouse_state)
+{
+    mouse_state->resized_frame = NULL;
+    mouse_state->dragged_frame = NULL;
+    mouse_state->scrolled_frame = NULL;
+    if (mouse_state->drag_in_view_frame)
+    {
+        view_handle_mouse_release(mouse_state->drag_in_view_frame->view);
+        mouse_state->drag_in_view_frame = NULL;
+    }
+}
+
+void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+{
+    (void)is_shift_pressed;
+    buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+}
+
+void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+{
+    if (view->kind == VIEW_KIND_BUFFER)
+    {
+        buffer_view_handle_click_drag(&view->bv, frame_rect, mouse_canvas_pos, is_shift_pressed, render_state);
     }
 }
 
@@ -2770,9 +2805,9 @@ void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_st
 
 void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
 {
-    if (mouse_state->view_clicked_frame)
+    if (mouse_state->drag_in_view_frame)
     {
-        view_handle_click_drag(mouse_state->view_clicked_frame->view, mouse_state->view_clicked_frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+        view_handle_click_drag(mouse_state->drag_in_view_frame->view, mouse_state->drag_in_view_frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
     }
     else if (mouse_state->dragged_frame)
     {

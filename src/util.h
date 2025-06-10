@@ -179,3 +179,9 @@ static bool is_white_line(const char *str)
     }
     return true;
 }
+
+inline static bool is_cursor_pos_eq(Cursor_Pos a, Cursor_Pos b)
+{
+    bool equal = a.line == b.line && a.col == b.col;
+    return equal;
+}

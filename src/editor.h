@@ -171,21 +171,27 @@ typedef struct {
     };
 } Buffer;
 
-typedef enum  {
-    VIEW_KIND_BUFFER,
-    VIEW_KIND_IMAGE,
-} View_Kind;
+typedef struct {
+    bool active;
+    Cursor_Pos pos;
+} Text_Mark;
 
 struct Buffer_View {
     Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
     Text_Selection selection;
+    Text_Mark mark;
 };
 
 typedef struct {
     int a;
 } Image_View;
+
+typedef enum  {
+    VIEW_KIND_BUFFER,
+    VIEW_KIND_IMAGE,
+} View_Kind;
 
 typedef struct {
     union {
@@ -204,7 +210,7 @@ typedef struct {
     Frame *resized_frame;
     Frame *dragged_frame;
     Frame *scrolled_frame;
-    Frame *view_clicked_frame;
+    Frame *drag_in_view_frame;
     Vec_2 prev_mouse_pos;
     float scroll_timeout;
 } Mouse_State;
@@ -437,12 +443,18 @@ void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_Stat
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void handle_char_input(Editor_State *state, char c);
 
-bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, Render_State *render_state);
-void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool will_propagate_to_view);
+void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state);
+void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
+bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
+bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
+void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool is_shift_pressed, bool will_propagate_to_view);
 void handle_mouse_click(GLFWwindow *window, Editor_State *state);
+void buffer_view_handle_mouse_release(Buffer_View *buffer_view);
+void view_handle_mouse_release(View *view);
+void handle_mouse_release(Mouse_State *mouse_state);
 
-void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
-void view_handle_click_drag(View *view, Rect outer_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
+void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
+void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
 void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
 void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
 void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state);
