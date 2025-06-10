@@ -2600,10 +2600,9 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
     }
 }
 
-void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_selection, bool big_steps, bool start_end, Editor_State *state)
+void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state)
 {
-    (void)with_selection;
-    // if (with_selection && !is_selection_valid(buffer_view->buffer->text_buffer, buffer_view->selection)) start_selection_at_cursor(state);
+    if (is_shift_pressed && !buffer_view->mark.active) buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
 
     switch (dir)
     {
@@ -2636,8 +2635,8 @@ void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Mo
     viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     buffer_view->cursor.blink_time = 0.0f;
 
-    // if (with_selection) extend_selection_to_cursor(state);
-    // else cancel_selection(state);
+    if (is_shift_pressed) buffer_view___validate_mark(buffer_view);
+    else buffer_view->mark.active = false;
 }
 
 void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state)
@@ -2673,14 +2672,29 @@ void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
     buffer_view->mark.pos = pos;
 }
 
+void buffer_view___validate_mark(Buffer_View *buffer_view)
+{
+    if (buffer_view->mark.active && cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
+        buffer_view->mark.active = false;
+}
+
 bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
 {
     Rect text_area_rect = buffer_view_get_text_area_rect(*buffer_view, frame_rect, render_state);
     if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
     {
-        buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
-        if (!is_shift_pressed)
+        if (is_shift_pressed)
         {
+            if (!buffer_view->mark.active)
+                buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
+
+            buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+
+            buffer_view___validate_mark(buffer_view);
+        }
+        else
+        {
+            buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
             buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
         }
         return true;
@@ -2730,10 +2744,7 @@ void handle_mouse_click(GLFWwindow *window, Editor_State *state)
 
 void buffer_view_handle_mouse_release(Buffer_View *buffer_view)
 {
-    if (buffer_view->mark.active && cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
-    {
-        buffer_view->mark.active = false;
-    }
+    buffer_view___validate_mark(buffer_view);
 }
 
 void view_handle_mouse_release(View *view)
