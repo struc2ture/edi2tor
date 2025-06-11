@@ -20,6 +20,7 @@
 #define DEFAULT_ZOOM 1.0f
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
 #define FONT_SIZE 20.0f
+#define ENABLE_OS_CLIPBOARD true
 
 #define FILE_PATH1 "res/mock6.txt"
 // #define FILE_PATH1 "res/mock4.txt"
@@ -458,3 +459,6 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 void string_builder_append_f(String_Builder *string_builder, const char *fmt, ...);
 void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
 char *string_builder_compile_and_destroy(String_Builder *string_builder);
+
+void read_clipboard_mac(char *buf, size_t buf_size);
+void write_clipboard_mac(const char *text);

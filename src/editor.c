@@ -1948,6 +1948,7 @@ Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range,
     bassert(pos.line < text_buffer->line_count);
     bassert(pos.col < text_buffer->lines[pos.line].len);
     int range_len = strlen(range);
+    bassert(range_len > 0);
     int segment_count = str_get_line_segment_count(range);
 
     Cursor_Pos end_cursor = pos;
@@ -2267,24 +2268,47 @@ void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state)
     {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
-
-        if (state->copy_buffer) free(state->copy_buffer);
-        state->copy_buffer = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
-
-        trace_log("Copied: %s", state->copy_buffer);
+        if (ENABLE_OS_CLIPBOARD)
+        {
+            char *range = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
+            write_clipboard_mac(range);
+            free(range);
+        }
+        else
+        {
+            if (state->copy_buffer) free(state->copy_buffer);
+            state->copy_buffer = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
+        }
     }
 }
 
 void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state)
 {
-    if (state->copy_buffer)
+    if (ENABLE_OS_CLIPBOARD)
     {
-        if (buffer_view->mark.active)
+        char buf[10*1024];
+        read_clipboard_mac(buf, sizeof(buf));
+        if (strlen(buf) > 0)
         {
-            buffer_view_delete_selected(buffer_view);
+            if (buffer_view->mark.active)
+            {
+                buffer_view_delete_selected(buffer_view);
+            }
+            Cursor_Pos new_cursor = text_buffer_insert_range(&buffer_view->buffer->text_buffer, buf, buffer_view->cursor.pos);
+            buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, new_cursor);
         }
-        Cursor_Pos new_cursor = text_buffer_insert_range(&buffer_view->buffer->text_buffer, state->copy_buffer, buffer_view->cursor.pos);
-        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, new_cursor);
+    }
+    else
+    {
+        if (state->copy_buffer)
+        {
+            if (buffer_view->mark.active)
+            {
+                buffer_view_delete_selected(buffer_view);
+            }
+            Cursor_Pos new_cursor = text_buffer_insert_range(&buffer_view->buffer->text_buffer, state->copy_buffer, buffer_view->cursor.pos);
+            buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, new_cursor);
+        }
     }
 }
 
@@ -2785,4 +2809,25 @@ char *string_builder_compile_and_destroy(String_Builder *string_builder)
     string_builder->chunk_count = 0;
 
     return compiled_str;
+}
+
+void read_clipboard_mac(char *buf, size_t buf_size)
+{
+    FILE *pipe = popen("pbpaste", "r");
+    if (!pipe) return;
+    size_t len = 0;
+    while (fgets(buf + len, buf_size - len, pipe))
+    {
+        len = strlen(buf);
+        if (len >= buf_size - 1) break;
+    }
+    pclose(pipe);
+}
+
+void write_clipboard_mac(const char *text)
+{
+    FILE *pipe = popen("pbcopy", "w");
+    if (!pipe) return;
+    fputs(text, pipe);
+    pclose(pipe);
 }
