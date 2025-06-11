@@ -418,11 +418,6 @@ File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
 void file_write(Text_Buffer text_buffer, const char *path);
 
 #if 0
-void start_selection_at_cursor(Editor_State *state);
-void extend_selection_to_cursor(Editor_State *state);
-void cancel_selection(Editor_State *state);
-bool is_selection_valid(Text_Buffer text_buffer, Text_Selection selection);
-int selection_char_count(Editor_State *state);
 void delete_selected(Editor_State *state);
 
 void copy_at_selection(Editor_State *state);
@@ -431,29 +426,31 @@ void paste_from_copy_buffer(Editor_State *state);
 
 void rebuild_dl();
 
-void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);
-void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state);
-void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
-void handle_char_input(Editor_State *state, char c);
-
-void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state);
 void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
 void buffer_view___validate_mark(Buffer_View *buffer_view);
-bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
-bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
-void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool is_shift_pressed, bool will_propagate_to_view);
-void handle_mouse_click(GLFWwindow *window, Editor_State *state);
-void buffer_view_handle_mouse_release(Buffer_View *buffer_view);
-void view_handle_mouse_release(View *view);
-void handle_mouse_release(Mouse_State *mouse_state);
+void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state);
+
+void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
+void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);
+void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+
+void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state);
 
 void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
 void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
 void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
 void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state);
 void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state);
+
+bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
+bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state);
+void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool is_shift_pressed, bool will_propagate_to_view);
+void handle_mouse_click(GLFWwindow *window, Editor_State *state);
+
+void buffer_view_handle_mouse_release(Buffer_View *buffer_view);
+void view_handle_mouse_release(View *view);
+void handle_mouse_release(Mouse_State *mouse_state);
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);

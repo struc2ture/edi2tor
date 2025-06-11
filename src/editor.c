@@ -2220,77 +2220,6 @@ void file_write(Text_Buffer text_buffer, const char *path)
 }
 
 #if 0
-void start_selection_at_cursor(Editor_State *state)
-{
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    active_view->buffer.selection.start = active_view->buffer.cursor.pos;
-    active_view->buffer.selection.end = active_view->buffer.selection.start;
-}
-
-void extend_selection_to_cursor(Editor_State *state)
-{
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    active_view->buffer.selection.end = active_view->buffer.cursor.pos;
-}
-
-bool is_selection_valid(Text_Buffer text_buffer, Text_Selection selection)
-{
-    bool is_valid = is_cursor_pos_valid(text_buffer, selection.start) &&
-        is_cursor_pos_valid(text_buffer, selection.end) &&
-        !is_cursor_pos_equal(selection.start, selection.end);
-    return is_valid;
-}
-
-void cancel_selection(Editor_State *state)
-{
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    active_view->buffer.selection.start = (Cursor_Pos){ -1, -1 };
-    active_view->buffer.selection.end = (Cursor_Pos){ -1, -1 };
-}
-
-int selection_char_count(Editor_State *state)
-{
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    int char_count = 0;
-    if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection))
-    {
-        Cursor_Pos start = active_view->buffer.selection.start;
-        Cursor_Pos end = active_view->buffer.selection.end;
-        if (start.line > end.line)
-        {
-            Cursor_Pos temp = start;
-            start = end;
-            end = temp;
-        }
-        for (int i = start.line; i <= end.line; i++)
-        {
-            if (i == start.line && i == end.line)
-            {
-                int diff = end.col - start.col;
-                if (diff < 0) diff = -diff;
-                char_count += diff;
-            }
-            else if (i == start.line)
-            {
-                char_count += active_view->buffer.buffer->text_buffer.lines[i].len - start.col;
-            }
-            else if (i == end.line)
-            {
-                char_count += end.col;
-            }
-            else
-            {
-                char_count += active_view->buffer.buffer->text_buffer.lines[i].len;
-            }
-        }
-    }
-    return char_count;
-}
-
 void delete_selected(Editor_State *state)
 {
     View *active_view = state->active_view;
@@ -2405,79 +2334,74 @@ void rebuild_dl()
     trace_log("Rebuilt dl");
 }
 
-void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
 {
-    (void) window;
-    switch(key)
-    {
-        // case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
-        // {
-        //     glfwSetWindowShouldClose(window, 1);
-        // } break;
-        case GLFW_KEY_F1: if (action == GLFW_PRESS)
-        {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            Text_Buffer log_buffer = {0};
-            unit_tests_run(&log_buffer, true);
-            Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
-            frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
-            viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
-        } break;
-        case GLFW_KEY_F12: if (action == GLFW_PRESS)
-        {
-            state->should_break = true;
-        } break;
-        case GLFW_KEY_F9: if (action == GLFW_PRESS)
-        {
-            rebuild_dl();
-        } break;
-        case GLFW_KEY_W: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            if (state->active_frame != NULL)
-            {
-                frame_destroy(state->active_frame, state);
-            }
-        } break;
-        case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-            frame_create_buffer_view_open_file(
-                FILE_PATH1,
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
-                state);
-        } break;
-        case GLFW_KEY_O: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_buffer_view_prompt(
-                "Open file:",
-                prompt_create_context_open_file(),
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
-                state);
-        } break;
-    }
+    buffer_view->mark.active = true;
+    buffer_view->mark.pos = pos;
+}
 
-    if (state->active_frame)
+void buffer_view___validate_mark(Buffer_View *buffer_view)
+{
+    if (buffer_view->mark.active && cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
+        buffer_view->mark.active = false;
+}
+
+void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state)
+{
+    Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*buffer_view, frame_rect, mouse_canvas_pos, render_state);
+    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
+    Cursor_Pos text_cursor_under_mouse = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, render_state);
+    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
+}
+
+void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state)
+{
+    if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
     {
-        view_handle_key(state->active_frame->view, window, state, key, action, mods);
+        buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
+        text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+        buffer_view->cursor.blink_time = 0.0f;
+        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
     }
 }
 
-void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state)
 {
-    switch (view->kind)
-    {
-        case VIEW_KIND_BUFFER:
-        {
-            buffer_view_handle_key(&view->bv, window, state, key, action, mods);
-        } break;
+    if (is_shift_pressed && !buffer_view->mark.active) buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
 
-        default:
+    switch (dir)
+    {
+        case CURSOR_MOVE_LEFT:
         {
-            log_warning("view_handle_key: Unhandled View kind: %d", view->kind);
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
+        } break;
+        case CURSOR_MOVE_RIGHT:
+        {
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
+        } break;
+        case CURSOR_MOVE_UP:
+        {
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_paragraph(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_buffer(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1);
+        } break;
+        case CURSOR_MOVE_DOWN:
+        {
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_paragraph(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_buffer(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1);
         } break;
     }
+
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
+    buffer_view->cursor.blink_time = 0.0f;
+
+    if (is_shift_pressed) buffer_view___validate_mark(buffer_view);
+    else buffer_view->mark.active = false;
 }
 
 void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
@@ -2600,43 +2524,79 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
     }
 }
 
-void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state)
+void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
-    if (is_shift_pressed && !buffer_view->mark.active) buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
-
-    switch (dir)
+    switch (view->kind)
     {
-        case CURSOR_MOVE_LEFT:
+        case VIEW_KIND_BUFFER:
         {
-            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
+            buffer_view_handle_key(&view->bv, window, state, key, action, mods);
         } break;
-        case CURSOR_MOVE_RIGHT:
+
+        default:
         {
-            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
+            log_warning("view_handle_key: Unhandled View kind: %d", view->kind);
         } break;
-        case CURSOR_MOVE_UP:
+    }
+}
+
+void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+{
+    (void) window;
+    switch(key)
+    {
+        // case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
+        // {
+        //     glfwSetWindowShouldClose(window, 1);
+        // } break;
+        case GLFW_KEY_F1: if (action == GLFW_PRESS)
         {
-            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_paragraph(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_buffer(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1);
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+            Text_Buffer log_buffer = {0};
+            unit_tests_run(&log_buffer, true);
+            Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+            frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
+            viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
         } break;
-        case CURSOR_MOVE_DOWN:
+        case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {
-            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_paragraph(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_buffer(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else buffer_view->cursor.pos = cursor_pos_advance_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1);
+            state->should_break = true;
+        } break;
+        case GLFW_KEY_F9: if (action == GLFW_PRESS)
+        {
+            rebuild_dl();
+        } break;
+        case GLFW_KEY_W: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            if (state->active_frame != NULL)
+            {
+                frame_destroy(state->active_frame, state);
+            }
+        } break;
+        case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            frame_create_buffer_view_open_file(
+                FILE_PATH1,
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
+        } break;
+        case GLFW_KEY_O: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+            frame_create_buffer_view_prompt(
+                "Open file:",
+                prompt_create_context_open_file(),
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+                state);
         } break;
     }
 
-    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
-    buffer_view->cursor.blink_time = 0.0f;
-
-    if (is_shift_pressed) buffer_view___validate_mark(buffer_view);
-    else buffer_view->mark.active = false;
+    if (state->active_frame)
+    {
+        view_handle_key(state->active_frame->view, window, state, key, action, mods);
+    }
 }
 
 void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state)
@@ -2647,35 +2607,50 @@ void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_Stat
     viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
 }
 
-void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state)
+void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
 {
-    if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
+    (void)is_shift_pressed;
+    buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+}
+
+void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+{
+    if (view->kind == VIEW_KIND_BUFFER)
     {
-        buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
-        text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-        buffer_view->cursor.blink_time = 0.0f;
-        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+        buffer_view_handle_click_drag(&view->bv, frame_rect, mouse_canvas_pos, is_shift_pressed, render_state);
     }
 }
 
-void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state)
+void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
 {
-    Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(*buffer_view, frame_rect, mouse_canvas_pos, render_state);
-    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(*buffer_view, mouse_text_area_pos);
-    Cursor_Pos text_cursor_under_mouse = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, render_state);
-    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
+    Rect new_rect = frame->outer_rect;
+    new_rect.x += drag_delta.x;
+    new_rect.y += drag_delta.y;
+    frame_set_rect(frame, new_rect, render_state);
 }
 
-void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
+void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
 {
-    buffer_view->mark.active = true;
-    buffer_view->mark.pos = pos;
+    Rect new_rect = frame->outer_rect;
+    new_rect.w += drag_delta.x;
+    new_rect.h += drag_delta.y;
+    frame_set_rect(frame, new_rect, render_state);
 }
 
-void buffer_view___validate_mark(Buffer_View *buffer_view)
+void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
 {
-    if (buffer_view->mark.active && cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
-        buffer_view->mark.active = false;
+    if (mouse_state->drag_in_view_frame)
+    {
+        view_handle_click_drag(mouse_state->drag_in_view_frame->view, mouse_state->drag_in_view_frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+    }
+    else if (mouse_state->dragged_frame)
+    {
+        frame_handle_drag(mouse_state->dragged_frame, mouse_delta, render_state);
+    }
+    else if (mouse_state->resized_frame)
+    {
+        frame_handle_resize(mouse_state->resized_frame, mouse_delta, render_state);
+    }
 }
 
 bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
@@ -2764,52 +2739,6 @@ void handle_mouse_release(Mouse_State *mouse_state)
     {
         view_handle_mouse_release(mouse_state->drag_in_view_frame->view);
         mouse_state->drag_in_view_frame = NULL;
-    }
-}
-
-void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
-{
-    (void)is_shift_pressed;
-    buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
-}
-
-void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
-{
-    if (view->kind == VIEW_KIND_BUFFER)
-    {
-        buffer_view_handle_click_drag(&view->bv, frame_rect, mouse_canvas_pos, is_shift_pressed, render_state);
-    }
-}
-
-void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
-{
-    Rect new_rect = frame->outer_rect;
-    new_rect.x += drag_delta.x;
-    new_rect.y += drag_delta.y;
-    frame_set_rect(frame, new_rect, render_state);
-}
-
-void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
-{
-    Rect new_rect = frame->outer_rect;
-    new_rect.w += drag_delta.x;
-    new_rect.h += drag_delta.y;
-    frame_set_rect(frame, new_rect, render_state);
-}
-
-void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
-{
-    if (mouse_state->drag_in_view_frame)
-    {
-        view_handle_click_drag(mouse_state->drag_in_view_frame->view, mouse_state->drag_in_view_frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
-    }
-    else if (mouse_state->dragged_frame)
-    {
-        frame_handle_drag(mouse_state->dragged_frame, mouse_delta, render_state);
-    }
-    else if (mouse_state->resized_frame)
-    {
-        frame_handle_resize(mouse_state->resized_frame, mouse_delta, render_state);
     }
 }
 
