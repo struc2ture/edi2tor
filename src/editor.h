@@ -390,7 +390,8 @@ void text_line_insert_char(Text_Line *text_line, char c, int insert_index);
 void text_line_remove_char(Text_Line *text_line, int remove_index);
 void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index, int insert_count);
 void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
-int text_line_get_indent(Text_Line text_line);
+int text_line_indent_get_level(Text_Line text_line);
+int text_line_indent_set_level(Text_Line *text_line, int indent_level);
 int text_line_indent_level_increase(Text_Line *text_line);
 int text_line_indent_level_decrease(Text_Line *text_line);
 
@@ -407,18 +408,7 @@ void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
-
-#if 0
-void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
-void remove_char(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
-void insert_indent(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
-int get_line_indent(Text_Line line);
-void decrease_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
-void decrease_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
-void increase_indent_level_line(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
-void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Editor_State *state);
-void delete_current_line(Editor_State *state);
-#endif
+int text_buffer_match_indent(Text_Buffer *text_buffer, int line);
 
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state);
