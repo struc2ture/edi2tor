@@ -1578,6 +1578,15 @@ Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int 
     return (Cursor_Pos){line, col};
 }
 
+Cursor_Pos cursor_pos_advance_char_n(Text_Buffer text_buffer, Cursor_Pos pos, int n, int dir, bool can_switch_lines)
+{
+    for (int i = 0; i < n; i++)
+    {
+        pos = cursor_pos_advance_char(text_buffer, pos, dir, can_switch_lines);
+    }
+    return pos;
+}
+
 Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int dir)
 {
     int line = pos.line;
@@ -1816,6 +1825,42 @@ void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_c
         text_line->str[i] = text_line->str[i + remove_count];
     }
     text_line___resize(text_line, text_line->len - remove_count);
+}
+
+int text_line_get_indent(Text_Line text_line)
+{
+    int spaces = 0;
+    char *str = text_line.str;
+    while (*str)
+    {
+        if (*str == ' ') spaces++;
+        else return spaces;
+        str++;
+    }
+    return 0;
+}
+
+int text_line_indent_level_increase(Text_Line *text_line)
+{
+    int indent_level = text_line_get_indent(*text_line);
+    int chars_to_add = INDENT_SPACES - (indent_level % INDENT_SPACES);
+    for (int i = 0; i < chars_to_add; i++)
+    {
+        text_line_insert_char(text_line, ' ', 0);
+    }
+    return chars_to_add;
+}
+
+int text_line_indent_level_decrease(Text_Line *text_line)
+{
+    int indent_level = text_line_get_indent(*text_line);
+    int chars_to_remove = indent_level % INDENT_SPACES;
+    if (indent_level >= INDENT_SPACES && chars_to_remove == 0)
+    {
+        chars_to_remove = 4;
+    }
+    text_line_remove_range(text_line, 0, chars_to_remove);
+    return chars_to_remove;
 }
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...)
@@ -2233,35 +2278,6 @@ void delete_current_line(Editor_State *state)
 }
 #endif
 
-File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
-{
-    File_Info file_info = {0};
-    file_info.path = xstrdup(path);
-    FILE *f = fopen(file_info.path, "r");
-    if (!f) fatal("Failed to open file for reading at %s", path);
-    char buf[MAX_CHARS_PER_LINE];
-    memset(text_buffer, 0, sizeof(*text_buffer));
-    while (fgets(buf, sizeof(buf), f)) {
-        text_buffer->line_count++;
-        bassert(text_buffer->line_count <= MAX_LINES);
-        text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
-        text_buffer->lines[text_buffer->line_count - 1] = text_line_make_dup(buf);
-    }
-    fclose(f);
-    return file_info;
-}
-
-void file_write(Text_Buffer text_buffer, const char *path)
-{
-    FILE *f = fopen(path, "w");
-    if (!f) fatal("Failed to open file for writing at %s", path);
-    for (int i = 0; i < text_buffer.line_count; i++) {
-        fputs(text_buffer.lines[i].str, f);
-    }
-    fclose(f);
-    trace_log("Saved file to %s", path);
-}
-
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state)
 {
     if (buffer_view->mark.active)
@@ -2312,15 +2328,6 @@ void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state)
     }
 }
 
-void rebuild_dl()
-{
-    int result = system("make dl");
-    if (result != 0) {
-        fprintf(stderr, "Build failed with code %d\n", result);
-    }
-    trace_log("Rebuilt dl");
-}
-
 void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
 {
     buffer_view->mark.active = true;
@@ -2350,6 +2357,68 @@ void buffer_view_delete_selected(Buffer_View *buffer_view)
     text_buffer_remove_range(&buffer_view->buffer->text_buffer, start, end);
     buffer_view->mark.active = false;
     buffer_view->cursor.pos = start;
+}
+
+void buffer_view_insert_indent(Buffer_View *buffer_view, Render_State *render_state)
+{
+    if (buffer_view->mark.active)
+    {
+        buffer_view_increase_indent_level(buffer_view, render_state);
+    }
+    else
+    {
+        int spaces_to_insert = INDENT_SPACES - buffer_view->cursor.pos.col % INDENT_SPACES;
+        for (int i = 0; i < spaces_to_insert; i++)
+        {
+            text_buffer_insert_char(&buffer_view->buffer->text_buffer, ' ', buffer_view->cursor.pos);
+        }
+        buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, spaces_to_insert, +1, false);
+        buffer_view->cursor.blink_time = 0.0f;
+        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+    }
+}
+
+void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state)
+{
+    if (buffer_view->mark.active)
+    {
+        Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
+        Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+        for (int i = start.line; i <= end.line; i++)
+        {
+            int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+            if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_added, +1, false);
+            if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
+        }
+    }
+    int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+    buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+}
+
+void buffer_view_decrease_indent_level(Buffer_View *buffer_view, Render_State *render_state)
+{
+    if (buffer_view->mark.active)
+    {
+        Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
+        Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+        for (int i = start.line; i <= end.line; i++)
+        {
+            int chars_removed = text_line_indent_level_decrease(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+            if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_removed, -1, false);
+            if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
+        }
+    }
+    int chars_removed = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+    buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+}
+
+void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *render_state)
+{
+    text_buffer_remove_line(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos.line);
+    buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
 }
 
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state)
@@ -2811,6 +2880,35 @@ char *string_builder_compile_and_destroy(String_Builder *string_builder)
     return compiled_str;
 }
 
+File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
+{
+    File_Info file_info = {0};
+    file_info.path = xstrdup(path);
+    FILE *f = fopen(file_info.path, "r");
+    if (!f) fatal("Failed to open file for reading at %s", path);
+    char buf[MAX_CHARS_PER_LINE];
+    memset(text_buffer, 0, sizeof(*text_buffer));
+    while (fgets(buf, sizeof(buf), f)) {
+        text_buffer->line_count++;
+        bassert(text_buffer->line_count <= MAX_LINES);
+        text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
+        text_buffer->lines[text_buffer->line_count - 1] = text_line_make_dup(buf);
+    }
+    fclose(f);
+    return file_info;
+}
+
+void file_write(Text_Buffer text_buffer, const char *path)
+{
+    FILE *f = fopen(path, "w");
+    if (!f) fatal("Failed to open file for writing at %s", path);
+    for (int i = 0; i < text_buffer.line_count; i++) {
+        fputs(text_buffer.lines[i].str, f);
+    }
+    fclose(f);
+    trace_log("Saved file to %s", path);
+}
+
 void read_clipboard_mac(char *buf, size_t buf_size)
 {
     FILE *pipe = popen("pbpaste", "r");
@@ -2830,4 +2928,13 @@ void write_clipboard_mac(const char *text)
     if (!pipe) return;
     fputs(text, pipe);
     pclose(pipe);
+}
+
+void rebuild_dl()
+{
+    int result = system("make dl");
+    if (result != 0) {
+        fprintf(stderr, "Build failed with code %d\n", result);
+    }
+    trace_log("Rebuilt dl");
 }

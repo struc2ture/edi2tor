@@ -369,6 +369,7 @@ char cursor_iterator_get_char(Cursor_Iterator it);
 
 Cursor_Pos cursor_pos_clamp(Text_Buffer text_buffer, Cursor_Pos pos);
 Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int dir, bool can_switch_lines);
+Cursor_Pos cursor_pos_advance_char_n(Text_Buffer text_buffer, Cursor_Pos pos, int n, int dir, bool can_switch_lines);
 Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int dir);
 Cursor_Pos cursor_pos_to_start_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos);
 Cursor_Pos cursor_pos_to_end_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos);
@@ -389,6 +390,9 @@ void text_line_insert_char(Text_Line *text_line, char c, int insert_index);
 void text_line_remove_char(Text_Line *text_line, int remove_index);
 void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index, int insert_count);
 void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
+int text_line_get_indent(Text_Line text_line);
+int text_line_indent_level_increase(Text_Line *text_line);
+int text_line_indent_level_decrease(Text_Line *text_line);
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...);
 void text_buffer_destroy(Text_Buffer *text_buffer);
@@ -416,20 +420,18 @@ void increase_indent_level(Text_Buffer *text_buffer, Display_Cursor *cursor, Edi
 void delete_current_line(Editor_State *state);
 #endif
 
-File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
-void file_write(Text_Buffer text_buffer, const char *path);
-
-
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state);
-
-void rebuild_dl();
 
 void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
 void buffer_view___validate_mark(Buffer_View *buffer_view);
 void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state);
 
 void buffer_view_delete_selected(Buffer_View *buffer_view);
+void buffer_view_insert_indent(Buffer_View *buffer_view, Render_State *render_state);
+void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state);
+void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state);
+void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *render_state);
 
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);
@@ -460,5 +462,10 @@ void string_builder_append_f(String_Builder *string_builder, const char *fmt, ..
 void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
 char *string_builder_compile_and_destroy(String_Builder *string_builder);
 
+File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
+void file_write(Text_Buffer text_buffer, const char *path);
+
 void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
+
+void rebuild_dl();
