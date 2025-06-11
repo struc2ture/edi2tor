@@ -406,6 +406,7 @@ void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
 void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
+char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 
 #if 0
 void insert_char(Text_Buffer *text_buffer, char c, Display_Cursor *cursor, Editor_State *state, bool auto_indent);
@@ -462,4 +463,5 @@ void handle_mouse_release(Mouse_State *mouse_state);
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
 
 void string_builder_append_f(String_Builder *string_builder, const char *fmt, ...);
+void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
 char *string_builder_compile_and_destroy(String_Builder *string_builder);

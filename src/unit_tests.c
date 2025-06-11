@@ -671,6 +671,32 @@ void test__text_buffer_remove_range(UT_State *s)
     text_buffer_destroy(&text_buffer_d);
 }
 
+void test__text_buffer_extract_range(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "line 1",
+        "line 2",
+        "line 3",
+        "line 4",
+        "line 5",
+        NULL);
+
+    char *extracted_range_multi_line = text_buffer_extract_range(&text_buffer, (Cursor_Pos){1, 2}, (Cursor_Pos){3, 3});
+    char *extracted_range_partial_line = text_buffer_extract_range(&text_buffer, (Cursor_Pos){1, 2}, (Cursor_Pos){1, 6});
+    char *extracted_range_whole = text_buffer_extract_range(&text_buffer, (Cursor_Pos){0, 0}, (Cursor_Pos){4, 7});
+
+    bool multi_line = strcmp(extracted_range_multi_line, "ne 2\nline 3\nlin") == 0;
+    bool partial_line = strcmp(extracted_range_partial_line, "ne 2") == 0;
+    bool whole = strcmp(extracted_range_whole, "line 1\nline 2\nline 3\nline 4\nline 5\n") == 0;
+
+    UNIT_TESTS_RUN_CHECK(multi_line && partial_line && whole);
+
+    free(extracted_range_multi_line);
+    free(extracted_range_partial_line);
+    free(extracted_range_whole);
+    text_buffer_destroy(&text_buffer);
+}
+
 void test__cursor_pos_clamp__regular(UT_State *s)
 {
     Text_Buffer text_buffer = text_buffer_create_from_lines(
@@ -1336,14 +1362,18 @@ void test__string_builder(UT_State *s)
     string_builder_append_f(&sb, "Hello %s\n", "world!");
     string_builder_append_f(&sb, "%d %d %d", 1, 2, 3);
     string_builder_append_f(&sb, "\n\n\n");
+    string_builder_append_str_range(&sb, "012345", 0, 6);
+    string_builder_append_str_range(&sb, "012345", 1, 3);
 
-    bool correct_chunk_count = sb.chunk_count == 3;
+    bool correct_chunk_count = sb.chunk_count == 5;
     bool correct_chunks = strcmp(sb.chunks[0], "Hello world!\n") == 0 &&
                           strcmp(sb.chunks[1], "1 2 3") == 0 &&
-                          strcmp(sb.chunks[2], "\n\n\n") == 0;
+                          strcmp(sb.chunks[2], "\n\n\n") == 0 &&
+                          strcmp(sb.chunks[3], "012345") == 0 &&
+                          strcmp(sb.chunks[4], "123") == 0;
 
     char *compiled_str = string_builder_compile_and_destroy(&sb);
-    bool correct_compiled = strcmp(compiled_str, "Hello world!\n1 2 3\n\n\n") == 0;
+    bool correct_compiled = strcmp(compiled_str, "Hello world!\n1 2 3\n\n\n012345123") == 0;
     bool string_builder_destroyed = sb.chunks == NULL && sb.chunk_count == 0;
 
     UNIT_TESTS_RUN_CHECK(correct_chunk_count && correct_chunks && correct_compiled && string_builder_destroyed);
@@ -1385,6 +1415,7 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     test__text_buffer_remove_char(&s);
     test__text_buffer_insert_range(&s);
     test__text_buffer_remove_range(&s);
+    test__text_buffer_extract_range(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "CURSOR POS TESTS:");

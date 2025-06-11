@@ -1988,7 +1988,7 @@ void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor
     bassert(start.line < text_buffer->line_count);
     bassert(start.col < text_buffer->lines[start.line].len);
     bassert(end.line < text_buffer->line_count);
-    bassert(end.col < text_buffer->lines[end.line].len);
+    bassert(end.col <= text_buffer->lines[end.line].len);
     bassert((end.line == start.line && end.col > start.col) || end.line > start.line);
     if (start.line == end.line)
     {
@@ -2006,6 +2006,43 @@ void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor
             text_buffer_remove_line(text_buffer, start.line + 1); // Keep removing the same index, as lines get shifted up
         }
     }
+}
+
+char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end)
+{
+    bassert(start.line < text_buffer->line_count);
+    bassert(start.col < text_buffer->lines[start.line].len);
+    bassert(end.line < text_buffer->line_count);
+    bassert(end.col <= text_buffer->lines[end.line].len);
+    bassert((end.line == start.line && end.col > start.col) || end.line > start.line);
+    String_Builder sb = {0};
+    if (start.line == end.line)
+    {
+        string_builder_append_str_range(&sb,
+            text_buffer->lines[start.line].str,
+            start.col,
+            end.col - start.col);
+    }
+    else
+    {
+        string_builder_append_str_range(&sb,
+            text_buffer->lines[start.line].str,
+            start.col,
+            text_buffer->lines[start.line].len - start.col);
+        for (int i = start.line + 1; i < end.line; i++)
+        {
+            string_builder_append_str_range(&sb,
+                text_buffer->lines[i].str,
+                0,
+                text_buffer->lines[i].len);
+        }
+        string_builder_append_str_range(&sb,
+            text_buffer->lines[end.line].str,
+            0,
+            end.col);
+    }
+    char *extracted_range = string_builder_compile_and_destroy(&sb);
+    return extracted_range;
 }
 
 #if 0
@@ -2767,6 +2804,13 @@ void string_builder_append_f(String_Builder *string_builder, const char *fmt, ..
     string_builder->chunk_count++;
     string_builder->chunks = xrealloc(string_builder->chunks, string_builder->chunk_count * sizeof(string_builder->chunks[0]));
     string_builder->chunks[string_builder->chunk_count - 1] = chunk;
+}
+
+void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count)
+{
+    string_builder->chunk_count++;
+    string_builder->chunks = xrealloc(string_builder->chunks, string_builder->chunk_count * sizeof(string_builder->chunks[0]));
+    string_builder->chunks[string_builder->chunk_count - 1] = xstrndup(str + start, count);
 }
 
 char *string_builder_compile_and_destroy(String_Builder *string_builder)
