@@ -425,8 +425,8 @@ void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *ren
 
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);
-void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 
 void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state);

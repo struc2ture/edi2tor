@@ -2263,6 +2263,7 @@ void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *ren
 {
     text_buffer_remove_line(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos.line);
     buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
     viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
 }
 
@@ -2323,7 +2324,7 @@ void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Mo
     else buffer_view->mark.active = false;
 }
 
-void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
     switch(key)
     {
@@ -2347,12 +2348,12 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
         {
             switch (buffer_view->buffer->kind)
             {
-                // case BUFFER_PROMPT:
-                // {
-                //     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
-                //     prompt_submit(buffer_view->buffer->prompt.context, prompt_result, active_view->outer_rect, window, state);
-                //     view_buffer_destroy(active_view, state);
-                // } break;
+                case BUFFER_PROMPT:
+                {
+                    Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
+                    prompt_submit(buffer_view->buffer->prompt.context, prompt_result, frame->outer_rect, window, state);
+                    frame_destroy(frame, state);
+                } break;
 
                 default:
                 {
@@ -2432,13 +2433,13 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
     }
 }
 
-void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
     switch (view->kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            buffer_view_handle_key(&view->bv, window, state, key, action, mods);
+            buffer_view_handle_key(&view->bv, frame, window, state, key, action, mods);
         } break;
 
         default:
@@ -2453,10 +2454,6 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
     (void) window;
     switch(key)
     {
-        // case GLFW_KEY_ESCAPE: if (action == GLFW_PRESS)
-        // {
-        //     glfwSetWindowShouldClose(window, 1);
-        // } break;
         case GLFW_KEY_F1: if (action == GLFW_PRESS)
         {
             Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
@@ -2503,7 +2500,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
 
     if (state->active_frame)
     {
-        view_handle_key(state->active_frame->view, window, state, key, action, mods);
+        view_handle_key(state->active_frame->view, state->active_frame, window, state, key, action, mods);
     }
 }
 
