@@ -94,11 +94,6 @@ typedef struct {
 } Text_Selection;
 
 typedef struct {
-    Text_Line *lines;
-    int line_count;
-} Copy_Buffer;
-
-typedef struct {
     stbtt_bakedchar *char_data;
     int char_count;
     GLuint texture;
@@ -229,7 +224,7 @@ typedef struct {
 
     Viewport canvas_viewport;
 
-    Copy_Buffer copy_buffer;
+    char *copy_buffer;
     bool should_break;
     float delta_time;
     float last_frame_time;
@@ -404,7 +399,7 @@ void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
 void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos);
 void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
 void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
-void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
+Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 
@@ -424,10 +419,8 @@ File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
 void file_write(Text_Buffer text_buffer, const char *path);
 
 
-#if 0
-void copy_at_selection(Editor_State *state);
-void paste_from_copy_buffer(Editor_State *state);
-#endif
+void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state);
+void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state);
 
 void rebuild_dl();
 

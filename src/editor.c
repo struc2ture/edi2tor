@@ -1943,16 +1943,18 @@ void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos)
     }
 }
 
-void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos)
+Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos)
 {
     bassert(pos.line < text_buffer->line_count);
     bassert(pos.col < text_buffer->lines[pos.line].len);
     int range_len = strlen(range);
     int segment_count = str_get_line_segment_count(range);
 
+    Cursor_Pos end_cursor = pos;
     if (segment_count == 1)
     {
         text_line_insert_range(&text_buffer->lines[pos.line], range, pos.col, range_len);
+        end_cursor.col = pos.col + range_len;
     }
     else
     {
@@ -1971,6 +1973,8 @@ void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Curso
             else if (i == segment_count - 1) // last segment
             {
                 text_line_insert_range(&text_buffer->lines[dest_line_i], range + segment_start, 0, segment_len);
+                end_cursor.line = dest_line_i;
+                end_cursor.col = segment_len;
             }
             else // middle segments
             {
@@ -1981,6 +1985,7 @@ void text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Curso
             segment_start = segment_end;
         }
     }
+    return end_cursor;
 }
 
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end)
@@ -2256,87 +2261,32 @@ void file_write(Text_Buffer text_buffer, const char *path)
     trace_log("Saved file to %s", path);
 }
 
-#if 0
-void copy_at_selection(Editor_State *state)
+void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state)
 {
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection))
+    if (buffer_view->mark.active)
     {
-        Cursor_Pos start = active_view->buffer.selection.start;
-        Cursor_Pos end = active_view->buffer.selection.end;
-        if (start.line > end.line)
-        {
-            Cursor_Pos temp = start;
-            start = end;
-            end = temp;
-        }
-        state->copy_buffer.line_count = end.line - start.line + 1;
-        state->copy_buffer.lines = xrealloc(state->copy_buffer.lines, state->copy_buffer.line_count * sizeof(state->copy_buffer.lines[0]));
-        int copy_buffer_i = 0;
-        for (int i = start.line; i <= end.line; i++)
-        {
-            int start_c, end_c;
-            if (i == start.line && i == end.line)
-            {
-                start_c = start.col;
-                end_c = end.col;
-                if (start_c > end_c)
-                {
-                    int temp = start_c;
-                    start_c = end_c;
-                    end_c = temp;
-                }
-            }
-            else if (i == start.line)
-            {
-                start_c = start.col;
-                end_c = -1;
-            }
-            else if (i == end.line)
-            {
-                start_c = 0;
-                end_c = end.col;
-            }
-            else
-            {
-                start_c = 0;
-                end_c = -1;
-            }
-            state->copy_buffer.lines[copy_buffer_i++] = text_line_copy(active_view->buffer.buffer->text_buffer.lines[i], start_c, end_c);
-        }
-        trace_log("Copied at selection");
-    }
-    else
-    {
-        trace_log("Nothing to copy");
+        Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
+        Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+
+        if (state->copy_buffer) free(state->copy_buffer);
+        state->copy_buffer = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
+
+        trace_log("Copied: %s", state->copy_buffer);
     }
 }
 
-void paste_from_copy_buffer(Editor_State *state)
+void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state)
 {
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    if (state->copy_buffer.line_count > 0)
+    if (state->copy_buffer)
     {
-        if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection))
+        if (buffer_view->mark.active)
         {
-            delete_selected(state);
+            buffer_view_delete_selected(buffer_view);
         }
-        for (int i = 0; i < state->copy_buffer.line_count; i++)
-        {
-            for (int char_i = 0; char_i < state->copy_buffer.lines[i].len; char_i++)
-            {
-                insert_char(&active_view->buffer.buffer->text_buffer, state->copy_buffer.lines[i].str[char_i], &active_view->buffer.cursor, state, false);
-            }
-        }
-    }
-    else
-    {
-        trace_log("Nothing to paste");
+        Cursor_Pos new_cursor = text_buffer_insert_range(&buffer_view->buffer->text_buffer, state->copy_buffer, buffer_view->cursor.pos);
+        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, new_cursor);
     }
 }
-#endif
 
 void rebuild_dl()
 {
@@ -2497,14 +2447,14 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
         // {
         //     increase_indent_level(&active_view->buffer.buffer->text_buffer, &active_view->buffer.cursor, state);
         // } break;
-        // case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        // {
-        //     copy_at_selection(state);
-        // } break;
-        // case GLFW_KEY_V: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        // {
-        //     paste_from_copy_buffer(state);
-        // } break;
+        case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            buffer_view_copy_selected(buffer_view, state);
+        } break;
+        case GLFW_KEY_V: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            buffer_view_paste(buffer_view, state);
+        } break;
         // case GLFW_KEY_X: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         // {
         //     delete_current_line(state);

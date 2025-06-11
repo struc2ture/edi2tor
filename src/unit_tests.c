@@ -599,14 +599,15 @@ void test__text_buffer_insert_range(UT_State *s)
     Text_Buffer text_buffer_h = text_buffer_create_from_lines(
         "abcd",
         NULL);
-    text_buffer_insert_range(&text_buffer_h, "01\n23\n45", (Cursor_Pos){0, 4});
+    Cursor_Pos end_cursor = text_buffer_insert_range(&text_buffer_h, "01\n23\n45", (Cursor_Pos){0, 4});
     bool insert_at_the_end = validate__text_buffer(&text_buffer_h,
         "abcd01\n",
         "23\n",
         "45\n",
         NULL);
+    bool end_cursor_correct = end_cursor.line == 2 && end_cursor.col == 2;
 
-    UNIT_TESTS_RUN_CHECK(insert_three_lines && insert_start_on_newline && insert_end_on_newline && insert_two_newlines && insert_newline_char && insert_no_newlines && insert_when_empty && insert_at_the_end);
+    UNIT_TESTS_RUN_CHECK(insert_three_lines && insert_start_on_newline && insert_end_on_newline && insert_two_newlines && insert_newline_char && insert_no_newlines && insert_when_empty && insert_at_the_end && end_cursor_correct);
 
     text_buffer_destroy(&text_buffer_a);
     text_buffer_destroy(&text_buffer_b);
