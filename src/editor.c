@@ -2225,14 +2225,17 @@ void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *r
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
         for (int i = start.line; i <= end.line; i++)
         {
-            int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+            int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[i]);
             if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_added, +1, false);
             if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
         }
     }
-    int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
-    buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
-    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+    else
+    {
+        int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+        buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
+        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+    }
 }
 
 void buffer_view_decrease_indent_level(Buffer_View *buffer_view, Render_State *render_state)
@@ -2243,14 +2246,17 @@ void buffer_view_decrease_indent_level(Buffer_View *buffer_view, Render_State *r
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
         for (int i = start.line; i <= end.line; i++)
         {
-            int chars_removed = text_line_indent_level_decrease(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+            int chars_removed = text_line_indent_level_decrease(&buffer_view->buffer->text_buffer.lines[i]);
             if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_removed, -1, false);
             if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
         }
     }
-    int chars_removed = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
-    buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
-    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+    else
+    {
+        int chars_removed = text_line_indent_level_decrease(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+        buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
+        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+    }
 }
 
 void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *render_state)
@@ -2364,11 +2370,11 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
         } break;
         case GLFW_KEY_LEFT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            buffer_view_increase_indent_level(buffer_view, &state->render_state);
+            buffer_view_decrease_indent_level(buffer_view, &state->render_state);
         } break;
         case GLFW_KEY_RIGHT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            buffer_view_decrease_indent_level(buffer_view, &state->render_state);
+            buffer_view_increase_indent_level(buffer_view, &state->render_state);
         } break;
         case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
