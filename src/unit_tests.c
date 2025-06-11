@@ -1330,6 +1330,27 @@ void test__cursor_pos_to_prev_start_of_paragraph__start_at_first_white_lines(UT_
     text_buffer_destroy(&text_buffer);
 }
 
+void test__string_builder(UT_State *s)
+{
+    String_Builder sb = {0};
+    string_builder_append_f(&sb, "Hello %s\n", "world!");
+    string_builder_append_f(&sb, "%d %d %d", 1, 2, 3);
+    string_builder_append_f(&sb, "\n\n\n");
+
+    bool correct_chunk_count = sb.chunk_count == 3;
+    bool correct_chunks = strcmp(sb.chunks[0], "Hello world!\n") == 0 &&
+                          strcmp(sb.chunks[1], "1 2 3") == 0 &&
+                          strcmp(sb.chunks[2], "\n\n\n") == 0;
+
+    char *compiled_str = string_builder_compile_and_destroy(&sb);
+    bool correct_compiled = strcmp(compiled_str, "Hello world!\n1 2 3\n\n\n") == 0;
+    bool string_builder_destroyed = sb.chunks == NULL && sb.chunk_count == 0;
+
+    UNIT_TESTS_RUN_CHECK(correct_chunk_count && correct_chunks && correct_compiled && string_builder_destroyed);
+
+    free(compiled_str);
+}
+
 // ---------------------------------------------------------------------
 
 void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
@@ -1407,6 +1428,10 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     test__cursor_pos_to_prev_start_of_paragraph__regular(&s);
     test__cursor_pos_to_prev_start_of_paragraph__skip_current(&s);
     test__cursor_pos_to_prev_start_of_paragraph__start_at_first_white_lines(&s);
+    text_buffer_append_f(s.log_buffer, "");
+
+    text_buffer_append_f(s.log_buffer, "STRING BUILDER TESTS:");
+    test__string_builder(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     _unit_tests_finish(&s);

@@ -247,6 +247,11 @@ typedef enum {
     CURSOR_MOVE_DOWN
 } Cursor_Movement_Dir;
 
+typedef struct {
+    char **chunks;
+    int chunk_count;
+} String_Builder;
+
 void _init(GLFWwindow *window, void *_state);
 void _hotreload_init(GLFWwindow *window);
 void _render(GLFWwindow *window, void *_state);
@@ -455,3 +460,6 @@ void view_handle_mouse_release(View *view);
 void handle_mouse_release(Mouse_State *mouse_state);
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
+
+void string_builder_append_f(String_Builder *string_builder, const char *fmt, ...);
+char *string_builder_compile_and_destroy(String_Builder *string_builder);
