@@ -417,9 +417,8 @@ void delete_current_line(Editor_State *state);
 File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
 void file_write(Text_Buffer text_buffer, const char *path);
 
-#if 0
-void delete_selected(Editor_State *state);
 
+#if 0
 void copy_at_selection(Editor_State *state);
 void paste_from_copy_buffer(Editor_State *state);
 #endif
@@ -429,6 +428,8 @@ void rebuild_dl();
 void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
 void buffer_view___validate_mark(Buffer_View *buffer_view);
 void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state);
+
+void buffer_view_delete_selected(Buffer_View *buffer_view);
 
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);

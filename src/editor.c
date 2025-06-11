@@ -2220,30 +2220,6 @@ void file_write(Text_Buffer text_buffer, const char *path)
 }
 
 #if 0
-void delete_selected(Editor_State *state)
-{
-    View *active_view = state->active_view;
-    bassert(active_view->kind == VIEW_KIND_BUFFER);
-    int char_count = selection_char_count(state);
-    if (char_count > 0)
-    {
-        Cursor_Pos start = active_view->buffer.selection.start;
-        Cursor_Pos end = active_view->buffer.selection.end;
-        if (start.line > end.line || (start.line == end.line && start.col > end.col))
-        {
-            Cursor_Pos temp = start;
-            start = end;
-            end = temp;
-        }
-        active_view->buffer.cursor.pos = cursor_pos_clamp(active_view->buffer.buffer->text_buffer, end);
-        for (int i = 0; i < char_count; i++)
-        {
-            remove_char(&active_view->buffer.buffer->text_buffer, &active_view->buffer.cursor, state);
-        }
-        cancel_selection(state);
-    }
-}
-
 void copy_at_selection(Editor_State *state)
 {
     View *active_view = state->active_view;
@@ -2354,14 +2330,32 @@ void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect f
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
 }
 
+void buffer_view_delete_selected(Buffer_View *buffer_view)
+{
+    bassert(buffer_view->mark.active);
+    bassert(!cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos));
+    Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
+    Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+    text_buffer_remove_range(&buffer_view->buffer->text_buffer, start, end);
+    buffer_view->mark.active = false;
+    buffer_view->cursor.pos = start;
+}
+
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state)
 {
-    if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
+    if (buffer_view->mark.active)
     {
-        buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
-        text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-        buffer_view->cursor.blink_time = 0.0f;
-        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+        buffer_view_delete_selected(buffer_view);
+    }
+    else
+    {
+        if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
+        {
+            buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
+            text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            buffer_view->cursor.blink_time = 0.0f;
+            viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+        }
     }
 }
 
@@ -2447,8 +2441,6 @@ void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor
         } break;
         case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
         {
-            // if (is_selection_valid(active_view->buffer.buffer->text_buffer, active_view->buffer.selection)) delete_selected(state);
-            // else remove_char(&active_view->buffer.buffer->text_buffer, &active_view->buffer.cursor, state);
             buffer_view_handle_backspace(buffer_view, &state->render_state);
         } break;
         // case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
@@ -2601,6 +2593,10 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
 
 void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state)
 {
+    if (buffer_view->mark.active)
+    {
+        buffer_view_delete_selected(buffer_view);
+    }
     text_buffer_insert_char(&buffer_view->buffer->text_buffer, c, buffer_view->cursor.pos);
     buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
     buffer_view->cursor.blink_time = 0.0f;
