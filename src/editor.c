@@ -55,6 +55,9 @@ void _render(GLFWwindow *window, void *_state)
 
     perform_timing_calculations(state);
 
+    glBindVertexArray(state->render_state.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
+
     glUseProgram(state->render_state.grid_shader);
     draw_grid(state->canvas_viewport, &state->render_state);
 
@@ -232,6 +235,64 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
     GLsizei scissor_w = (GLsizei)(ceil(scaled_rect.x + scaled_rect.w) - scissor_x);
     GLsizei scissor_h = (GLsizei)(ceil(screen_rect_bottomup_bottom_y + scaled_rect.h) - scissor_y);
     glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
+}
+
+Framebuffer gl_create_framebuffer(int w, int h)
+{
+    Framebuffer framebuffer;
+    framebuffer.w = w;
+    framebuffer.h = h;
+    glGenTextures(1, &framebuffer.tex);
+    glBindTexture(GL_TEXTURE_2D, framebuffer.tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, framebuffer.w, framebuffer.h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glGenFramebuffers(1, &framebuffer.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.tex, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        log_warning("gl_create_framebuffer: Failed to create framebuffer");
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    const char *vs_src =
+        "#version 410 core\n"
+        "layout(location = 0) in vec2 aPos;\n"
+        "void main() {\n"
+        "  gl_Position = vec4(aPos, 0.0, 1.0);\n"
+        "}\n";
+
+    const char *fs_src =
+        "#version 410 core\n"
+        "out vec4 FragColor;\n"
+        "void main() {\n"
+        "  FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
+        "}\n";
+
+    framebuffer.prog = gl_create_shader_program(vs_src, fs_src);
+
+    float verts[] = {
+        -0.5f, -0.5f,
+        0.5f, -0.5f,
+        0.0f,  0.5f
+    };
+
+    glGenVertexArrays(1, &framebuffer.vao);
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+
+    glBindVertexArray(framebuffer.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+
+    return framebuffer;
 }
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state)
@@ -580,6 +641,15 @@ Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *s
     return frame;
 }
 
+Frame *frame_create_framebuffer_view(Rect rect, Editor_State *state)
+{
+    Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
+    View *view = framebuffer_view_create(framebuffer, state);
+    Frame *frame = frame_create(view, rect, state);
+    frame_set_active(frame, state);
+    return frame;
+}
+
 int view___get_index(View *view, Editor_State *state)
 {
     int index = 0;
@@ -685,6 +755,14 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
             }
         } break;
 
+        case VIEW_KIND_FRAMEBUFFER:
+        {
+            view->fv.framebuffer_rect.x = rect.x + render_state->buffer_view_padding;
+            view->fv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
+            view->fv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
+            view->fv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
+        } break;
+
         default:
         {
             log_warning("view_set_rect: Unhandled View kind: %d", view->kind);
@@ -771,6 +849,14 @@ View *image_view_create(Image image, Editor_State *state)
     View *view = view_create(state);
     view->kind = VIEW_KIND_IMAGE;
     view->iv.image = image;
+    return view;
+}
+
+View *framebuffer_view_create(Framebuffer framebuffer, Editor_State *state)
+{
+    View *view = view_create(state);
+    view->kind = VIEW_KIND_FRAMEBUFFER;
+    view->fv.framebuffer = framebuffer;
     return view;
 }
 
@@ -1144,6 +1230,11 @@ void draw_view(View view, const Frame *frame, bool is_active, Viewport canvas_vi
             draw_image_view(view.iv, render_state);
         } break;
 
+        case VIEW_KIND_FRAMEBUFFER:
+        {
+            draw_framebuffer_view(view.fv, render_state);
+        } break;
+
         default:
         {
             log_warning("draw_view: unhandled View kind: %d", view.kind);
@@ -1333,6 +1424,33 @@ void draw_image_view(Image_View image_view, Render_State *render_state)
     glUseProgram(render_state->image_shader);
     draw_texture(image_view.image.texture, image_view.image_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
     glUseProgram(render_state->main_shader);
+}
+
+void draw_framebuffer_contents(Framebuffer_View framebuffer_view)
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(framebuffer_view.framebuffer.prog);
+    glBindVertexArray(framebuffer_view.framebuffer.vao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
+void draw_framebuffer_view(Framebuffer_View framebuffer_view, Render_State *render_state)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_view.framebuffer.fbo);
+    glViewport(0, 0, framebuffer_view.framebuffer.w, framebuffer_view.framebuffer.h);
+    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+
+    draw_framebuffer_contents(framebuffer_view);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
+    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+    glBindVertexArray(render_state->vao);
+
+    glUseProgram(render_state->image_shader);
+    draw_texture(framebuffer_view.framebuffer.tex, framebuffer_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
+    glUseProgram(render_state->main_shader);
+    (void)framebuffer_view; (void)render_state;
 }
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out)
@@ -2655,6 +2773,13 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
             frame_create_image_view(
                 IMAGE_PATH,
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
+        } break;
+        case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+            frame_create_framebuffer_view(
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;

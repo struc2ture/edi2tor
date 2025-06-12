@@ -65,6 +65,15 @@ typedef struct {
 } Image;
 
 typedef struct {
+    int w;
+    int h;
+    GLuint fbo;
+    GLuint tex;
+    GLuint prog;
+    GLuint vao;
+} Framebuffer;
+
+typedef struct {
     Rect rect;
     float zoom;
 } Viewport;
@@ -198,15 +207,22 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
+typedef struct {
+    Framebuffer framebuffer;
+    Rect framebuffer_rect;
+} Framebuffer_View;
+
 typedef enum  {
     VIEW_KIND_BUFFER,
     VIEW_KIND_IMAGE,
+    VIEW_KIND_FRAMEBUFFER
 } View_Kind;
 
 typedef struct {
     union {
         Buffer_View bv;
         Image_View iv;
+        Framebuffer_View fv;
     };
     View_Kind kind;
 } View;
@@ -278,6 +294,7 @@ bool gl_check_compile_success(GLuint shader, const char *src);
 bool gl_check_link_success(GLuint prog);
 GLuint gl_create_shader_program(const char *vs_src, const char *fs_src);
 void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
+Framebuffer gl_create_framebuffer(int width, int height);
 
 void initialize_render_state(GLFWwindow *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
@@ -308,6 +325,7 @@ Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Edit
 Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state);
+Frame *frame_create_framebuffer_view(Rect rect, Editor_State *state);
 
 int view___get_index(View *view, Editor_State *state);
 View **view___create_new_slot(Editor_State *state);
@@ -327,6 +345,8 @@ Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 tex
 void image_destroy(Image image);
 
 View *image_view_create(Image image, Editor_State *state);
+
+View *framebuffer_view_create(Framebuffer framebuffer, Editor_State *state);
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
@@ -365,6 +385,10 @@ void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Vie
 void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state);
 
 void draw_image_view(Image_View image_view, Render_State *render_state);
+
+void draw_framebuffer_contents(Framebuffer_View framebuffer_view);
+
+void draw_framebuffer_view(Framebuffer_View framebuffer_view, Render_State *render_state);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
