@@ -32,7 +32,30 @@ const char *shader_image_frag_src =
 "in vec4 Color;\n"
 "void main() {\n"
 "    FragColor = Color * texture(u_tex, TexCoord);\n"
-// "    FragColor = vec4(1.0, 1.0, 1.0, 1.0);\n"
+"}\n";
+
+const char *shader_framebuffer_vert_src =
+"#version 410 core\n"
+"layout (location = 0) in vec2 aPos;\n"
+"layout (location = 1) in vec2 aTexCoord;\n"
+"layout (location = 2) in vec4 aColor;\n"
+"uniform mat4 u_mvp;\n"
+"out vec2 TexCoord;\n"
+"out vec4 Color;\n"
+"void main() {\n"
+"    gl_Position = u_mvp * vec4(aPos, 0.0, 1.0);\n"
+"    TexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);\n"
+"    Color = aColor;\n"
+"}\n";
+
+const char *shader_framebuffer_frag_src =
+"#version 410 core\n"
+"out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D u_tex;\n"
+"in vec4 Color;\n"
+"void main() {\n"
+"    FragColor = Color * texture(u_tex, TexCoord);\n"
 "}\n";
 
 const char *shader_grid_frag_src =

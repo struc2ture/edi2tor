@@ -129,6 +129,7 @@ typedef struct {
     GLuint main_shader;
     GLuint grid_shader;
     GLuint image_shader;
+    GLuint framebuffer_shader;
     GLuint vao;
     GLuint vbo;
     GLuint main_shader_mvp_loc;
@@ -136,6 +137,7 @@ typedef struct {
     GLuint grid_shader_offset_loc;
     GLuint grid_shader_resolution_loc;
     GLuint image_shader_mvp_loc;
+    GLuint framebuffer_shader_mvp_loc;
     Vec_2 window_dim;
     Vec_2 framebuffer_dim;
     float dpi_scale;

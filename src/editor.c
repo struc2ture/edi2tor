@@ -274,12 +274,14 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     render_state->main_shader = gl_create_shader_program(shader_main_vert_src, shader_main_frag_src);
     render_state->grid_shader = gl_create_shader_program(shader_main_vert_src, shader_grid_frag_src);
     render_state->image_shader = gl_create_shader_program(shader_main_vert_src, shader_image_frag_src);
+    render_state->framebuffer_shader = gl_create_shader_program(shader_framebuffer_vert_src, shader_framebuffer_frag_src);
 
     render_state->main_shader_mvp_loc = glGetUniformLocation(render_state->main_shader, "u_mvp");
     render_state->grid_shader_mvp_loc = glGetUniformLocation(render_state->grid_shader, "u_mvp");
     render_state->grid_shader_offset_loc = glGetUniformLocation(render_state->grid_shader, "u_offset");
     render_state->grid_shader_resolution_loc = glGetUniformLocation(render_state->grid_shader, "u_resolution");
     render_state->image_shader_mvp_loc = glGetUniformLocation(render_state->image_shader, "u_mvp");
+    render_state->framebuffer_shader_mvp_loc = glGetUniformLocation(render_state->framebuffer_shader, "u_mvp");
 
     glGenVertexArrays(1, &render_state->vao);
     glGenBuffers(1, &render_state->vbo);
@@ -1423,7 +1425,7 @@ void draw_render_scene_view(Render_Scene_View rs_view, Render_State *render_stat
     glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
     glBindVertexArray(render_state->vao);
 
-    glUseProgram(render_state->image_shader);
+    glUseProgram(render_state->framebuffer_shader);
     draw_texture(rs_view.framebuffer.tex, rs_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
     glUseProgram(render_state->main_shader);
 }
@@ -1531,10 +1533,12 @@ void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *rende
     mul_mat4(view_canvas, view_screen, view);
     mul_mat4(view, proj, mvp);
 
-    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
     glUseProgram(render_state->image_shader);
     glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUseProgram(render_state->framebuffer_shader);
+    glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, mvp);
     glUseProgram(render_state->main_shader);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
 
     Rect screen_rect = canvas_rect_to_screen_rect(rect, canvas_viewport);
     gl_enable_scissor(screen_rect, render_state);
@@ -1549,10 +1553,12 @@ void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_s
 
     mul_mat4(view, proj, mvp);
 
-    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
     glUseProgram(render_state->image_shader);
     glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUseProgram(render_state->framebuffer_shader);
+    glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, mvp);
     glUseProgram(render_state->main_shader);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
 
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1563,10 +1569,12 @@ void transform_set_screen_space(Render_State *render_state)
 
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
 
-    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, proj);
     glUseProgram(render_state->image_shader);
     glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, proj);
+    glUseProgram(render_state->framebuffer_shader);
+    glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, proj);
     glUseProgram(render_state->main_shader);
+    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, proj);
 
     glDisable(GL_SCISSOR_TEST);
 }
