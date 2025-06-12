@@ -242,15 +242,21 @@ Framebuffer gl_create_framebuffer(int w, int h)
     Framebuffer framebuffer;
     framebuffer.w = w;
     framebuffer.h = h;
+
+    glGenFramebuffers(1, &framebuffer.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
+
     glGenTextures(1, &framebuffer.tex);
     glBindTexture(GL_TEXTURE_2D, framebuffer.tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, framebuffer.w, framebuffer.h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glGenFramebuffers(1, &framebuffer.fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.tex, 0);
+
+    glGenRenderbuffers(1, &framebuffer.depth_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, framebuffer.depth_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer.depth_rb);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -613,7 +619,7 @@ Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *s
 Frame *frame_create_render_scene_view(Rect rect, Editor_State *state)
 {
     Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    Render_Scene *render_scene = render_scene_create();
+    Render_Scene *render_scene = render_scene_create(rect.w, rect.h);
     View *view = render_scene_view_create(framebuffer, render_scene, state);
     Frame *frame = frame_create(view, rect, state);
     frame_set_active(frame, state);
@@ -672,6 +678,14 @@ void view_destroy(View *view, Editor_State *state)
         case VIEW_KIND_IMAGE:
         {
             image_destroy(view->iv.image);
+            view___free_slot(view, state);
+            free(view);
+        } break;
+
+        case VIEW_KIND_RENDER_SCENE:
+        {
+            framebuffer_destroy(view->rsv.framebuffer);
+            render_scene_destroy(view->rsv.render_scene);
             view___free_slot(view, state);
             free(view);
         } break;
@@ -814,6 +828,13 @@ void image_destroy(Image image)
     glDeleteTextures(1, &image.texture);
 }
 
+void framebuffer_destroy(Framebuffer framebuffer)
+{
+    glDeleteRenderbuffers(1, &framebuffer.depth_rb);
+    glDeleteTextures(1, &framebuffer.tex);
+    glDeleteFramebuffers(1, &framebuffer.fbo);
+}
+
 View *image_view_create(Image image, Editor_State *state)
 {
     View *view = view_create(state);
@@ -822,16 +843,17 @@ View *image_view_create(Image image, Editor_State *state)
     return view;
 }
 
-Render_Scene *render_scene_create()
+Render_Scene *render_scene_create(float w, float h)
 {
     Render_Scene *render_scene = xcalloc(sizeof(Render_Scene));
     render_scene->user_state = xcalloc(sizeof(User_State));
-    user_init(render_scene->user_state);
+    user_init(render_scene->user_state, w, h);
     return render_scene;
 }
 
 void render_scene_destroy(Render_Scene *render_scene)
 {
+    user_destroy(render_scene->user_state);
     free(render_scene->user_state);
     render_scene->user_state = NULL;
     free(render_scene);
@@ -1218,7 +1240,7 @@ void draw_view(View view, const Frame *frame, bool is_active, Viewport canvas_vi
 
         case VIEW_KIND_RENDER_SCENE:
         {
-            draw_render_scene_view(view.rsv, render_state);
+            draw_render_scene_view(view.rsv, render_state, delta_time);
         } break;
 
         default:
@@ -1412,17 +1434,16 @@ void draw_image_view(Image_View image_view, Render_State *render_state)
     glUseProgram(render_state->main_shader);
 }
 
-void draw_render_scene_view(Render_Scene_View rs_view, Render_State *render_state)
+void draw_render_scene_view(Render_Scene_View rs_view, Render_State *render_state, float delta_time)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, rs_view.framebuffer.fbo);
     glViewport(0, 0, rs_view.framebuffer.w, rs_view.framebuffer.h);
-    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 
-    user_draw(rs_view.render_scene->user_state);
+    user_draw(rs_view.render_scene->user_state, delta_time);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
-    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+    glClearColor(0, 0, 0, 1.0f);
     glBindVertexArray(render_state->vao);
 
     glUseProgram(render_state->framebuffer_shader);

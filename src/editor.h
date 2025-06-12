@@ -71,6 +71,7 @@ typedef struct {
     int h;
     GLuint fbo;
     GLuint tex;
+    GLuint depth_rb;
     GLuint prog;
     GLuint vao;
 } Framebuffer;
@@ -355,7 +356,10 @@ void image_destroy(Image image);
 
 View *image_view_create(Image image, Editor_State *state);
 
-Render_Scene *render_scene_create();
+void framebuffer_destroy(Framebuffer framebuffer);
+
+Render_Scene *render_scene_create(float w, float h);
+void render_scene_destroy(Render_Scene *render_scene);
 
 View *render_scene_view_create(Framebuffer framebuffer, Render_Scene *render_scene, Editor_State *state);
 
@@ -397,7 +401,7 @@ void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_act
 
 void draw_image_view(Image_View image_view, Render_State *render_state);
 
-void draw_render_scene_view(Render_Scene_View framebuffer_view, Render_State *render_state);
+void draw_render_scene_view(Render_Scene_View framebuffer_view, Render_State *render_state, float delta_time);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
