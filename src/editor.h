@@ -332,7 +332,7 @@ Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view);
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
-void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
+bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);
@@ -476,7 +476,7 @@ void string_builder_append_f(String_Builder *string_builder, const char *fmt, ..
 void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
 char *string_builder_compile_and_destroy(String_Builder *string_builder);
 
-File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
+bool file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer, File_Info *file_info);
 void file_write(Text_Buffer text_buffer, const char *path);
 
 Image file_open_image(const char *path);

@@ -329,12 +329,15 @@ Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state)
 
 Buffer *buffer_create_read_file(const char *path, Editor_State *state)
 {
-    Buffer **new_slot = buffer_create_new_slot(state);
-
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_KIND_FILE;
-    buffer->file.info = file_read_into_text_buffer(path, &buffer->text_buffer);
-
+    bool opened = file_read_into_text_buffer(path, &buffer->text_buffer, &buffer->file.info);
+    if (!opened)
+    {
+        free(buffer);
+        return NULL;
+    }
+    Buffer **new_slot = buffer_create_new_slot(state);
     *new_slot = buffer;
     return *new_slot;
 }
@@ -544,10 +547,14 @@ Frame *frame_create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Edit
 Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state)
 {
     Buffer *buffer = buffer_create_read_file(file_path, state);
-    View *view = buffer_view_create(buffer, state);
-    Frame *frame = frame_create(view, rect, state);
-    frame_set_active(frame, state);
-    return frame;
+    if (buffer != NULL)
+    {
+        View *view = buffer_view_create(buffer, state);
+        Frame *frame = frame_create(view, rect, state);
+        frame_set_active(frame, state);
+        return frame;
+    }
+    return NULL;
 }
 
 Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state)
@@ -808,7 +815,7 @@ Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
     return result;
 }
 
-void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state)
+bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state)
 {
     (void)window; (void)state;
     switch (context.kind)
@@ -822,7 +829,11 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 .w = 500,
                 .h = 500
             };
-            frame_create_buffer_view_open_file(result.str, buffer_view_rect, state);
+            Frame *frame = frame_create_buffer_view_open_file(result.str, buffer_view_rect, state);
+            if (frame == NULL)
+            {
+                return false;
+            }
         } break;
 
         case PROMPT_GO_TO_LINE:
@@ -856,6 +867,7 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             log_warning("prompt_submit: unhandled prompt kind");
         } break;
     }
+    return true;
 }
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect)
@@ -2464,8 +2476,8 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
                 case BUFFER_KIND_PROMPT:
                 {
                     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
-                    prompt_submit(buffer_view->buffer->prompt.context, prompt_result, frame->outer_rect, window, state);
-                    frame_destroy(frame, state);
+                    if (prompt_submit(buffer_view->buffer->prompt.context, prompt_result, frame->outer_rect, window, state))
+                        frame_destroy(frame, state);
                 } break;
 
                 default:
@@ -2862,12 +2874,15 @@ char *string_builder_compile_and_destroy(String_Builder *string_builder)
     return compiled_str;
 }
 
-File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
+bool file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer, File_Info *file_info)
 {
-    File_Info file_info = {0};
-    file_info.path = xstrdup(path);
-    FILE *f = fopen(file_info.path, "r");
-    if (!f) fatal("Failed to open file for reading at %s", path);
+    file_info->path = xstrdup(path);
+    FILE *f = fopen(file_info->path, "r");
+    if (!f)
+    {
+        trace_log("Could not open file at %s", path);
+        return false;
+    }
     char buf[MAX_CHARS_PER_LINE];
     memset(text_buffer, 0, sizeof(*text_buffer));
     while (fgets(buf, sizeof(buf), f))
@@ -2878,7 +2893,7 @@ File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
         text_buffer->lines[text_buffer->line_count - 1] = text_line_make_dup(buf);
     }
     fclose(f);
-    return file_info;
+    return true;
 }
 
 void file_write(Text_Buffer text_buffer, const char *path)
