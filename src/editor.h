@@ -161,9 +161,9 @@ typedef struct {
 } Prompt_Result;
 
 typedef enum {
-    BUFFER_GENERIC,
-    BUFFER_FILE,
-    BUFFER_PROMPT
+    BUFFER_KIND_GENERIC,
+    BUFFER_KIND_FILE,
+    BUFFER_KIND_PROMPT
 } Buffer_Kind;
 
 typedef struct {
@@ -286,6 +286,7 @@ Buffer **buffer_create_new_slot(Editor_State *state);
 void buffer_free_slot(Buffer *buffer, Editor_State *state);
 Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state);
 Buffer *buffer_create_read_file(const char *path, Editor_State *state);
+Buffer *buffer_create_empty_file(Editor_State *state);
 Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state);
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
@@ -304,6 +305,7 @@ bool frame_handle_scroll(Frame *frame, float x_offset, float y_offset, const Ren
 
 Frame *frame_create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
+Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state);
 

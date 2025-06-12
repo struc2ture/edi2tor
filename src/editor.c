@@ -321,7 +321,7 @@ Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state)
 {
     Buffer **new_slot = buffer_create_new_slot(state);
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_GENERIC;
+    buffer->kind = BUFFER_KIND_GENERIC;
     buffer->text_buffer = text_buffer;
     *new_slot = buffer;
     return *new_slot;
@@ -332,8 +332,21 @@ Buffer *buffer_create_read_file(const char *path, Editor_State *state)
     Buffer **new_slot = buffer_create_new_slot(state);
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_FILE;
+    buffer->kind = BUFFER_KIND_FILE;
     buffer->file.info = file_read_into_text_buffer(path, &buffer->text_buffer);
+
+    *new_slot = buffer;
+    return *new_slot;
+}
+
+Buffer *buffer_create_empty_file(Editor_State *state)
+{
+    Buffer **new_slot = buffer_create_new_slot(state);
+
+    Buffer *buffer = xcalloc(sizeof(Buffer));
+    buffer->kind = BUFFER_KIND_FILE;
+    buffer->file.info.path = NULL;
+    buffer->text_buffer = text_buffer_create_from_lines("", NULL);
 
     *new_slot = buffer;
     return *new_slot;
@@ -344,7 +357,7 @@ Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Ed
     Buffer **new_slot = buffer_create_new_slot(state);
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_PROMPT;
+    buffer->kind = BUFFER_KIND_PROMPT;
 
     buffer->text_buffer.line_count = 2;
     buffer->text_buffer.lines = xmalloc(buffer->text_buffer.line_count * sizeof(buffer->text_buffer.lines[0]));
@@ -375,14 +388,14 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
 {
     switch (buffer->kind)
     {
-        case BUFFER_FILE:
+        case BUFFER_KIND_FILE:
         {
             text_buffer_destroy(&buffer->text_buffer);
             buffer_free_slot(buffer, state);
             free(buffer);
         } break;
 
-        case BUFFER_PROMPT:
+        case BUFFER_KIND_PROMPT:
         {
             text_buffer_destroy(&buffer->text_buffer);
             buffer_free_slot(buffer, state);
@@ -453,7 +466,7 @@ void frame_destroy(Frame *frame, Editor_State *state)
     free(frame);
     if (state->active_frame == frame)
     {
-        state->active_frame = state->frames[0];
+        state->active_frame = (state->frame_count_ > 0) ? state->frames[0] : NULL;
     }
 }
 
@@ -531,6 +544,15 @@ Frame *frame_create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Edit
 Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state)
 {
     Buffer *buffer = buffer_create_read_file(file_path, state);
+    View *view = buffer_view_create(buffer, state);
+    Frame *frame = frame_create(view, rect, state);
+    frame_set_active(frame, state);
+    return frame;
+}
+
+Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state)
+{
+    Buffer *buffer = buffer_create_empty_file(state);
     View *view = buffer_view_create(buffer, state);
     Frame *frame = frame_create(view, rect, state);
     frame_set_active(frame, state);
@@ -822,6 +844,9 @@ void prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             if (view_exists((View *)buffer_view, state))
             {
                 file_write(buffer_view->buffer->text_buffer, result.str);
+                Buffer *new_buffer = buffer_create_read_file(result.str, state);
+                buffer_destroy(buffer_view->buffer, state);
+                buffer_view->buffer = new_buffer;
             }
             else log_warning("prompt_submit: PROMPT_SAVE_AS: Buffer_View %p does not exist", context.save_as.for_buffer_view);
         } break;
@@ -1138,7 +1163,7 @@ void draw_buffer_view(Buffer_View buffer_view, Rect frame_rect, bool is_active, 
     draw_buffer_view_selection(buffer_view, render_state);
 
     draw_buffer_view_line_numbers(buffer_view, frame_rect, canvas_viewport, render_state);
-    if (buffer_view.buffer->kind == BUFFER_FILE)
+    if (buffer_view.buffer->kind == BUFFER_KIND_FILE && buffer_view.buffer->file.info.path != NULL)
         draw_buffer_view_name(buffer_view, frame_rect, is_active, canvas_viewport, render_state);
 }
 
@@ -1237,7 +1262,7 @@ void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Vie
 
 void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state)
 {
-    bassert(buffer_view.buffer->kind == BUFFER_FILE);
+    bassert(buffer_view.buffer->kind == BUFFER_KIND_FILE);
 
     Rect name_rect = buffer_view_get_name_rect(buffer_view, frame_rect, render_state);
 
@@ -2436,7 +2461,7 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
         {
             switch (buffer_view->buffer->kind)
             {
-                case BUFFER_PROMPT:
+                case BUFFER_KIND_PROMPT:
                 {
                     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
                     prompt_submit(buffer_view->buffer->prompt.context, prompt_result, frame->outer_rect, window, state);
@@ -2477,15 +2502,20 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
         {
             buffer_view_delete_current_line(buffer_view, &state->render_state);
         } break;
-        case GLFW_KEY_F7: if (action == GLFW_PRESS)
+        case GLFW_KEY_R: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            // TODO: Implement reloading current file
+            if (buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL)
+            {
+                Buffer *new_buffer = buffer_create_read_file(buffer_view->buffer->file.info.path, state);
+                buffer_destroy(buffer_view->buffer, state);
+                buffer_view->buffer = new_buffer;
+            }
         } break;
         case GLFW_KEY_S: if (mods & GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            if (buffer_view->buffer->kind == BUFFER_FILE)
+            if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
             {
-                if (mods & GLFW_MOD_SHIFT)
+                if (mods & GLFW_MOD_SHIFT || buffer_view->buffer->file.info.path == NULL)
                 {
                     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
                     frame_create_buffer_view_prompt(
@@ -2545,6 +2575,7 @@ void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State 
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
     (void) window;
+    bool will_propagate_to_view = true;
     switch(key)
     {
         case GLFW_KEY_F1: if (action == GLFW_PRESS)
@@ -2569,12 +2600,12 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             if (state->active_frame != NULL)
             {
                 frame_destroy(state->active_frame, state);
+                will_propagate_to_view = false;
             }
         } break;
         case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
             frame_create_buffer_view_open_file(
                 FILE_PATH1,
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -2582,8 +2613,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
         case GLFW_KEY_2: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
             frame_create_image_view(
                 IMAGE_PATH,
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -2598,9 +2628,16 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
                 state);
         } break;
+        case GLFW_KEY_N: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+            frame_create_buffer_view_empty_file(
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
+        } break;
     }
 
-    if (state->active_frame)
+    if (will_propagate_to_view && state->active_frame)
     {
         view_handle_key(state->active_frame->view, state->active_frame, window, state, key, action, mods);
     }
