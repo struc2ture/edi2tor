@@ -24,6 +24,17 @@ const char *shader_main_frag_src =
 "    FragColor = vec4(vec3(Color), Color.a * texture(u_tex, TexCoord).r);\n"
 "}\n";
 
+const char *shader_image_frag_src =
+"#version 410 core\n"
+"out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D u_tex;\n"
+"in vec4 Color;\n"
+"void main() {\n"
+"    FragColor = Color * texture(u_tex, TexCoord);\n"
+// "    FragColor = vec4(1.0, 1.0, 1.0, 1.0);\n"
+"}\n";
+
 const char *shader_grid_frag_src =
 "#version 410 core\n"
 "out vec4 FragColor;\n"

@@ -7,6 +7,9 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
+#include <stb_image.h>
+#include <stb_truetype.h>
+
 #include "editor.h"
 
 #include "shaders.h"
@@ -242,11 +245,13 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
 
     render_state->main_shader = gl_create_shader_program(shader_main_vert_src, shader_main_frag_src);
     render_state->grid_shader = gl_create_shader_program(shader_main_vert_src, shader_grid_frag_src);
+    render_state->image_shader = gl_create_shader_program(shader_main_vert_src, shader_image_frag_src);
 
+    render_state->main_shader_mvp_loc = glGetUniformLocation(render_state->main_shader, "u_mvp");
     render_state->grid_shader_mvp_loc = glGetUniformLocation(render_state->grid_shader, "u_mvp");
     render_state->grid_shader_offset_loc = glGetUniformLocation(render_state->grid_shader, "u_offset");
     render_state->grid_shader_resolution_loc = glGetUniformLocation(render_state->grid_shader, "u_resolution");
-    render_state->main_shader_mvp_loc = glGetUniformLocation(render_state->main_shader, "u_mvp");
+    render_state->image_shader_mvp_loc = glGetUniformLocation(render_state->image_shader, "u_mvp");
 
     glGenVertexArrays(1, &render_state->vao);
     glGenBuffers(1, &render_state->vbo);
@@ -259,6 +264,11 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
     glEnableVertexAttribArray(2);
+
+    glGenTextures(1, &render_state->white_texture);
+    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
+    unsigned char white_texture_bytes[] = { 255 };
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, white_texture_bytes);
 
     render_state->font = load_font(FONT_PATH);
     render_state->buffer_view_line_num_col_width = get_string_rect("000", render_state->font, 0, 0).w;
@@ -537,6 +547,15 @@ Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context c
     return frame;
 }
 
+Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state)
+{
+    Image image = file_open_image(file_path);
+    View *view = image_view_create(image, state);
+    Frame *frame = frame_create(view, rect, state);
+    frame_set_active(frame, state);
+    return frame;
+}
+
 int view___get_index(View *view, Editor_State *state)
 {
     int index = 0;
@@ -586,6 +605,13 @@ void view_destroy(View *view, Editor_State *state)
             free(view);
         } break;
 
+        case VIEW_KIND_IMAGE:
+        {
+            image_destroy(view->iv.image);
+            view___free_slot(view, state);
+            free(view);
+        } break;
+
         default:
         {
             log_warning("view_destroy: Unhandled View kind: %d", view->kind);
@@ -611,6 +637,28 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
         {
             Rect text_area_rect = buffer_view_get_text_area_rect(view->bv, rect, render_state);
             viewport_set_outer_rect(&view->bv.viewport, text_area_rect);
+        } break;
+
+        case VIEW_KIND_IMAGE:
+        {
+            float x = rect.x + render_state->buffer_view_padding;
+            float y = rect.y + render_state->buffer_view_padding;
+            float w = rect.w - 2 * render_state->buffer_view_padding;
+            float h = rect.h - 2 * render_state->buffer_view_padding;
+            if (w > h)
+            {
+                view->iv.image_rect.y = y;
+                view->iv.image_rect.h = h;
+                view->iv.image_rect.w = view->iv.image_rect.h / view->iv.image.height * view->iv.image.width;
+                view->iv.image_rect.x = x + w * 0.5f - view->iv.image_rect.w * 0.5f;
+            }
+            else
+            {
+                view->iv.image_rect.x = x;
+                view->iv.image_rect.w = w;
+                view->iv.image_rect.h = view->iv.image_rect.w / view->iv.image.width * view->iv.image.height;
+                view->iv.image_rect.y = y + h * 0.5f - view->iv.image_rect.h * 0.5f;
+            }
         } break;
 
         default:
@@ -687,6 +735,19 @@ Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 tex
     buffer_pos.x = buffer_view.viewport.rect.x + text_area_pos.x / buffer_view.viewport.zoom;
     buffer_pos.y = buffer_view.viewport.rect.y + text_area_pos.y / buffer_view.viewport.zoom;
     return buffer_pos;
+}
+
+void image_destroy(Image image)
+{
+    glDeleteTextures(1, &image.texture);
+}
+
+View *image_view_create(Image image, Editor_State *state)
+{
+    View *view = view_create(state);
+    view->kind = VIEW_KIND_IMAGE;
+    view->iv.image = image;
+    return view;
 }
 
 Prompt_Context prompt_create_context_open_file()
@@ -820,11 +881,6 @@ Render_Font load_font(const char *path)
     stbtt_GetScaledFontVMetrics(file_bytes, 0, font.size, &font.ascent, &font.descent, &font.line_gap);
     free(file_bytes);
 
-    glGenTextures(1, &font.white_texture);
-    glBindTexture(GL_TEXTURE_2D, font.white_texture);
-    unsigned char white_texture_bytes[] = { 255 };
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, white_texture_bytes);
-
     glGenTextures(1, &font.texture);
     glBindTexture(GL_TEXTURE_2D, font.texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, font.atlas_w, font.atlas_h, 0, GL_RED, GL_UNSIGNED_BYTE, atlas_bitmap);
@@ -954,29 +1010,6 @@ Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_Stat
     return cursor_rect;
 }
 
-void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4])
-{
-    y += font.ascent;
-    Vert_Buffer vert_buf = {0};
-    while (*str)
-    {
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1);
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
-        str++;
-    }
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font.texture);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-    glBindTexture(GL_TEXTURE_2D, font.white_texture);
-}
-
 void draw_quad(Rect q, const unsigned char color[4])
 {
     Vert_Buffer vert_buf = {0};
@@ -997,6 +1030,45 @@ void draw_quad(Rect q, const unsigned char color[4])
     }
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+}
+
+void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_State *render_state)
+{
+    Vert_Buffer vert_buf = {0};
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, color));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, color));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, color));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, color));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, color));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, color));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
+}
+
+void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state)
+{
+    y += font.ascent;
+    Vert_Buffer vert_buf = {0};
+    while (*str)
+    {
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1);
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
+        str++;
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, font.texture);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
 }
 
 void draw_grid(Viewport canvas_viewport, Render_State *render_state)
@@ -1023,22 +1095,22 @@ void draw_frame(Frame frame, bool is_active, Viewport canvas_viewport, Render_St
     else
         draw_quad(frame.outer_rect, (unsigned char[4]){20, 20, 20, 255});
 
-    draw_view(*frame.view, frame.outer_rect, is_active, canvas_viewport, render_state, delta_time);
+    draw_view(*frame.view, &frame, is_active, canvas_viewport, render_state, delta_time);
 }
 
-void draw_view(View view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
+void draw_view(View view, const Frame *frame, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
 {
     switch(view.kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            draw_buffer_view(view.bv, frame_rect, is_active, canvas_viewport, render_state, delta_time);
+            draw_buffer_view(view.bv, frame->outer_rect, is_active, canvas_viewport, render_state, delta_time);
         } break;
 
-        // case VIEW_KIND_IMAGE:
-        // {
-        //     draw_image_view();
-        // } break;
+        case VIEW_KIND_IMAGE:
+        {
+            draw_image_view(view.iv, render_state);
+        } break;
 
         default:
         {
@@ -1080,7 +1152,7 @@ void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *
         Rect string_rect = get_string_rect(text_buffer.lines[i].str, render_state->font, 0, y);
         bool is_seen = rect_intersect(string_rect, viewport.rect);
         if (is_seen)
-            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (unsigned char[4]){255, 255, 255, 255});
+            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (unsigned char[4]){255, 255, 255, 255}, render_state);
         y += line_height;
     }
 }
@@ -1158,7 +1230,7 @@ void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Vie
             {
                 color[0] = 230; color[1] = 230; color[2] = 230; color[3] = 255;
             }
-            draw_string(line_i_str_buf, render_state->font, 0, min_y, color);
+            draw_string(line_i_str_buf, render_state->font, 0, min_y, color, render_state);
         }
     }
 }
@@ -1177,9 +1249,9 @@ void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_act
 
     transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
-        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255});
+        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255}, render_state);
     else
-        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255});
+        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
 }
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state)
@@ -1216,12 +1288,19 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *rend
             active_buffer_view->cursor.pos.col,
             active_buffer_view->buffer->text_buffer.lines[active_buffer_view->cursor.pos.line].len,
             active_buffer_view->buffer->text_buffer.line_count);
-        draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
+        draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
         status_str_y += font_line_height;
     }
 
     snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f", state->fps, state->delta_time);
-    draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color);
+    draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
+}
+
+void draw_image_view(Image_View image_view, Render_State *render_state)
+{
+    glUseProgram(render_state->image_shader);
+    draw_texture(image_view.image.texture, image_view.image_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
+    glUseProgram(render_state->main_shader);
 }
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out)
@@ -1328,6 +1407,9 @@ void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *rende
     mul_mat4(view, proj, mvp);
 
     glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUseProgram(render_state->image_shader);
+    glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUseProgram(render_state->main_shader);
 
     Rect screen_rect = canvas_rect_to_screen_rect(rect, canvas_viewport);
     gl_enable_scissor(screen_rect, render_state);
@@ -1343,6 +1425,9 @@ void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_s
     mul_mat4(view, proj, mvp);
 
     glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUseProgram(render_state->image_shader);
+    glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, mvp);
+    glUseProgram(render_state->main_shader);
 
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1354,6 +1439,9 @@ void transform_set_screen_space(Render_State *render_state)
     make_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1, proj);
 
     glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, proj);
+    glUseProgram(render_state->image_shader);
+    glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, proj);
+    glUseProgram(render_state->main_shader);
 
     glDisable(GL_SCISSOR_TEST);
 }
@@ -2442,6 +2530,11 @@ void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State 
             buffer_view_handle_key(&view->bv, frame, window, state, key, action, mods);
         } break;
 
+        case VIEW_KIND_IMAGE:
+        {
+            // Nothing for now
+        } break;
+
         default:
         {
             log_warning("view_handle_key: Unhandled View kind: %d", view->kind);
@@ -2484,6 +2577,15 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
             frame_create_buffer_view_open_file(
                 FILE_PATH1,
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+                state);
+        } break;
+        case GLFW_KEY_2: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+            frame_create_image_view(
+                IMAGE_PATH,
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;
@@ -2731,7 +2833,8 @@ File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer)
     if (!f) fatal("Failed to open file for reading at %s", path);
     char buf[MAX_CHARS_PER_LINE];
     memset(text_buffer, 0, sizeof(*text_buffer));
-    while (fgets(buf, sizeof(buf), f)) {
+    while (fgets(buf, sizeof(buf), f))
+    {
         text_buffer->line_count++;
         bassert(text_buffer->line_count <= MAX_LINES);
         text_buffer->lines = xrealloc(text_buffer->lines, text_buffer->line_count * sizeof(text_buffer->lines[0]));
@@ -2745,11 +2848,38 @@ void file_write(Text_Buffer text_buffer, const char *path)
 {
     FILE *f = fopen(path, "w");
     if (!f) fatal("Failed to open file for writing at %s", path);
-    for (int i = 0; i < text_buffer.line_count; i++) {
+    for (int i = 0; i < text_buffer.line_count; i++)
+    {
         fputs(text_buffer.lines[i].str, f);
     }
     fclose(f);
     trace_log("Saved file to %s", path);
+}
+
+Image file_open_image(const char *path)
+{
+    Image image = {0};
+    int width, height, channels;
+    unsigned char *data = stbi_load(path, &width, &height, &channels, 0);
+    if (!data) return image;
+
+    image.width = (float)width;
+    image.height = (float)height;
+    image.channels = channels;
+
+    GLenum format = (channels == 3) ? GL_RGB : GL_RGBA;
+
+    glGenTextures(1, &image.texture);
+    glBindTexture(GL_TEXTURE_2D, image.texture);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
+    return image;
 }
 
 void read_clipboard_mac(char *buf, size_t buf_size)

@@ -6,6 +6,9 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
@@ -25,6 +28,7 @@
 #define FILE_PATH1 "res/mock6.txt"
 // #define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "src/editor.c"
+#define IMAGE_PATH "res/DUCKS.png"
 
 typedef struct {
     float x, y;
@@ -52,6 +56,13 @@ typedef struct {
     Vert verts[VERT_MAX];
     int vert_count;
 } Vert_Buffer;
+
+typedef struct {
+    GLuint texture;
+    float width;
+    float height;
+    int channels;
+} Image;
 
 typedef struct {
     Rect rect;
@@ -98,7 +109,6 @@ typedef struct {
     stbtt_bakedchar *char_data;
     int char_count;
     GLuint texture;
-    GLuint white_texture;
     float size;
     float ascent, descent, line_gap;
     int atlas_w, atlas_h;
@@ -107,16 +117,19 @@ typedef struct {
 typedef struct {
     GLuint main_shader;
     GLuint grid_shader;
+    GLuint image_shader;
     GLuint vao;
     GLuint vbo;
     GLuint main_shader_mvp_loc;
     GLuint grid_shader_mvp_loc;
     GLuint grid_shader_offset_loc;
     GLuint grid_shader_resolution_loc;
+    GLuint image_shader_mvp_loc;
     Vec_2 window_dim;
     Vec_2 framebuffer_dim;
     float dpi_scale;
     Render_Font font;
+    GLuint white_texture;
     float buffer_view_line_num_col_width;
     float buffer_view_name_height;
     float buffer_view_padding;
@@ -181,7 +194,8 @@ struct Buffer_View {
 };
 
 typedef struct {
-    int a;
+    Image image;
+    Rect image_rect;
 } Image_View;
 
 typedef enum  {
@@ -291,6 +305,7 @@ bool frame_handle_scroll(Frame *frame, float x_offset, float y_offset, const Ren
 Frame *frame_create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
+Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state);
 
 int view___get_index(View *view, Editor_State *state);
 View **view___create_new_slot(Editor_State *state);
@@ -306,6 +321,10 @@ Rect buffer_view_get_line_num_col_rect(Buffer_View buffer_view, Rect frame_rect,
 Rect buffer_view_get_name_rect(Buffer_View buffer_view, Rect frame_rect, const Render_State *render_state);
 Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View buffer_view, Rect frame_rect, Vec_2 canvas_pos, const Render_State *render_state);
 Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View buffer_view, Vec_2 text_area_pos);
+
+void image_destroy(Image image);
+
+View *image_view_create(Image image, Editor_State *state);
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
@@ -328,19 +347,22 @@ Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
 Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state);
 
-void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4]);
 void draw_quad(Rect q, const unsigned char color[4]);
+void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_State *render_state);
+void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state);
 
 void draw_grid(Viewport canvas_viewport, Render_State *render_state);
 
 void draw_frame(Frame frame, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
-void draw_view(View view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+void draw_view(View view, const Frame *frame, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void draw_buffer_view(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
 void draw_buffer_view_selection(Buffer_View buffer_view, Render_State *render_state);
 void draw_buffer_view_line_numbers(Buffer_View buffer_view, Rect frame_rect, Viewport canvas_viewport, Render_State *render_state);
 void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_active, Viewport canvas_viewport, Render_State *render_state);
+
+void draw_image_view(Image_View image_view, Render_State *render_state);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 
@@ -454,6 +476,8 @@ char *string_builder_compile_and_destroy(String_Builder *string_builder);
 
 File_Info file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer);
 void file_write(Text_Buffer text_buffer, const char *path);
+
+Image file_open_image(const char *path);
 
 void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
