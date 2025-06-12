@@ -12,6 +12,8 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
+#include "user_draw.h"
+
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
@@ -208,21 +210,26 @@ typedef struct {
 } Image_View;
 
 typedef struct {
+    User_State *user_state;
+} Render_Scene;
+
+typedef struct {
+    Render_Scene *render_scene;
     Framebuffer framebuffer;
     Rect framebuffer_rect;
-} Framebuffer_View;
+} Render_Scene_View;
 
 typedef enum  {
     VIEW_KIND_BUFFER,
     VIEW_KIND_IMAGE,
-    VIEW_KIND_FRAMEBUFFER
+    VIEW_KIND_RENDER_SCENE
 } View_Kind;
 
 typedef struct {
     union {
         Buffer_View bv;
         Image_View iv;
-        Framebuffer_View fv;
+        Render_Scene_View rsv;
     };
     View_Kind kind;
 } View;
@@ -325,7 +332,7 @@ Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Edit
 Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state);
-Frame *frame_create_framebuffer_view(Rect rect, Editor_State *state);
+Frame *frame_create_render_scene_view(Rect rect, Editor_State *state);
 
 int view___get_index(View *view, Editor_State *state);
 View **view___create_new_slot(Editor_State *state);
@@ -346,7 +353,9 @@ void image_destroy(Image image);
 
 View *image_view_create(Image image, Editor_State *state);
 
-View *framebuffer_view_create(Framebuffer framebuffer, Editor_State *state);
+Render_Scene *render_scene_create();
+
+View *render_scene_view_create(Framebuffer framebuffer, Render_Scene *render_scene, Editor_State *state);
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
@@ -386,9 +395,7 @@ void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_act
 
 void draw_image_view(Image_View image_view, Render_State *render_state);
 
-void draw_framebuffer_contents(Framebuffer_View framebuffer_view);
-
-void draw_framebuffer_view(Framebuffer_View framebuffer_view, Render_State *render_state);
+void draw_render_scene_view(Render_Scene_View framebuffer_view, Render_State *render_state);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 

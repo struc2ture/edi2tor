@@ -259,39 +259,6 @@ Framebuffer gl_create_framebuffer(int w, int h)
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    const char *vs_src =
-        "#version 410 core\n"
-        "layout(location = 0) in vec2 aPos;\n"
-        "void main() {\n"
-        "  gl_Position = vec4(aPos, 0.0, 1.0);\n"
-        "}\n";
-
-    const char *fs_src =
-        "#version 410 core\n"
-        "out vec4 FragColor;\n"
-        "void main() {\n"
-        "  FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
-        "}\n";
-
-    framebuffer.prog = gl_create_shader_program(vs_src, fs_src);
-
-    float verts[] = {
-        -0.5f, -0.5f,
-        0.5f, -0.5f,
-        0.0f,  0.5f
-    };
-
-    glGenVertexArrays(1, &framebuffer.vao);
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-
-    glBindVertexArray(framebuffer.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-
     return framebuffer;
 }
 
@@ -641,10 +608,11 @@ Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *s
     return frame;
 }
 
-Frame *frame_create_framebuffer_view(Rect rect, Editor_State *state)
+Frame *frame_create_render_scene_view(Rect rect, Editor_State *state)
 {
     Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    View *view = framebuffer_view_create(framebuffer, state);
+    Render_Scene *render_scene = render_scene_create();
+    View *view = render_scene_view_create(framebuffer, render_scene, state);
     Frame *frame = frame_create(view, rect, state);
     frame_set_active(frame, state);
     return frame;
@@ -755,12 +723,12 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
             }
         } break;
 
-        case VIEW_KIND_FRAMEBUFFER:
+        case VIEW_KIND_RENDER_SCENE:
         {
-            view->fv.framebuffer_rect.x = rect.x + render_state->buffer_view_padding;
-            view->fv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
-            view->fv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
-            view->fv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
+            view->rsv.framebuffer_rect.x = rect.x + render_state->buffer_view_padding;
+            view->rsv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
+            view->rsv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
+            view->rsv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
         } break;
 
         default:
@@ -852,11 +820,27 @@ View *image_view_create(Image image, Editor_State *state)
     return view;
 }
 
-View *framebuffer_view_create(Framebuffer framebuffer, Editor_State *state)
+Render_Scene *render_scene_create()
+{
+    Render_Scene *render_scene = xcalloc(sizeof(Render_Scene));
+    render_scene->user_state = xcalloc(sizeof(User_State));
+    user_init(render_scene->user_state);
+    return render_scene;
+}
+
+void render_scene_destroy(Render_Scene *render_scene)
+{
+    free(render_scene->user_state);
+    render_scene->user_state = NULL;
+    free(render_scene);
+}
+
+View *render_scene_view_create(Framebuffer framebuffer, Render_Scene *render_scene, Editor_State *state)
 {
     View *view = view_create(state);
-    view->kind = VIEW_KIND_FRAMEBUFFER;
-    view->fv.framebuffer = framebuffer;
+    view->kind = VIEW_KIND_RENDER_SCENE;
+    view->rsv.framebuffer = framebuffer;
+    view->rsv.render_scene = render_scene;
     return view;
 }
 
@@ -1230,9 +1214,9 @@ void draw_view(View view, const Frame *frame, bool is_active, Viewport canvas_vi
             draw_image_view(view.iv, render_state);
         } break;
 
-        case VIEW_KIND_FRAMEBUFFER:
+        case VIEW_KIND_RENDER_SCENE:
         {
-            draw_framebuffer_view(view.fv, render_state);
+            draw_render_scene_view(view.rsv, render_state);
         } break;
 
         default:
@@ -1426,21 +1410,13 @@ void draw_image_view(Image_View image_view, Render_State *render_state)
     glUseProgram(render_state->main_shader);
 }
 
-void draw_framebuffer_contents(Framebuffer_View framebuffer_view)
+void draw_render_scene_view(Render_Scene_View rs_view, Render_State *render_state)
 {
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(framebuffer_view.framebuffer.prog);
-    glBindVertexArray(framebuffer_view.framebuffer.vao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-}
-
-void draw_framebuffer_view(Framebuffer_View framebuffer_view, Render_State *render_state)
-{
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_view.framebuffer.fbo);
-    glViewport(0, 0, framebuffer_view.framebuffer.w, framebuffer_view.framebuffer.h);
+    glBindFramebuffer(GL_FRAMEBUFFER, rs_view.framebuffer.fbo);
+    glViewport(0, 0, rs_view.framebuffer.w, rs_view.framebuffer.h);
     glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 
-    draw_framebuffer_contents(framebuffer_view);
+    user_draw(rs_view.render_scene->user_state);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
@@ -1448,9 +1424,8 @@ void draw_framebuffer_view(Framebuffer_View framebuffer_view, Render_State *rend
     glBindVertexArray(render_state->vao);
 
     glUseProgram(render_state->image_shader);
-    draw_texture(framebuffer_view.framebuffer.tex, framebuffer_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
+    draw_texture(rs_view.framebuffer.tex, rs_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
     glUseProgram(render_state->main_shader);
-    (void)framebuffer_view; (void)render_state;
 }
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out)
@@ -2722,6 +2697,11 @@ void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State 
             // Nothing for now
         } break;
 
+        case VIEW_KIND_RENDER_SCENE:
+        {
+            // Nothing for now
+        } break;
+
         default:
         {
             log_warning("view_handle_key: Unhandled View kind: %d", view->kind);
@@ -2779,7 +2759,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
             Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_framebuffer_view(
+            frame_create_render_scene_view(
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;
