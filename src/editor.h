@@ -433,6 +433,7 @@ Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range,
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 int text_buffer_match_indent(Text_Buffer *text_buffer, int line);
+int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer);
 
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state);
@@ -446,6 +447,8 @@ void buffer_view_insert_indent(Buffer_View *buffer_view, Render_State *render_st
 void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state);
 void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state);
 void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *render_state);
+
+void buffer_view_whitespace_cleanup(Buffer_View *buffer_view);
 
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
 void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);

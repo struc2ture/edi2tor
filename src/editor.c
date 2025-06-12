@@ -391,13 +391,8 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
 {
     switch (buffer->kind)
     {
+        case BUFFER_KIND_GENERIC:
         case BUFFER_KIND_FILE:
-        {
-            text_buffer_destroy(&buffer->text_buffer);
-            buffer_free_slot(buffer, state);
-            free(buffer);
-        } break;
-
         case BUFFER_KIND_PROMPT:
         {
             text_buffer_destroy(&buffer->text_buffer);
@@ -2242,6 +2237,27 @@ int text_buffer_match_indent(Text_Buffer *text_buffer, int line)
     return prev_indent_level;
 }
 
+int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer)
+{
+    int cleaned_lines = 0;
+    for (int line_i = 0; line_i < text_buffer->line_count; line_i++)
+    {
+        Text_Line *text_line = &text_buffer->lines[line_i];
+        int trailing_spaces = 0;
+        for (int i = text_line->len - 2; i >= 0; i--) // len - 2 because \n will always be at the end of a line
+        {
+            if (text_line->str[i] == ' ') trailing_spaces++;
+            else break;
+        }
+        if (trailing_spaces > 0)
+        {
+            text_line_remove_range(text_line, text_line->len - 1 - trailing_spaces, trailing_spaces);
+            cleaned_lines++;
+        }
+    }
+    return cleaned_lines;
+}
+
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state)
 {
     if (buffer_view->mark.active)
@@ -2390,6 +2406,13 @@ void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *ren
     buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
     viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, render_state);
+}
+
+void buffer_view_whitespace_cleanup(Buffer_View *buffer_view)
+{
+    int cleaned_lines = text_buffer_whitespace_cleanup(&buffer_view->buffer->text_buffer);
+    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+    trace_log("buffer_view_whitespace_cleanup: Cleaned up %d lines", cleaned_lines);
 }
 
 void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state)
@@ -2559,6 +2582,10 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
                 prompt_create_context_go_to_line(buffer_view),
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
                 state);
+        } break;
+        case GLFW_KEY_SEMICOLON: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+        {
+            buffer_view_whitespace_cleanup(buffer_view);
         } break;
     }
 }

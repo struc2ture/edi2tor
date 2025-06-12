@@ -698,6 +698,31 @@ void test__text_buffer_extract_range(UT_State *s)
     text_buffer_destroy(&text_buffer);
 }
 
+void test__text_buffer_whitespace_cleanup(UT_State *s)
+{
+    Text_Buffer text_buffer = text_buffer_create_from_lines(
+        "line 1   ",
+        "line 2 ",
+        "line 3",
+        "line 4        ",
+        "line 5 asd",
+        NULL);
+
+    int cleaned_lines = text_buffer_whitespace_cleanup(&text_buffer);
+    bool correct_buffer = validate__text_buffer(&text_buffer,
+        "line 1\n",
+        "line 2\n",
+        "line 3\n",
+        "line 4\n",
+        "line 5 asd\n",
+        NULL);
+    bool correct_count = cleaned_lines == 3;
+
+    UNIT_TESTS_RUN_CHECK(correct_buffer && correct_count);
+
+    text_buffer_destroy(&text_buffer);
+}
+
 void test__cursor_pos_clamp__regular(UT_State *s)
 {
     Text_Buffer text_buffer = text_buffer_create_from_lines(
@@ -1417,6 +1442,7 @@ void unit_tests_run(Text_Buffer *log_buffer, bool break_on_failure)
     test__text_buffer_insert_range(&s);
     test__text_buffer_remove_range(&s);
     test__text_buffer_extract_range(&s);
+    test__text_buffer_whitespace_cleanup(&s);
     text_buffer_append_f(s.log_buffer, "");
 
     text_buffer_append_f(s.log_buffer, "CURSOR POS TESTS:");
