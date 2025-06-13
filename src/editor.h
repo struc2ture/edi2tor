@@ -12,7 +12,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-#include "user_draw.h"
+#include "live_cube.h"
 
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
@@ -214,25 +214,25 @@ typedef struct {
 
 typedef struct {
     User_State *user_state;
-} Render_Scene;
+} Live_Scene;
 
 typedef struct {
-    Render_Scene *render_scene;
+    Live_Scene *live_scene;
     Framebuffer framebuffer;
     Rect framebuffer_rect;
-} Render_Scene_View;
+} Live_Scene_View;
 
 typedef enum  {
     VIEW_KIND_BUFFER,
     VIEW_KIND_IMAGE,
-    VIEW_KIND_RENDER_SCENE
+    VIEW_KIND_LIVE_SCENE
 } View_Kind;
 
 typedef struct {
     union {
         Buffer_View bv;
         Image_View iv;
-        Render_Scene_View rsv;
+        Live_Scene_View lsv;
     };
     View_Kind kind;
 } View;
@@ -335,7 +335,7 @@ Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Edit
 Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state);
-Frame *frame_create_render_scene_view(Rect rect, Editor_State *state);
+Frame *frame_create_live_scene_view(Rect rect, Editor_State *state);
 
 int view___get_index(View *view, Editor_State *state);
 View **view___create_new_slot(Editor_State *state);
@@ -358,10 +358,10 @@ View *image_view_create(Image image, Editor_State *state);
 
 void framebuffer_destroy(Framebuffer framebuffer);
 
-Render_Scene *render_scene_create(float w, float h);
-void render_scene_destroy(Render_Scene *render_scene);
+Live_Scene *live_scene_create(float w, float h);
+void live_scene_destroy(Live_Scene *render_scene);
 
-View *render_scene_view_create(Framebuffer framebuffer, Render_Scene *render_scene, Editor_State *state);
+View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Editor_State *state);
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
@@ -401,7 +401,7 @@ void draw_buffer_view_name(Buffer_View buffer_view, Rect frame_rect, bool is_act
 
 void draw_image_view(Image_View image_view, Render_State *render_state);
 
-void draw_render_scene_view(Render_Scene_View framebuffer_view, Render_State *render_state, float delta_time);
+void draw_live_scene_view(Live_Scene_View live_scene_view, Render_State *render_state, float delta_time);
 
 void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
 

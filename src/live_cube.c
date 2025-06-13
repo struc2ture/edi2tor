@@ -6,7 +6,7 @@
 
 #include <OpenGL/gl3.h>
 
-#include "user_draw.h"
+#include "live_cube.h"
 
 static bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -112,7 +112,7 @@ void mat4_mul(mat4 out, mat4 a, mat4 b) {
     memcpy(out, res, sizeof(mat4));
 }
 
-void user_init(User_State *state, float w, float h)
+void live_cube_init(User_State *state, float w, float h)
 {
     const char *vs_src =
         "#version 410 core\n"
@@ -175,7 +175,7 @@ void user_init(User_State *state, float w, float h)
     state->h = h;
 }
 
-void user_draw(User_State *state, float delta_time)
+void live_cube_draw(User_State *state, float delta_time)
 {
     glEnable(GL_DEPTH_TEST);
 
@@ -204,7 +204,7 @@ void user_draw(User_State *state, float delta_time)
     glDisable(GL_DEPTH_TEST);
 }
 
-void user_destroy(User_State *state)
+void live_cube_destroy(User_State *state)
 {
     glDeleteBuffers(1, &state->vbo);
     glDeleteVertexArrays(1, &state->vao);

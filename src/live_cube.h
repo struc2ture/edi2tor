@@ -12,6 +12,6 @@ typedef struct {
     float h;
 } User_State;
 
-void user_init(User_State *state, float w, float h);
-void user_draw(User_State *state, float delta_time);
-void user_destroy(User_State *state);
+void live_cube_init(User_State *state, float w, float h);
+void live_cube_draw(User_State *state, float delta_time);
+void live_cube_destroy(User_State *state);

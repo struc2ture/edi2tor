@@ -616,11 +616,11 @@ Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *s
     return frame;
 }
 
-Frame *frame_create_render_scene_view(Rect rect, Editor_State *state)
+Frame *frame_create_live_scene_view(Rect rect, Editor_State *state)
 {
     Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    Render_Scene *render_scene = render_scene_create(rect.w, rect.h);
-    View *view = render_scene_view_create(framebuffer, render_scene, state);
+    Live_Scene *live_scene = live_scene_create(rect.w, rect.h);
+    View *view = live_scene_view_create(framebuffer, live_scene, state);
     Frame *frame = frame_create(view, rect, state);
     frame_set_active(frame, state);
     return frame;
@@ -682,10 +682,10 @@ void view_destroy(View *view, Editor_State *state)
             free(view);
         } break;
 
-        case VIEW_KIND_RENDER_SCENE:
+        case VIEW_KIND_LIVE_SCENE:
         {
-            framebuffer_destroy(view->rsv.framebuffer);
-            render_scene_destroy(view->rsv.render_scene);
+            framebuffer_destroy(view->lsv.framebuffer);
+            live_scene_destroy(view->lsv.live_scene);
             view___free_slot(view, state);
             free(view);
         } break;
@@ -739,12 +739,12 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
             }
         } break;
 
-        case VIEW_KIND_RENDER_SCENE:
+        case VIEW_KIND_LIVE_SCENE:
         {
-            view->rsv.framebuffer_rect.x = rect.x + render_state->buffer_view_padding;
-            view->rsv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
-            view->rsv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
-            view->rsv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
+            view->lsv.framebuffer_rect.x = rect.x + render_state->buffer_view_padding;
+            view->lsv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
+            view->lsv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
+            view->lsv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
         } break;
 
         default:
@@ -843,28 +843,28 @@ View *image_view_create(Image image, Editor_State *state)
     return view;
 }
 
-Render_Scene *render_scene_create(float w, float h)
+Live_Scene *live_scene_create(float w, float h)
 {
-    Render_Scene *render_scene = xcalloc(sizeof(Render_Scene));
-    render_scene->user_state = xcalloc(sizeof(User_State));
-    user_init(render_scene->user_state, w, h);
-    return render_scene;
+    Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
+    live_scene->user_state = xcalloc(sizeof(User_State));
+    live_cube_init(live_scene->user_state, w, h);
+    return live_scene;
 }
 
-void render_scene_destroy(Render_Scene *render_scene)
+void live_scene_destroy(Live_Scene *live_scene)
 {
-    user_destroy(render_scene->user_state);
-    free(render_scene->user_state);
-    render_scene->user_state = NULL;
-    free(render_scene);
+    live_cube_destroy(live_scene->user_state);
+    free(live_scene->user_state);
+    live_scene->user_state = NULL;
+    free(live_scene);
 }
 
-View *render_scene_view_create(Framebuffer framebuffer, Render_Scene *render_scene, Editor_State *state)
+View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Editor_State *state)
 {
     View *view = view_create(state);
-    view->kind = VIEW_KIND_RENDER_SCENE;
-    view->rsv.framebuffer = framebuffer;
-    view->rsv.render_scene = render_scene;
+    view->kind = VIEW_KIND_LIVE_SCENE;
+    view->lsv.framebuffer = framebuffer;
+    view->lsv.live_scene = live_scene;
     return view;
 }
 
@@ -1238,9 +1238,9 @@ void draw_view(View view, const Frame *frame, bool is_active, Viewport canvas_vi
             draw_image_view(view.iv, render_state);
         } break;
 
-        case VIEW_KIND_RENDER_SCENE:
+        case VIEW_KIND_LIVE_SCENE:
         {
-            draw_render_scene_view(view.rsv, render_state, delta_time);
+            draw_live_scene_view(view.lsv, render_state, delta_time);
         } break;
 
         default:
@@ -1434,12 +1434,12 @@ void draw_image_view(Image_View image_view, Render_State *render_state)
     glUseProgram(render_state->main_shader);
 }
 
-void draw_render_scene_view(Render_Scene_View rs_view, Render_State *render_state, float delta_time)
+void draw_live_scene_view(Live_Scene_View rs_view, Render_State *render_state, float delta_time)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, rs_view.framebuffer.fbo);
     glViewport(0, 0, rs_view.framebuffer.w, rs_view.framebuffer.h);
 
-    user_draw(rs_view.render_scene->user_state, delta_time);
+    live_cube_draw(rs_view.live_scene->user_state, delta_time);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
@@ -2726,7 +2726,7 @@ void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State 
             // Nothing for now
         } break;
 
-        case VIEW_KIND_RENDER_SCENE:
+        case VIEW_KIND_LIVE_SCENE:
         {
             // Nothing for now
         } break;
@@ -2788,7 +2788,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
             Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_render_scene_view(
+            frame_create_live_scene_view(
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;
