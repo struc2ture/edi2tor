@@ -182,6 +182,8 @@ typedef enum {
     BUFFER_KIND_PROMPT
 } Buffer_Kind;
 
+typedef struct Live_Scene Live_Scene;
+
 typedef struct {
     Buffer_Kind kind;
     Text_Buffer text_buffer;
@@ -189,6 +191,7 @@ typedef struct {
     struct { /* nothing for generic */ } generic;
     struct {
         File_Info info;
+        Live_Scene *linked_live_scene;
     } file;
     struct {
         Prompt_Context context;
@@ -229,10 +232,10 @@ typedef struct {
     live_scene_destroy_t destroy;
 } Live_Scene_Dylib;
 
-typedef struct {
+struct Live_Scene {
     void *state;
     Live_Scene_Dylib dylib;
-} Live_Scene;
+} ;
 
 typedef struct {
     Live_Scene *live_scene;

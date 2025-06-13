@@ -2897,6 +2897,24 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             {
                 live_scene_rebuild(frame->view->lsv.live_scene);
             }
+            else if (frame->view->kind == VIEW_KIND_BUFFER &&
+                frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
+                frame->view->bv.buffer->file.linked_live_scene)
+            {
+                live_scene_rebuild(frame->view->bv.buffer->file.linked_live_scene);
+            }
+        } break;
+        case GLFW_KEY_F6: if (action == GLFW_PRESS)
+        {
+            Frame *frame = state->active_frame;
+            if (frame->view->kind == VIEW_KIND_BUFFER &&
+                frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
+                state->frame_count_ > 1 &&
+                state->frames[1]->view->kind == VIEW_KIND_LIVE_SCENE)
+            {
+                frame->view->bv.buffer->file.linked_live_scene = state->frames[1]->view->lsv.live_scene;
+                trace_log("Linked live scene to buffer %s", frame->view->bv.buffer->file.info.path);
+            }
         } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {
