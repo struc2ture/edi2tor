@@ -304,6 +304,12 @@ typedef struct {
     int chunk_count;
 } String_Builder;
 
+typedef enum {
+    FILE_KIND_TEXT,
+    FILE_KIND_IMAGE,
+    FILE_KIND_DYLIB
+} File_Kind;
+
 void _init(GLFWwindow *window, void *_state);
 void _hotreload_init(GLFWwindow *window);
 void _render(GLFWwindow *window, void *_state);
@@ -543,3 +549,6 @@ void write_clipboard_mac(const char *text);
 void rebuild_dl();
 Live_Scene_Dylib live_scene_load_dylib(const char *path);
 void live_scene_rebuild(Live_Scene *live_scene);
+
+bool file___is_image(const char *path);
+File_Kind file_detect_kind(const char *path);

@@ -924,17 +924,29 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
     {
         case PROMPT_OPEN_FILE:
         {
-            Rect buffer_view_rect =
+            Rect new_frame_rect =
             {
                 .x = prompt_rect.x,
                 .y = prompt_rect.y,
                 .w = 500,
                 .h = 500
             };
-            Frame *frame = frame_create_buffer_view_open_file(result.str, buffer_view_rect, state);
-            if (frame == NULL)
+            File_Kind file_kind = file_detect_kind(result.str);
+            if (file_kind == FILE_KIND_IMAGE)
             {
-                return false;
+                frame_create_image_view(result.str, new_frame_rect, state);
+            }
+            else if (file_kind == FILE_KIND_DYLIB)
+            {
+                frame_create_live_scene_view(result.str, new_frame_rect, state);
+            }
+            else
+            {
+                Frame *frame = frame_create_buffer_view_open_file(result.str, new_frame_rect, state);
+                if (frame == NULL)
+                {
+                    return false;
+                }
             }
         } break;
 
@@ -3173,4 +3185,18 @@ void live_scene_rebuild(Live_Scene *live_scene)
         log_warning("live_scene_rebuild: Build failed with code %d for dylib %s", result, live_scene->dylib.dl_path);
     }
     trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.dl_path);
+}
+
+bool file___is_image(const char *path)
+{
+    int x, y, comp;
+    return stbi_info(path, &x, &y, &comp) != 0;
+}
+
+File_Kind file_detect_kind(const char *path)
+{
+    const char *ext = strrchr(path, '.');
+    if (ext && strcmp(ext, ".dylib") == 0) return FILE_KIND_DYLIB;
+    if (file___is_image(path)) return FILE_KIND_IMAGE;
+    return FILE_KIND_TEXT;
 }
