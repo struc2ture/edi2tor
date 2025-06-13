@@ -1966,6 +1966,16 @@ Cursor_Pos cursor_pos_to_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
     return new_pos;
 }
 
+Cursor_Pos cursor_pos_to_indent_or_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    int col = text_line_indent_get_level(text_buffer.lines[pos.line]);
+    if (col >= pos.col) col = 0;
+    Cursor_Pos new_pos;
+    new_pos.line = pos.line;
+    new_pos.col = col;
+    return new_pos;
+}
+
 Cursor_Pos cursor_pos_to_end_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
 {
     Cursor_Pos new_pos;
@@ -2674,7 +2684,7 @@ void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Mo
         case CURSOR_MOVE_LEFT:
         {
             if (big_steps) buffer_view->cursor.pos = cursor_pos_to_prev_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            else if (start_end) buffer_view->cursor.pos = cursor_pos_to_indent_or_start_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
             else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
         } break;
         case CURSOR_MOVE_RIGHT:
