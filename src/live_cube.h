@@ -10,8 +10,9 @@ typedef struct {
     float angle;
     float w;
     float h;
-} User_State;
+} Live_Scene_State;
 
-void live_cube_init(User_State *state, float w, float h);
-void live_cube_draw(User_State *state, float delta_time);
-void live_cube_destroy(User_State *state);
+void on_init(Live_Scene_State *state, float w, float h);
+void on_reload(Live_Scene_State *state);
+void on_render(Live_Scene_State *state, float delta_time);
+void on_destroy(Live_Scene_State *state);

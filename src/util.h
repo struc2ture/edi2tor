@@ -1,11 +1,15 @@
 #pragma once
 
 #include <ctype.h>
+#include <dlfcn.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+
 
 #include "editor.h"
 
@@ -196,4 +200,33 @@ inline static Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b)
 {
     if (a.line > b.line || (a.line == b.line && a.col >= b.col)) return a;
     else return b;
+}
+
+static time_t get_file_timestamp(const char *path) {
+    struct stat attr;
+    if (stat(path, &attr) == 0) {
+        return attr.st_mtime;
+    }
+    fprintf(stderr, "[PLATFORM] Failed to get timestamp for file at %s\n", path);
+    exit(1);
+}
+
+static void *xdlopen(const char *dl_path)
+{
+    void *handle = dlopen(dl_path, RTLD_NOW);
+    if (!handle) {
+        fprintf(stderr, "[PLATFORM] dlopen error: %s\n", dlerror());
+        exit(1);
+    }
+    return handle;
+}
+
+static void * xdlsym(void *handle, const char *name)
+{
+    void *sym = dlsym(handle, name);
+    if (!sym) {
+        fprintf(stderr, "[PLATFORM] dlsym error: %s\n", dlerror());
+        exit(1);
+    }
+    return sym;
 }

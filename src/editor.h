@@ -2,6 +2,7 @@
 
 #include <stdarg.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
@@ -11,8 +12,6 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
-
-#include "live_cube.h"
 
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
@@ -31,6 +30,7 @@
 // #define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "src/editor.c"
 #define IMAGE_PATH "res/DUCKS.png"
+#define LIVE_CUBE_PATH "bin/live_cube.dylib"
 
 typedef struct {
     float x, y;
@@ -212,8 +212,20 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
+typedef void (*live_scene_init_t)(void *state, float w, float h);
+typedef void (*live_scene_reload_t)(void *state);
+typedef void (*live_scene_render_t)(void *state, float delta_time);
+typedef void (*live_scene_destroy_t)(void *state);
+
 typedef struct {
-    User_State *user_state;
+    void *state;
+    void *dl_handle;
+    char *dl_path;
+    time_t dl_timestamp;
+    live_scene_init_t init;
+    live_scene_reload_t reload;
+    live_scene_render_t render;
+    live_scene_destroy_t destroy;
 } Live_Scene;
 
 typedef struct {
@@ -335,7 +347,7 @@ Frame *frame_create_buffer_view_open_file(const char *file_path, Rect rect, Edit
 Frame *frame_create_buffer_view_empty_file(Rect rect, Editor_State *state);
 Frame *frame_create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *state);
-Frame *frame_create_live_scene_view(Rect rect, Editor_State *state);
+Frame *frame_create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state);
 
 int view___get_index(View *view, Editor_State *state);
 View **view___create_new_slot(Editor_State *state);
@@ -358,7 +370,7 @@ View *image_view_create(Image image, Editor_State *state);
 
 void framebuffer_destroy(Framebuffer framebuffer);
 
-Live_Scene *live_scene_create(float w, float h);
+Live_Scene *live_scene_create(const char *path, float w, float h);
 void live_scene_destroy(Live_Scene *render_scene);
 
 View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Editor_State *state);

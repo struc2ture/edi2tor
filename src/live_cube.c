@@ -112,7 +112,7 @@ void mat4_mul(mat4 out, mat4 a, mat4 b) {
     memcpy(out, res, sizeof(mat4));
 }
 
-void live_cube_init(User_State *state, float w, float h)
+void on_init(Live_Scene_State *state, float w, float h)
 {
     const char *vs_src =
         "#version 410 core\n"
@@ -175,7 +175,12 @@ void live_cube_init(User_State *state, float w, float h)
     state->h = h;
 }
 
-void live_cube_draw(User_State *state, float delta_time)
+void on_reload(Live_Scene_State *state)
+{
+    (void)state;
+}
+
+void on_render(Live_Scene_State *state, float delta_time)
 {
     glEnable(GL_DEPTH_TEST);
 
@@ -204,7 +209,7 @@ void live_cube_draw(User_State *state, float delta_time)
     glDisable(GL_DEPTH_TEST);
 }
 
-void live_cube_destroy(User_State *state)
+void on_destroy(Live_Scene_State *state)
 {
     glDeleteBuffers(1, &state->vbo);
     glDeleteVertexArrays(1, &state->vao);

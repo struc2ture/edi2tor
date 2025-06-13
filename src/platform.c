@@ -55,7 +55,6 @@ void * xdlsym(void *handle, const char *name)
     return sym;
 }
 
-
 Dl_Info load_dl(const char *path)
 {
     Dl_Info dl_info = {0};

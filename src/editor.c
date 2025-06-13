@@ -616,10 +616,10 @@ Frame *frame_create_image_view(const char *file_path, Rect rect, Editor_State *s
     return frame;
 }
 
-Frame *frame_create_live_scene_view(Rect rect, Editor_State *state)
+Frame *frame_create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state)
 {
     Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    Live_Scene *live_scene = live_scene_create(rect.w, rect.h);
+    Live_Scene *live_scene = live_scene_create(dylib_path, rect.w, rect.h);
     View *view = live_scene_view_create(framebuffer, live_scene, state);
     Frame *frame = frame_create(view, rect, state);
     frame_set_active(frame, state);
@@ -843,19 +843,26 @@ View *image_view_create(Image image, Editor_State *state)
     return view;
 }
 
-Live_Scene *live_scene_create(float w, float h)
+Live_Scene *live_scene_create(const char *path, float w, float h)
 {
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
-    live_scene->user_state = xcalloc(sizeof(User_State));
-    live_cube_init(live_scene->user_state, w, h);
+    live_scene->state = xcalloc(4096);
+    live_scene->dl_handle = xdlopen(path);
+    live_scene->dl_path = xstrdup(path);
+    live_scene->dl_timestamp = get_file_timestamp(path);
+    live_scene->init = xdlsym(live_scene->dl_handle, "on_init");
+    live_scene->reload = xdlsym(live_scene->dl_handle, "on_reload");
+    live_scene->render = xdlsym(live_scene->dl_handle, "on_render");
+    live_scene->destroy = xdlsym(live_scene->dl_handle, "on_destroy");
+    live_scene->init(live_scene->state, w, h);
     return live_scene;
 }
 
 void live_scene_destroy(Live_Scene *live_scene)
 {
-    live_cube_destroy(live_scene->user_state);
-    free(live_scene->user_state);
-    live_scene->user_state = NULL;
+    live_scene->destroy(live_scene->state);
+    free(live_scene->state);
+    live_scene->state = NULL;
     free(live_scene);
 }
 
@@ -1439,7 +1446,7 @@ void draw_live_scene_view(Live_Scene_View rs_view, Render_State *render_state, f
     glBindFramebuffer(GL_FRAMEBUFFER, rs_view.framebuffer.fbo);
     glViewport(0, 0, rs_view.framebuffer.w, rs_view.framebuffer.h);
 
-    live_cube_draw(rs_view.live_scene->user_state, delta_time);
+    rs_view.live_scene->render(rs_view.live_scene->state, delta_time);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
@@ -2789,6 +2796,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         {
             Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
             frame_create_live_scene_view(
+                LIVE_CUBE_PATH,
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
                 state);
         } break;
