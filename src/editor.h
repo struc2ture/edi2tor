@@ -153,7 +153,8 @@ typedef struct {
 typedef enum {
     PROMPT_OPEN_FILE,
     PROMPT_SAVE_AS,
-    PROMPT_GO_TO_LINE
+    PROMPT_GO_TO_LINE,
+    PROMPT_CHANGE_WORKING_DIR
 } Prompt_Kind;
 
 typedef struct Buffer_View Buffer_View;
@@ -290,6 +291,7 @@ typedef struct {
     float fps;
     long long frame_count;
 
+    char *working_dir;
 } Editor_State;
 
 typedef enum {
@@ -552,3 +554,6 @@ void live_scene_rebuild(Live_Scene *live_scene);
 
 bool file___is_image(const char *path);
 File_Kind file_detect_kind(const char *path);
+
+char *sys_get_working_dir();
+bool sys_change_working_dir(const char *dir, Editor_State *state);

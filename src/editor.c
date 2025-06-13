@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
@@ -27,6 +28,8 @@ void _init(GLFWwindow *window, void *_state)
 
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
+
+    state->working_dir = sys_get_working_dir();
 }
 
 void _hotreload_init(GLFWwindow *window)
@@ -904,6 +907,13 @@ Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view)
     return context;
 }
 
+Prompt_Context prompt_create_context_change_working_dir()
+{
+    Prompt_Context context;
+    context.kind = PROMPT_CHANGE_WORKING_DIR;
+    return context;
+}
+
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
 {
     bassert(text_buffer.line_count >= 2);
@@ -974,6 +984,11 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 buffer_view->buffer = new_buffer;
             }
             else log_warning("prompt_submit: PROMPT_SAVE_AS: Buffer_View %p does not exist", context.save_as.for_buffer_view);
+        } break;
+
+        case PROMPT_CHANGE_WORKING_DIR:
+        {
+            return sys_change_working_dir(result.str, state);
         } break;
 
         default:
@@ -1448,7 +1463,7 @@ void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *rend
         status_str_y += font_line_height;
     }
 
-    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f", state->fps, state->delta_time);
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s", state->fps, state->delta_time, state->working_dir);
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
 }
 
@@ -2780,6 +2795,18 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
             viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
         } break;
+        case GLFW_KEY_F2: if (action == GLFW_PRESS)
+        {
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+            Frame *frame = frame_create_buffer_view_prompt(
+                "Change working dir:",
+                prompt_create_context_change_working_dir(),
+                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 100},
+                state);
+            Text_Line current_path_line = text_line_make_f("%s", state->working_dir);
+            text_buffer_insert_line(&frame->view->bv.buffer->text_buffer, current_path_line, 1);
+            frame->view->bv.cursor.pos = cursor_pos_to_end_of_line(frame->view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
+        } break;
         case GLFW_KEY_F5: if (action == GLFW_PRESS)
         {
             Frame *frame = state->active_frame;
@@ -3199,4 +3226,23 @@ File_Kind file_detect_kind(const char *path)
     if (ext && strcmp(ext, ".dylib") == 0) return FILE_KIND_DYLIB;
     if (file___is_image(path)) return FILE_KIND_IMAGE;
     return FILE_KIND_TEXT;
+}
+
+char *sys_get_working_dir()
+{
+    char *dir = xmalloc(1024);
+    getcwd(dir, 1024);
+    return dir;
+}
+
+bool sys_change_working_dir(const char *dir, Editor_State *state)
+{
+    if (chdir(dir) == 0)
+    {
+        if (state->working_dir) free(state->working_dir);
+        state->working_dir = sys_get_working_dir();
+        return true;
+    }
+    log_warning("Failed to change working dir to %s", dir);
+    return false;
 }

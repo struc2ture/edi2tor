@@ -9,7 +9,7 @@
 #include <GLFW/glfw3.h>
 
 #define PROGRAM_NAME "edi2tor"
-#define DL_PATH "./bin/editor.dylib"
+#define DL_PATH "/Users/struc/dev/jects/edi2tor/bin/editor.dylib"
 #define INITIAL_WINDOW_WIDTH 1000
 #define INITIAL_WINDOW_HEIGHT 900
 
