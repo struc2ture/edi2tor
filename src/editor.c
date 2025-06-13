@@ -1991,6 +1991,23 @@ Cursor_Pos cursor_pos_to_next_start_of_word(Text_Buffer text_buffer, Cursor_Pos 
     return cursor_pos_to_end_of_buffer(text_buffer, pos);
 }
 
+Cursor_Pos cursor_pos_to_next_end_of_word(Text_Buffer text_buffer, Cursor_Pos pos)
+{
+    Cursor_Iterator curr_it = { .buf = &text_buffer, .pos = pos };
+    Cursor_Iterator prev_it = curr_it;
+    while (cursor_iterator_next(&curr_it))
+    {
+        char curr = cursor_iterator_get_char(curr_it);
+        char prev = cursor_iterator_get_char(prev_it);
+        if (isalnum(prev) && (isspace(curr) || ispunct(curr)))
+        {
+            return curr_it.pos;
+        }
+        prev_it = curr_it;
+    }
+    return cursor_pos_to_end_of_buffer(text_buffer, pos);
+}
+
 Cursor_Pos cursor_pos_to_prev_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos)
 {
     Cursor_Iterator curr_it = { .buf = &text_buffer, .pos = pos };
@@ -2662,7 +2679,7 @@ void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Mo
         } break;
         case CURSOR_MOVE_RIGHT:
         {
-            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_start_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            if (big_steps) buffer_view->cursor.pos = cursor_pos_to_next_end_of_word(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
             else if (start_end) buffer_view->cursor.pos = cursor_pos_to_end_of_line(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
             else buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
         } break;
