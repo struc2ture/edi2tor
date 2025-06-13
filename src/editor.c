@@ -899,6 +899,14 @@ Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view)
     return context;
 }
 
+Prompt_Context prompt_create_context_search_next(Buffer_View *for_buffer_view)
+{
+    Prompt_Context context;
+    context.kind = PROMPT_SEARCH_NEXT;
+    context.go_to_line.for_buffer_view = for_buffer_view;
+    return context;
+}
+
 Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view)
 {
     Prompt_Context context;
@@ -971,6 +979,31 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 buffer_view->cursor.blink_time = 0.0f;
             }
             else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
+        } break;
+
+        case PROMPT_SEARCH_NEXT:
+        {
+            Buffer_View *buffer_view = context.go_to_line.for_buffer_view;
+            if (view_exists((View *)buffer_view, state))
+            {
+                if (state->prev_search) free(state->prev_search);
+                state->prev_search = xstrdup(result.str);
+
+                Cursor_Pos found_pos;
+                bool found = text_buffer_search_next(&buffer_view->buffer->text_buffer, result.str, buffer_view->cursor.pos, &found_pos);
+                if (found)
+                {
+                    buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, found_pos);
+                    viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
+                    buffer_view->cursor.blink_time = 0.0f;
+                }
+                else
+                {
+                    log_warning("prompt_submit: PROMPT_SEARCH_NEXT: Could not find \"%s\"", result.str);
+                    return false;
+                }
+            }
+            else log_warning("prompt_submit: PROMPT_SEARCH_NEXT: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
         } break;
 
         case PROMPT_SAVE_AS:
@@ -2422,6 +2455,24 @@ int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer)
     return cleaned_lines;
 }
 
+bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos)
+{
+    int col_offset = from.col + 1;
+    for (int i = from.line; i < text_buffer->line_count; i++)
+    {
+        char *match = strstr(text_buffer->lines[i].str + col_offset, query);
+        if (match)
+        {
+            int col = match - text_buffer->lines[i].str;
+            out_pos->line = i;
+            out_pos->col = col;
+            return true;
+        }
+        col_offset = 0;
+    }
+    return false;
+}
+
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state)
 {
     if (buffer_view->mark.active)
@@ -2746,6 +2797,38 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
                 prompt_create_context_go_to_line(buffer_view),
                 (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
                 state);
+        } break;
+        case GLFW_KEY_F: if (mods & GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
+        {
+            if (mods == (GLFW_MOD_SHIFT | GLFW_MOD_SUPER))
+            {
+                if (state->prev_search)
+                {
+                    Cursor_Pos found_pos;
+                    bool found = text_buffer_search_next(&buffer_view->buffer->text_buffer, state->prev_search, buffer_view->cursor.pos, &found_pos);
+                    if (found)
+                    {
+                        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, found_pos);
+                        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
+                        buffer_view->cursor.blink_time = 0.0f;
+                    }
+                }
+            }
+            else if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
+            {
+                Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+                Frame *prompt_frame = frame_create_buffer_view_prompt(
+                    "Search next:",
+                    prompt_create_context_search_next(buffer_view),
+                    (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+                    state);
+                if (state->prev_search)
+                {
+                    Text_Line current_path_line = text_line_make_f("%s", state->prev_search);
+                    text_buffer_insert_line(&prompt_frame->view->bv.buffer->text_buffer, current_path_line, 1);
+                    prompt_frame->view->bv.cursor.pos = cursor_pos_to_end_of_line(prompt_frame->view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
+                }
+            }
         } break;
         case GLFW_KEY_SEMICOLON: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {

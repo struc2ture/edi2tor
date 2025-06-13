@@ -154,6 +154,7 @@ typedef enum {
     PROMPT_OPEN_FILE,
     PROMPT_SAVE_AS,
     PROMPT_GO_TO_LINE,
+    PROMPT_SEARCH_NEXT,
     PROMPT_CHANGE_WORKING_DIR
 } Prompt_Kind;
 
@@ -292,6 +293,8 @@ typedef struct {
     long long frame_count;
 
     char *working_dir;
+
+    char *prev_search;
 } Editor_State;
 
 typedef enum {
@@ -495,6 +498,7 @@ void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 int text_buffer_match_indent(Text_Buffer *text_buffer, int line);
 int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer);
+bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos);
 
 void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state);
 void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state);
