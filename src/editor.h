@@ -218,7 +218,6 @@ typedef void (*live_scene_render_t)(void *state, float delta_time);
 typedef void (*live_scene_destroy_t)(void *state);
 
 typedef struct {
-    void *state;
     void *dl_handle;
     char *dl_path;
     time_t dl_timestamp;
@@ -226,6 +225,11 @@ typedef struct {
     live_scene_reload_t reload;
     live_scene_render_t render;
     live_scene_destroy_t destroy;
+} Live_Scene_Dylib;
+
+typedef struct {
+    void *state;
+    Live_Scene_Dylib dylib;
 } Live_Scene;
 
 typedef struct {
@@ -537,3 +541,5 @@ void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
 
 void rebuild_dl();
+Live_Scene_Dylib live_scene_load_dylib(const char *path);
+void live_scene_rebuild(Live_Scene *live_scene);

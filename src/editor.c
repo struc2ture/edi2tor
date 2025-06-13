@@ -847,20 +847,26 @@ Live_Scene *live_scene_create(const char *path, float w, float h)
 {
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
-    live_scene->dl_handle = xdlopen(path);
-    live_scene->dl_path = xstrdup(path);
-    live_scene->dl_timestamp = get_file_timestamp(path);
-    live_scene->init = xdlsym(live_scene->dl_handle, "on_init");
-    live_scene->reload = xdlsym(live_scene->dl_handle, "on_reload");
-    live_scene->render = xdlsym(live_scene->dl_handle, "on_render");
-    live_scene->destroy = xdlsym(live_scene->dl_handle, "on_destroy");
-    live_scene->init(live_scene->state, w, h);
+    live_scene->dylib = live_scene_load_dylib(path);
+    live_scene->dylib.init(live_scene->state, w, h);
     return live_scene;
+}
+
+void live_scene_check_hot_reload(Live_Scene *live_scene)
+{
+    time_t dl_current_timestamp = get_file_timestamp(live_scene->dylib.dl_path);
+    if (dl_current_timestamp != live_scene->dylib.dl_timestamp)
+    {
+        dlclose(live_scene->dylib.dl_handle);
+        live_scene->dylib= live_scene_load_dylib(live_scene->dylib.dl_path);
+        live_scene->dylib.reload(live_scene->state);
+        trace_log("live_scene_check_hot_reload: Reloaded live scene (%s)", live_scene->dylib.dl_path);
+    }
 }
 
 void live_scene_destroy(Live_Scene *live_scene)
 {
-    live_scene->destroy(live_scene->state);
+    live_scene->dylib.destroy(live_scene->state);
     free(live_scene->state);
     live_scene->state = NULL;
     free(live_scene);
@@ -1441,12 +1447,14 @@ void draw_image_view(Image_View image_view, Render_State *render_state)
     glUseProgram(render_state->main_shader);
 }
 
-void draw_live_scene_view(Live_Scene_View rs_view, Render_State *render_state, float delta_time)
+void draw_live_scene_view(Live_Scene_View ls_view, Render_State *render_state, float delta_time)
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, rs_view.framebuffer.fbo);
-    glViewport(0, 0, rs_view.framebuffer.w, rs_view.framebuffer.h);
+    live_scene_check_hot_reload(ls_view.live_scene);
 
-    rs_view.live_scene->render(rs_view.live_scene->state, delta_time);
+    glBindFramebuffer(GL_FRAMEBUFFER, ls_view.framebuffer.fbo);
+    glViewport(0, 0, ls_view.framebuffer.w, ls_view.framebuffer.h);
+
+    ls_view.live_scene->dylib.render(ls_view.live_scene->state, delta_time);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
@@ -1454,7 +1462,7 @@ void draw_live_scene_view(Live_Scene_View rs_view, Render_State *render_state, f
     glBindVertexArray(render_state->vao);
 
     glUseProgram(render_state->framebuffer_shader);
-    draw_texture(rs_view.framebuffer.tex, rs_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
+    draw_texture(ls_view.framebuffer.tex, ls_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
     glUseProgram(render_state->main_shader);
 }
 
@@ -2760,6 +2768,14 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
             viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
         } break;
+        case GLFW_KEY_F5: if (action == GLFW_PRESS)
+        {
+            Frame *frame = state->active_frame;
+            if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
+            {
+                live_scene_rebuild(frame->view->lsv.live_scene);
+            }
+        } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {
             state->should_break = true;
@@ -3127,8 +3143,34 @@ void write_clipboard_mac(const char *text)
 void rebuild_dl()
 {
     int result = system("make dl");
-    if (result != 0) {
+    if (result != 0)
+    {
         fprintf(stderr, "Build failed with code %d\n", result);
     }
     trace_log("Rebuilt dl");
+}
+
+Live_Scene_Dylib live_scene_load_dylib(const char *path)
+{
+    Live_Scene_Dylib dylib = {0};
+    dylib.dl_handle = xdlopen(path);
+    dylib.dl_path = xstrdup(path);
+    dylib.dl_timestamp = get_file_timestamp(path);
+    dylib.init = xdlsym(dylib.dl_handle, "on_init");
+    dylib.reload = xdlsym(dylib.dl_handle, "on_reload");
+    dylib.render = xdlsym(dylib.dl_handle, "on_render");
+    dylib.destroy = xdlsym(dylib.dl_handle, "on_destroy");
+    return dylib;
+}
+
+void live_scene_rebuild(Live_Scene *live_scene)
+{
+    char command_buf[1024];
+    snprintf(command_buf, sizeof(command_buf), "make %s", live_scene->dylib.dl_path);
+    int result = system(command_buf);
+    if (result != 0)
+    {
+        log_warning("live_scene_rebuild: Build failed with code %d for dylib %s", result, live_scene->dylib.dl_path);
+    }
+    trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.dl_path);
 }
