@@ -872,6 +872,8 @@ void live_scene_destroy(Live_Scene *live_scene)
     live_scene->dylib.destroy(live_scene->state);
     free(live_scene->state);
     live_scene->state = NULL;
+    dlclose(live_scene->dylib.dl_handle);
+    free(live_scene->dylib.dl_path);
     free(live_scene);
 }
 
@@ -950,21 +952,21 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 .h = 500
             };
             File_Kind file_kind = file_detect_kind(result.str);
-            if (file_kind == FILE_KIND_IMAGE)
+            switch (file_kind)
             {
-                frame_create_image_view(result.str, new_frame_rect, state);
-            }
-            else if (file_kind == FILE_KIND_DYLIB)
-            {
-                frame_create_live_scene_view(result.str, new_frame_rect, state);
-            }
-            else
-            {
-                Frame *frame = frame_create_buffer_view_open_file(result.str, new_frame_rect, state);
-                if (frame == NULL)
+                case FILE_KIND_IMAGE:
                 {
-                    return false;
-                }
+                    frame_create_image_view(result.str, new_frame_rect, state);
+                } break;
+                case FILE_KIND_DYLIB:
+                {
+                    frame_create_live_scene_view(result.str, new_frame_rect, state);
+                } break;
+                case FILE_KIND_TEXT:
+                {
+                    frame_create_buffer_view_open_file(result.str, new_frame_rect, state);
+                } break;
+                default: return false;
             }
         } break;
 
@@ -1520,6 +1522,8 @@ void draw_live_scene_view(Live_Scene_View ls_view, Render_State *render_state, f
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
     glClearColor(0, 0, 0, 1.0f);
     glBindVertexArray(render_state->vao);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
 
     glUseProgram(render_state->framebuffer_shader);
     draw_texture(ls_view.framebuffer.tex, ls_view.framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
@@ -2922,13 +2926,27 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
             Frame *frame = state->active_frame;
             if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
             {
-                live_scene_rebuild(frame->view->lsv.live_scene);
+                if (mods == GLFW_MOD_SHIFT)
+                {
+                    live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
+                }
+                else
+                {
+                    live_scene_rebuild(frame->view->lsv.live_scene);
+                }
             }
             else if (frame->view->kind == VIEW_KIND_BUFFER &&
                 frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
                 frame->view->bv.buffer->file.linked_live_scene)
             {
-                live_scene_rebuild(frame->view->bv.buffer->file.linked_live_scene);
+                if (mods == GLFW_MOD_SHIFT)
+                {
+                    live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
+                }
+                else
+                {
+                    live_scene_rebuild(frame->view->bv.buffer->file.linked_live_scene);
+                }
             }
         } break;
         case GLFW_KEY_F6: if (action == GLFW_PRESS)
@@ -3330,6 +3348,13 @@ Live_Scene_Dylib live_scene_load_dylib(const char *path)
     return dylib;
 }
 
+void live_scene_reset(Live_Scene **live_scene, float w, float h)
+{
+    const char *dl_path = xstrdup((*live_scene)->dylib.dl_path);
+    live_scene_destroy(*live_scene);
+    *live_scene = live_scene_create(dl_path, w, h);
+}
+
 void live_scene_rebuild(Live_Scene *live_scene)
 {
     char command_buf[1024];
@@ -3350,6 +3375,7 @@ bool file___is_image(const char *path)
 
 File_Kind file_detect_kind(const char *path)
 {
+    if (!sys_file_exists(path)) return FILE_KIND_NONE;
     const char *ext = strrchr(path, '.');
     if (ext && strcmp(ext, ".dylib") == 0) return FILE_KIND_DYLIB;
     if (file___is_image(path)) return FILE_KIND_IMAGE;
@@ -3372,5 +3398,16 @@ bool sys_change_working_dir(const char *dir, Editor_State *state)
         return true;
     }
     log_warning("Failed to change working dir to %s", dir);
+    return false;
+}
+
+bool sys_file_exists(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (f)
+    {
+        fclose(f);
+        return true;
+    }
     return false;
 }

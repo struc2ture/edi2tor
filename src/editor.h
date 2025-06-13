@@ -313,6 +313,7 @@ typedef struct {
 } String_Builder;
 
 typedef enum {
+    FILE_KIND_NONE,
     FILE_KIND_TEXT,
     FILE_KIND_IMAGE,
     FILE_KIND_DYLIB
@@ -559,6 +560,7 @@ void write_clipboard_mac(const char *text);
 
 void rebuild_dl();
 Live_Scene_Dylib live_scene_load_dylib(const char *path);
+void live_scene_reset(Live_Scene **live_scene, float w, float h);
 void live_scene_rebuild(Live_Scene *live_scene);
 
 bool file___is_image(const char *path);
@@ -566,3 +568,4 @@ File_Kind file_detect_kind(const char *path);
 
 char *sys_get_working_dir();
 bool sys_change_working_dir(const char *dir, Editor_State *state);
+bool sys_file_exists(const char *path);
