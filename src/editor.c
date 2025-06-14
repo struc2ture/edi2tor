@@ -1717,10 +1717,9 @@ Vec_2 get_mouse_screen_pos(GLFWwindow *window)
     return p;
 }
 
-Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state)
+Vec_2 get_mouse_canvas_pos(Editor_State *state)
 {
-    // TODO: Get window from state
-    Vec_2 p = screen_pos_to_canvas_pos(get_mouse_screen_pos(window), state->canvas_viewport);
+    Vec_2 p = screen_pos_to_canvas_pos(get_mouse_screen_pos(state->window), state->canvas_viewport);
     return p;
 }
 
@@ -2799,7 +2798,7 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
             {
                 if (mods & GLFW_MOD_SHIFT || buffer_view->buffer->file.info.path == NULL)
                 {
-                    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+                    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
                     frame_create_buffer_view_prompt(
                         "Save as:",
                         prompt_create_context_save_as(buffer_view),
@@ -2823,7 +2822,7 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
         } break;
         case GLFW_KEY_G: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
             frame_create_buffer_view_prompt(
                 "Go to line:",
                 prompt_create_context_go_to_line(buffer_view),
@@ -2848,7 +2847,7 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
             }
             else if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
             {
-                Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+                Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
                 Frame *prompt_frame = frame_create_buffer_view_prompt(
                     "Search next:",
                     prompt_create_context_search_next(buffer_view),
@@ -3120,7 +3119,7 @@ void handle_mouse_input(GLFWwindow *window, Editor_State *state)
     {
         bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
         Vec_2 mouse_delta = get_mouse_delta(window, &state->mouse_state);
-        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
+        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
         handle_mouse_click_drag(mouse_canvas_pos, mouse_delta, is_shift_pressed, &state->mouse_state, &state->render_state);
     }
 }
@@ -3336,7 +3335,7 @@ bool sys_file_exists(const char *path)
 
 bool action_run_unit_tests(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     Text_Buffer log_buffer = {0};
     unit_tests_run(&log_buffer, true);
     Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
@@ -3347,7 +3346,7 @@ bool action_run_unit_tests(Editor_State *state)
 
 bool action_change_working_dir(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     Frame *frame = frame_create_buffer_view_prompt(
         "Change working dir:",
         prompt_create_context_change_working_dir(),
@@ -3361,6 +3360,7 @@ bool action_change_working_dir(Editor_State *state)
 
 bool action_rebuild_live_scene(Editor_State *state)
 {
+    // TODO: view level action
     Frame *frame = state->active_frame;
     if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
     {
@@ -3377,6 +3377,7 @@ bool action_rebuild_live_scene(Editor_State *state)
 
 bool action_reset_live_scene(Editor_State *state)
 {
+    // TODO: view level action
     Frame *frame = state->active_frame;
     if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
     {
@@ -3413,7 +3414,7 @@ bool action_debug_break(Editor_State *state)
 
 bool action_destroy_active_frame(Editor_State *state)
 {
-    // TODO: Should this be frame/view level control?
+    // TODO: Should this be frame/view level action?
     //       then it doesn't have to target "active" specifically
     //       and do this weird "will_propagate_to_view" logic.
     //       Although, it does make sense, to "kill frame" from outside the frame
@@ -3426,7 +3427,7 @@ bool action_destroy_active_frame(Editor_State *state)
 
 bool action_open_test_file1(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     frame_create_buffer_view_open_file(
         FILE_PATH1,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -3436,7 +3437,7 @@ bool action_open_test_file1(Editor_State *state)
 
 bool action_open_test_image(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     frame_create_image_view(
         IMAGE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -3446,7 +3447,7 @@ bool action_open_test_image(Editor_State *state)
 
 bool action_open_test_live_scene(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     frame_create_live_scene_view(
         LIVE_CUBE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -3456,7 +3457,7 @@ bool action_open_test_live_scene(Editor_State *state)
 
 bool action_prompt_open_file(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     frame_create_buffer_view_prompt(
         "Open file:",
         prompt_create_context_open_file(),
@@ -3467,7 +3468,7 @@ bool action_prompt_open_file(Editor_State *state)
 
 bool action_prompt_new_file(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     frame_create_buffer_view_empty_file(
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
