@@ -508,28 +508,15 @@ int text_buffer_match_indent(Text_Buffer *text_buffer, int line);
 int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer);
 bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos);
 
-void buffer_view_copy_selected(Buffer_View *buffer_view, Editor_State *state);
-void buffer_view_paste(Buffer_View *buffer_view, Editor_State *state);
+// ------------------------------
 
 void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
 void buffer_view___validate_mark(Buffer_View *buffer_view);
 void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, const Render_State *render_state);
 
-void buffer_view_delete_selected(Buffer_View *buffer_view);
-void buffer_view_insert_indent(Buffer_View *buffer_view, Render_State *render_state);
-void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state);
-void buffer_view_increase_indent_level(Buffer_View *buffer_view, Render_State *render_state);
-void buffer_view_delete_current_line(Buffer_View *buffer_view, Render_State *render_state);
-
-void buffer_view_whitespace_cleanup(Buffer_View *buffer_view);
-
-void buffer_view_handle_backspace(Buffer_View *buffer_view, Render_State *render_state);
-void buffer_view_handle_cursor_movement_keys(Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool is_shift_pressed, bool big_steps, bool start_end, Editor_State *state);
 void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
 void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-
-void buffer_view_handle_char_input(Buffer_View *buffer_view, char c, Render_State *render_state);
 
 void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
 void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
@@ -547,6 +534,8 @@ void view_handle_mouse_release(View *view);
 void handle_mouse_release(Mouse_State *mouse_state);
 
 void handle_mouse_input(GLFWwindow *window, Editor_State *state);
+
+// --------------------------------
 
 void string_builder_append_f(String_Builder *string_builder, const char *fmt, ...);
 void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
@@ -571,6 +560,8 @@ char *sys_get_working_dir();
 bool sys_change_working_dir(const char *dir, Editor_State *state);
 bool sys_file_exists(const char *path);
 
+// ------------------------------------
+
 bool action_run_unit_tests(Editor_State *state);
 bool action_change_working_dir(Editor_State *state);
 bool action_rebuild_live_scene(Editor_State *state);
@@ -583,3 +574,23 @@ bool action_open_test_image(Editor_State *state);
 bool action_open_test_live_scene(Editor_State *state);
 bool action_prompt_open_file(Editor_State *state);
 bool action_prompt_new_file(Editor_State *state);
+
+bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_shift, bool with_alt, bool with_super);
+bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view, Frame *frame);
+bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view, char c);
+bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_copy_selected(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_delete_current_line(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_prompt_save_file_as(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_save_file(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_change_zoom(Editor_State *state, Buffer_View *buffer_view, float amount);
+bool action_buffer_view_prompt_go_to_line(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_prompt_search_next(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_repeat_search(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buffer_view);
