@@ -298,6 +298,8 @@ typedef struct {
     char *working_dir;
 
     char *prev_search;
+
+    GLFWwindow *window;
 } Editor_State;
 
 typedef enum {
@@ -558,7 +560,6 @@ Image file_open_image(const char *path);
 void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
 
-void rebuild_dl();
 Live_Scene_Dylib live_scene_load_dylib(const char *path);
 void live_scene_reset(Live_Scene **live_scene, float w, float h);
 void live_scene_rebuild(Live_Scene *live_scene);
@@ -569,3 +570,16 @@ File_Kind file_detect_kind(const char *path);
 char *sys_get_working_dir();
 bool sys_change_working_dir(const char *dir, Editor_State *state);
 bool sys_file_exists(const char *path);
+
+bool action_run_unit_tests(Editor_State *state);
+bool action_change_working_dir(Editor_State *state);
+bool action_rebuild_live_scene(Editor_State *state);
+bool action_reset_live_scene(Editor_State *state);
+bool action_link_live_scene(Editor_State *state);
+bool action_debug_break(Editor_State *state);
+bool action_destroy_active_frame(Editor_State *state);
+bool action_open_test_file1(Editor_State *state);
+bool action_open_test_image(Editor_State *state);
+bool action_open_test_live_scene(Editor_State *state);
+bool action_prompt_open_file(Editor_State *state);
+bool action_prompt_new_file(Editor_State *state);

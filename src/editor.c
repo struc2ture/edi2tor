@@ -1719,6 +1719,7 @@ Vec_2 get_mouse_screen_pos(GLFWwindow *window)
 
 Vec_2 get_mouse_canvas_pos(GLFWwindow *window, Editor_State *state)
 {
+    // TODO: Get window from state
     Vec_2 p = screen_pos_to_canvas_pos(get_mouse_screen_pos(window), state->canvas_viewport);
     return p;
 }
@@ -2902,120 +2903,51 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
     {
         case GLFW_KEY_F1: if (action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            Text_Buffer log_buffer = {0};
-            unit_tests_run(&log_buffer, true);
-            Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
-            frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
-            viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
+            action_run_unit_tests(state);
         } break;
         case GLFW_KEY_F2: if (action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            Frame *frame = frame_create_buffer_view_prompt(
-                "Change working dir:",
-                prompt_create_context_change_working_dir(),
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 100},
-                state);
-            Text_Line current_path_line = text_line_make_f("%s", state->working_dir);
-            text_buffer_insert_line(&frame->view->bv.buffer->text_buffer, current_path_line, 1);
-            frame->view->bv.cursor.pos = cursor_pos_to_end_of_line(frame->view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
+            action_change_working_dir(state);
         } break;
         case GLFW_KEY_F5: if (action == GLFW_PRESS)
         {
-            Frame *frame = state->active_frame;
-            if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
-            {
-                if (mods == GLFW_MOD_SHIFT)
-                {
-                    live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
-                }
-                else
-                {
-                    live_scene_rebuild(frame->view->lsv.live_scene);
-                }
-            }
-            else if (frame->view->kind == VIEW_KIND_BUFFER &&
-                frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
-                frame->view->bv.buffer->file.linked_live_scene)
-            {
-                if (mods == GLFW_MOD_SHIFT)
-                {
-                    live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
-                }
-                else
-                {
-                    live_scene_rebuild(frame->view->bv.buffer->file.linked_live_scene);
-                }
-            }
+            if (mods == 0)
+                action_rebuild_live_scene(state);
+            else if (mods == GLFW_MOD_SHIFT)
+                action_reset_live_scene(state);
         } break;
         case GLFW_KEY_F6: if (action == GLFW_PRESS)
         {
-            Frame *frame = state->active_frame;
-            if (frame->view->kind == VIEW_KIND_BUFFER &&
-                frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
-                state->frame_count_ > 1 &&
-                state->frames[1]->view->kind == VIEW_KIND_LIVE_SCENE)
-            {
-                frame->view->bv.buffer->file.linked_live_scene = state->frames[1]->view->lsv.live_scene;
-                trace_log("Linked live scene to buffer %s", frame->view->bv.buffer->file.info.path);
-            }
+            action_link_live_scene(state);
         } break;
         case GLFW_KEY_F12: if (action == GLFW_PRESS)
         {
-            state->should_break = true;
-        } break;
-        case GLFW_KEY_F9: if (action == GLFW_PRESS)
-        {
-            rebuild_dl();
+            action_debug_break(state);
         } break;
         case GLFW_KEY_W: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            if (state->active_frame != NULL)
-            {
-                frame_destroy(state->active_frame, state);
-                will_propagate_to_view = false;
-            }
+            will_propagate_to_view = false;
+            action_destroy_active_frame(state);
         } break;
         case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_buffer_view_open_file(
-                FILE_PATH1,
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
-                state);
+            action_open_test_file1(state);
         } break;
         case GLFW_KEY_2: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_image_view(
-                IMAGE_PATH,
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
-                state);
+            action_open_test_image(state);
         } break;
         case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_live_scene_view(
-                LIVE_CUBE_PATH,
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
-                state);
+            action_open_test_live_scene(state);
         } break;
         case GLFW_KEY_O: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_buffer_view_prompt(
-                "Open file:",
-                prompt_create_context_open_file(),
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
-                state);
+            action_prompt_open_file(state);
         } break;
         case GLFW_KEY_N: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(window, state);
-            frame_create_buffer_view_empty_file(
-                (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
-                state);
+            action_prompt_new_file(state);
         } break;
     }
 
@@ -3325,16 +3257,6 @@ void write_clipboard_mac(const char *text)
     pclose(pipe);
 }
 
-void rebuild_dl()
-{
-    int result = system("make dl");
-    if (result != 0)
-    {
-        fprintf(stderr, "Build failed with code %d\n", result);
-    }
-    trace_log("Rebuilt dl");
-}
-
 Live_Scene_Dylib live_scene_load_dylib(const char *path)
 {
     Live_Scene_Dylib dylib = {0};
@@ -3410,4 +3332,144 @@ bool sys_file_exists(const char *path)
         return true;
     }
     return false;
+}
+
+bool action_run_unit_tests(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Text_Buffer log_buffer = {0};
+    unit_tests_run(&log_buffer, true);
+    Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+    frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
+    viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
+    return true;
+}
+
+bool action_change_working_dir(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    Frame *frame = frame_create_buffer_view_prompt(
+        "Change working dir:",
+        prompt_create_context_change_working_dir(),
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 100},
+        state);
+    Text_Line current_path_line = text_line_make_f("%s", state->working_dir);
+    text_buffer_insert_line(&frame->view->bv.buffer->text_buffer, current_path_line, 1);
+    frame->view->bv.cursor.pos = cursor_pos_to_end_of_line(frame->view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
+    return true;
+}
+
+bool action_rebuild_live_scene(Editor_State *state)
+{
+    Frame *frame = state->active_frame;
+    if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
+    {
+        live_scene_rebuild(frame->view->lsv.live_scene);
+    }
+    else if (frame->view->kind == VIEW_KIND_BUFFER &&
+        frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        frame->view->bv.buffer->file.linked_live_scene)
+    {
+        live_scene_rebuild(frame->view->bv.buffer->file.linked_live_scene);
+    }
+    return true;
+}
+
+bool action_reset_live_scene(Editor_State *state)
+{
+    Frame *frame = state->active_frame;
+    if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
+    {
+        live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
+    }
+    else if (frame->view->kind == VIEW_KIND_BUFFER &&
+        frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        frame->view->bv.buffer->file.linked_live_scene)
+    {
+        live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
+    }
+    return true;
+}
+
+bool action_link_live_scene(Editor_State *state)
+{
+    Frame *frame = state->active_frame;
+    if (frame->view->kind == VIEW_KIND_BUFFER &&
+        frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        state->frame_count_ > 1 &&
+        state->frames[1]->view->kind == VIEW_KIND_LIVE_SCENE)
+    {
+        frame->view->bv.buffer->file.linked_live_scene = state->frames[1]->view->lsv.live_scene;
+        trace_log("Linked live scene to buffer %s", frame->view->bv.buffer->file.info.path);
+    }
+    return true;
+}
+
+bool action_debug_break(Editor_State *state)
+{
+    state->should_break = true;
+    return true;
+}
+
+bool action_destroy_active_frame(Editor_State *state)
+{
+    // TODO: Should this be frame/view level control?
+    //       then it doesn't have to target "active" specifically
+    //       and do this weird "will_propagate_to_view" logic.
+    //       Although, it does make sense, to "kill frame" from outside the frame
+    if (state->active_frame != NULL)
+    {
+        frame_destroy(state->active_frame, state);
+    }
+    return true;
+}
+
+bool action_open_test_file1(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    frame_create_buffer_view_open_file(
+        FILE_PATH1,
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+        state);
+    return true;
+}
+
+bool action_open_test_image(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    frame_create_image_view(
+        IMAGE_PATH,
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+        state);
+    return true;
+}
+
+bool action_open_test_live_scene(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    frame_create_live_scene_view(
+        LIVE_CUBE_PATH,
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+        state);
+    return true;
+}
+
+bool action_prompt_open_file(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    frame_create_buffer_view_prompt(
+        "Open file:",
+        prompt_create_context_open_file(),
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+        state);
+    return true;
+}
+
+bool action_prompt_new_file(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state->window, state);
+    frame_create_buffer_view_empty_file(
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
+        state);
+    return true;
 }
