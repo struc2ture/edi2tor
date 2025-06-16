@@ -2436,19 +2436,19 @@ bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor
     return false;
 }
 
-void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
+void buffer_view_set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
 {
     buffer_view->mark.active = true;
     buffer_view->mark.pos = pos;
 }
 
-void buffer_view___validate_mark(Buffer_View *buffer_view)
+void buffer_view_validate_mark(Buffer_View *buffer_view)
 {
     if (buffer_view->mark.active && cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos))
         buffer_view->mark.active = false;
 }
 
-void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state)
+void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state)
 {
     Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(buffer_view, mouse_canvas_pos, render_state);
     Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(buffer_view, mouse_text_area_pos);
@@ -2620,7 +2620,7 @@ void live_scene_rebuild(Live_Scene *live_scene)
     trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.dl_path);
 }
 
-bool file___is_image(const char *path)
+bool file_is_image(const char *path)
 {
     int x, y, comp;
     return stbi_info(path, &x, &y, &comp) != 0;
@@ -2631,7 +2631,7 @@ File_Kind file_detect_kind(const char *path)
     if (!sys_file_exists(path)) return FILE_KIND_NONE;
     const char *ext = strrchr(path, '.');
     if (ext && strcmp(ext, ".dylib") == 0) return FILE_KIND_DYLIB;
-    if (file___is_image(path)) return FILE_KIND_IMAGE;
+    if (file_is_image(path)) return FILE_KIND_IMAGE;
     return FILE_KIND_TEXT;
 }
 

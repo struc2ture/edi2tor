@@ -6,7 +6,6 @@
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
-
 #include <stb_image.h>
 #include <stb_truetype.h>
 
@@ -494,9 +493,9 @@ bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor
 
 // ------------------------------
 
-void buffer_view___set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
-void buffer_view___validate_mark(Buffer_View *buffer_view);
-void buffer_view___set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state);
+void buffer_view_set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
+void buffer_view_validate_mark(Buffer_View *buffer_view);
+void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state);
 
 // --------------------------------
 
@@ -516,7 +515,7 @@ Live_Scene_Dylib live_scene_load_dylib(const char *path);
 void live_scene_reset(Live_Scene **live_scene, float w, float h);
 void live_scene_rebuild(Live_Scene *live_scene);
 
-bool file___is_image(const char *path);
+bool file_is_image(const char *path);
 File_Kind file_detect_kind(const char *path);
 
 char *sys_get_working_dir();

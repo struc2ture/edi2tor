@@ -2,6 +2,8 @@
 
 #include <stdbool.h>
 
+#include <GLFW/glfw3.h>
+
 #include "editor.h"
 #include "unit_tests.h"
 #include "util.h"
@@ -150,7 +152,7 @@ bool action_prompt_new_file(Editor_State *state)
 
 bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_shift, bool with_alt, bool with_super)
 {
-    if (with_shift && !buffer_view->mark.active) buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
+    if (with_shift && !buffer_view->mark.active) buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
 
     switch (dir)
     {
@@ -183,7 +185,7 @@ bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_vie
     viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     buffer_view->cursor.blink_time = 0.0f;
 
-    if (with_shift) buffer_view___validate_mark(buffer_view);
+    if (with_shift) buffer_view_validate_mark(buffer_view);
     else buffer_view->mark.active = false;
 
     return true;

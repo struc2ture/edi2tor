@@ -2,6 +2,8 @@
 
 #include <stdbool.h>
 
+#include <GLFW/glfw3.h>
+
 #include "actions.h"
 #include "editor.h"
 #include "util.h"
@@ -212,7 +214,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
 void buffer_view_handle_click_drag(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
 {
     (void)is_shift_pressed;
-    buffer_view___set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+    buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
 }
 
 void view_handle_click_drag(View *view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
@@ -263,16 +265,16 @@ bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas
         if (is_shift_pressed)
         {
             if (!buffer_view->mark.active)
-                buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
+                buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
 
-            buffer_view___set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
 
-            buffer_view___validate_mark(buffer_view);
+            buffer_view_validate_mark(buffer_view);
         }
         else
         {
-            buffer_view___set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
-            buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
+            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+            buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
         }
         return true;
     }
@@ -331,7 +333,7 @@ void handle_mouse_click(GLFWwindow *window, Editor_State *state)
 
 void buffer_view_handle_mouse_release(Buffer_View *buffer_view)
 {
-    buffer_view___validate_mark(buffer_view);
+    buffer_view_validate_mark(buffer_view);
 }
 
 void view_handle_mouse_release(View *view)
