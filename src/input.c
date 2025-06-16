@@ -2,134 +2,100 @@
 
 #include <stdbool.h>
 
-#include <GLFW/glfw3.h>
+#include <SDL3/sdl.h>
 
 #include "actions.h"
 #include "editor.h"
 #include "util.h"
 
-void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void input_key_global(Editor_State *state, const SDL_Event *e)
 {
-    (void)window;
-    switch(key)
+    const SDL_KeyboardEvent *ke = &e->key;
+    bool will_propagate_to_view = true;
+    if (ke->type == SDL_EVENT_KEY_DOWN)
     {
-        case GLFW_KEY_LEFT:
-        case GLFW_KEY_RIGHT:
-        case GLFW_KEY_UP:
-        case GLFW_KEY_DOWN:
-        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        if (ke->mod == SDL_KMOD_NONE)
         {
-            Cursor_Movement_Dir dir = CURSOR_MOVE_UP;
-            switch (key)
+            switch (ke->key)
             {
-                case GLFW_KEY_LEFT: dir = CURSOR_MOVE_LEFT; break;
-                case GLFW_KEY_RIGHT: dir = CURSOR_MOVE_RIGHT; break;
-                case GLFW_KEY_UP: dir = CURSOR_MOVE_UP; break;
-                case GLFW_KEY_DOWN: dir = CURSOR_MOVE_DOWN; break;
-            }
-            action_buffer_view_move_cursor(state, buffer_view, dir, mods & GLFW_MOD_SHIFT, mods & GLFW_MOD_ALT, mods & GLFW_MOD_SUPER);
-        } break;
-        case GLFW_KEY_ENTER: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            switch (buffer_view->buffer->kind)
-            {
-                case BUFFER_KIND_PROMPT:
+                case SDLK_F1:
                 {
-                    action_buffer_view_prompt_submit(state, buffer_view);
+                    action_run_unit_tests(state);
                 } break;
+                case SDLK_F2:
+                {
+                    action_change_working_dir(state);
+                } break;
+                case SDLK_F5:
+                {
+                    action_rebuild_live_scene(state);
+                } break;
+                case SDLK_F6:
+                {
+                    action_link_live_scene(state);
+                } break;
+                case SDLK_F12:
+                {
+                    action_debug_break(state);
+                } break;
+            }
+        }
+        else if (ke->mod == SDL_KMOD_SHIFT)
+        {
+            switch (ke->key)
+            {
+                case SDLK_F5:
+                {
+                    action_reset_live_scene(state);
+                } break;
+            }
+        }
+        else if (ke->mod == SDL_KMOD_GUI)
+        {
+            switch (ke->mod)
+            {
+                case SDLK_W:
+                {
+                    will_propagate_to_view = false;
+                    action_destroy_active_view(state);
+                } break;
+                case SDLK_1:
+                {
+                    action_open_test_file1(state);
+                } break;
+                case SDLK_2:
+                {
+                    action_open_test_image(state);
+                } break;
+                case SDLK_3:
+                {
+                    action_open_test_live_scene(state);
+                } break;
+                case SDLK_O:
+                {
+                    action_prompt_open_file(state);
+                } break;
+                case SDLK_N:
+                {
+                    action_prompt_new_file(state);
+                } break;
+            }
+        }
+    }
 
-                default:
-                {
-                    action_buffer_view_input_char(state, buffer_view, '\n');
-                } break;
-            }
-        } break;
-        case GLFW_KEY_BACKSPACE: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            action_buffer_view_backspace(state, buffer_view);
-        } break;
-        case GLFW_KEY_TAB: if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            action_buffer_view_insert_indent(state, buffer_view);
-        } break;
-        case GLFW_KEY_LEFT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            action_buffer_view_decrease_indent_level(state, buffer_view);
-        } break;
-        case GLFW_KEY_RIGHT_BRACKET: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            action_buffer_view_increase_indent_level(state, buffer_view);
-        } break;
-        case GLFW_KEY_C: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_buffer_view_copy_selected(state, buffer_view);
-        } break;
-        case GLFW_KEY_V: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_buffer_view_paste(state, buffer_view);
-        } break;
-        case GLFW_KEY_X: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            action_buffer_view_delete_current_line(state, buffer_view);
-        } break;
-        case GLFW_KEY_R: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
-            {
-                action_buffer_view_reload_file(state, buffer_view);
-            }
-        } break;
-        case GLFW_KEY_S: if (mods & GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
-            {
-                if (mods & GLFW_MOD_SHIFT || buffer_view->buffer->file.info.path == NULL)
-                {
-                    action_buffer_view_prompt_save_file_as(state, buffer_view);
-                }
-                else
-                {
-                    action_buffer_view_save_file(state, buffer_view);
-                }
-            }
-        } break;
-        case GLFW_KEY_EQUAL: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            action_buffer_view_change_zoom(state, buffer_view, 0.25f);
-        } break;
-        case GLFW_KEY_MINUS: if (mods == GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            action_buffer_view_change_zoom(state, buffer_view, -0.25f);
-        } break;
-        case GLFW_KEY_G: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_buffer_view_prompt_go_to_line(state, buffer_view);
-        } break;
-        case GLFW_KEY_F: if (mods & GLFW_MOD_SUPER && (action == GLFW_PRESS || action == GLFW_REPEAT))
-        {
-            if (mods == (GLFW_MOD_SHIFT | GLFW_MOD_SUPER))
-            {
-                action_buffer_view_repeat_search(state, buffer_view);
-            }
-            else if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-            {
-                action_buffer_view_prompt_search_next(state, buffer_view);
-            }
-        } break;
-        case GLFW_KEY_SEMICOLON: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_buffer_view_whitespace_cleanup(state, buffer_view);
-        } break;
+    if (will_propagate_to_view && state->active_view)
+    {
+        input_key_view(state, state->active_view, e);
     }
 }
 
-void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void input_key_view(Editor_State *state, View *view, const SDL_Event *e)
 {
     switch (view->kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            buffer_view_handle_key(&view->bv, window, state, key, action, mods);
+            input_key_buffer_view(state, &view->bv, e);
         } break;
 
         case VIEW_KIND_IMAGE:
@@ -144,122 +110,282 @@ void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int ke
 
         default:
         {
-            log_warning("view_handle_key: Unhandled View kind: %d", view->kind);
+            log_warning("input_key_view: Unhandled View kind: %d", view->kind);
         } break;
     }
 }
 
-void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const SDL_Event *e)
 {
-    (void) window;
-    bool will_propagate_to_view = true;
-    switch(key)
+    const SDL_KeyboardEvent *ke = &e->key;
+    if (ke->type == SDL_EVENT_KEY_DOWN)
     {
-        case GLFW_KEY_F1: if (action == GLFW_PRESS)
+        if (ke->key == SDLK_LEFT ||
+            ke->key == SDLK_RIGHT ||
+            ke->key == SDLK_UP ||
+            ke->key == SDLK_DOWN)
         {
-            action_run_unit_tests(state);
-        } break;
-        case GLFW_KEY_F2: if (action == GLFW_PRESS)
+            Cursor_Movement_Dir dir = CURSOR_MOVE_UP;
+            switch (ke->key)
+            {
+                case SDLK_LEFT: dir = CURSOR_MOVE_LEFT; break;
+                case SDLK_RIGHT: dir = CURSOR_MOVE_RIGHT; break;
+                case SDLK_UP: dir = CURSOR_MOVE_UP; break;
+                case SDLK_DOWN: dir = CURSOR_MOVE_DOWN; break;
+            }
+            action_buffer_view_move_cursor(state, buffer_view, dir, ke->mod & SDL_KMOD_SHIFT, ke->mod & SDL_KMOD_ALT, ke->mod & SDL_KMOD_GUI);
+        }
+        else if (ke->mod == SDL_KMOD_NONE)
         {
-            action_change_working_dir(state);
-        } break;
-        case GLFW_KEY_F5: if (action == GLFW_PRESS)
-        {
-            if (mods == 0)
-                action_rebuild_live_scene(state);
-            else if (mods == GLFW_MOD_SHIFT)
-                action_reset_live_scene(state);
-        } break;
-        case GLFW_KEY_F6: if (action == GLFW_PRESS)
-        {
-            action_link_live_scene(state);
-        } break;
-        case GLFW_KEY_F12: if (action == GLFW_PRESS)
-        {
-            action_debug_break(state);
-        } break;
-        case GLFW_KEY_W: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            will_propagate_to_view = false;
-            action_destroy_active_view(state);
-        } break;
-        case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_open_test_file1(state);
-        } break;
-        case GLFW_KEY_2: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_open_test_image(state);
-        } break;
-        case GLFW_KEY_3: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_open_test_live_scene(state);
-        } break;
-        case GLFW_KEY_O: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_prompt_open_file(state);
-        } break;
-        case GLFW_KEY_N: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
-        {
-            action_prompt_new_file(state);
-        } break;
-    }
+            switch (ke->key)
+            {
+                case SDLK_RETURN:
+                {
+                    switch (buffer_view->buffer->kind)
+                    {
+                        case BUFFER_KIND_PROMPT:
+                        {
+                            action_buffer_view_prompt_submit(state, buffer_view);
+                        } break;
 
-    if (will_propagate_to_view && state->active_view)
+                        default:
+                        {
+                            action_buffer_view_input_char(state, buffer_view, '\n');
+                        } break;
+                    }
+                } break;
+
+                case SDLK_BACKSPACE:
+                {
+                    action_buffer_view_backspace(state, buffer_view);
+                } break;
+
+                case SDLK_TAB:
+                {
+                    action_buffer_view_insert_indent(state, buffer_view);
+                } break;
+            }
+        }
+        else if (ke->mod == SDL_KMOD_GUI)
+        {
+            switch (ke->key)
+            {
+                case SDLK_LEFTBRACKET:
+                {
+                    action_buffer_view_decrease_indent_level(state, buffer_view);
+                } break;
+                case SDLK_RIGHTBRACKET:
+                {
+                    action_buffer_view_increase_indent_level(state, buffer_view);
+                } break;
+                case SDLK_C:
+                {
+                    action_buffer_view_copy_selected(state, buffer_view);
+                } break;
+                case SDLK_V:
+                {
+                    action_buffer_view_paste(state, buffer_view);
+                } break;
+                case SDLK_X:
+                {
+                    action_buffer_view_delete_current_line(state, buffer_view);
+                } break;
+                case SDLK_R:
+                {
+                    if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
+                    {
+                        action_buffer_view_reload_file(state, buffer_view);
+                    }
+                } break;
+                case SDLK_S:
+                {
+                    if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
+                    {
+                        if (buffer_view->buffer->file.info.path == NULL)
+                        {
+                            action_buffer_view_prompt_save_file_as(state, buffer_view);
+                        }
+                        else
+                        {
+                            action_buffer_view_save_file(state, buffer_view);
+                        }
+                    }
+                } break;
+                case SDLK_EQUALS:
+                {
+                    action_buffer_view_change_zoom(state, buffer_view, 0.25f);
+                } break;
+                case SDLK_MINUS:
+                {
+                    action_buffer_view_change_zoom(state, buffer_view, -0.25f);
+                } break;
+                case SDLK_G:
+                {
+                    action_buffer_view_prompt_go_to_line(state, buffer_view);
+                } break;
+                case SDLK_F:
+                {
+                    action_buffer_view_prompt_search_next(state, buffer_view);
+                } break;
+                case SDLK_SEMICOLON:
+                {
+                    action_buffer_view_whitespace_cleanup(state, buffer_view);
+                } break;
+            }
+        }
+        else if (ke->mod == (SDL_KMOD_GUI | SDL_KMOD_SHIFT))
+        {
+            switch (ke->key)
+            {
+                case SDLK_S:
+                {
+                    action_buffer_view_prompt_save_file_as(state, buffer_view);
+                } break;
+
+                case SDLK_F:
+                {
+                    action_buffer_view_repeat_search(state, buffer_view);
+                } break;
+            }
+        }
+    }
+}
+
+void input_mouse_update(Editor_State *state)
+{
+    SDL_MouseButtonFlags mouse_button_flags = SDL_GetMouseState(&state->mouse_state.pos.x, &state->mouse_state.pos.y);
+    
+    if (mouse_button_flags == SDL_BUTTON_MASK(SDL_BUTTON_LEFT))
     {
-        view_handle_key(state->active_view, window, state, key, action, mods);
+        input_mouse_drag_global(state);
     }
-}
 
-void buffer_view_handle_click_drag(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
-{
-    (void)is_shift_pressed;
-    buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
-}
+    state->mouse_state.prev_mouse_pos = state->mouse_state.pos;
 
-void view_handle_click_drag(View *view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
-{
-    if (view->kind == VIEW_KIND_BUFFER)
+    if (state->mouse_state.scroll_timeout > 0.0f)
     {
-        buffer_view_handle_click_drag(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state);
+        state->mouse_state.scroll_timeout -= state->delta_time;
+    }
+    else
+    {
+        state->mouse_state.scrolled_view = NULL;
     }
 }
 
-void view_handle_drag(View *view, Vec_2 drag_delta, Render_State *render_state)
+void input_mouse_drag_global(Editor_State *state)
 {
-    Rect new_rect = view->outer_rect;
-    new_rect.x += drag_delta.x;
-    new_rect.y += drag_delta.y;
-    view_set_rect(view, new_rect, render_state);
-}
-
-void view_handle_resize(View *view, Vec_2 drag_delta, Render_State *render_state)
-{
-    Rect new_rect = view->outer_rect;
-    new_rect.w += drag_delta.x;
-    new_rect.h += drag_delta.y;
-    view_set_rect(view, new_rect, render_state);
-}
-
-void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
-{
+    Mouse_State *mouse_state = &state->mouse_state;
     if (mouse_state->inner_drag_view)
     {
-        view_handle_click_drag(mouse_state->inner_drag_view, mouse_canvas_pos, is_shift_pressed, render_state);
+        input_mouse_drag_view(state, mouse_state->inner_drag_view);
     }
     else if (mouse_state->dragged_view)
     {
-        view_handle_drag(mouse_state->dragged_view, mouse_delta, render_state);
+        Rect new_rect = mouse_state->dragged_view->outer_rect;
+        new_rect.x += mouse_state->pos.x - mouse_state->prev_mouse_pos.x;
+        new_rect.y += mouse_state->pos.y - mouse_state->prev_mouse_pos.y;
+        view_set_rect(mouse_state->dragged_view, new_rect, &state->render_state);
     }
     else if (mouse_state->resized_view)
     {
-        view_handle_resize(mouse_state->resized_view, mouse_delta, render_state);
+        Rect new_rect = mouse_state->resized_view->outer_rect;
+        new_rect.w += mouse_state->pos.x - mouse_state->prev_mouse_pos.x;
+        new_rect.h += mouse_state->pos.y - mouse_state->prev_mouse_pos.y;
+        view_set_rect(mouse_state->resized_view, new_rect, &state->render_state);
     }
 }
 
-bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+void input_mouse_drag_view(Editor_State *state, View *view)
 {
-    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            input_mouse_drag_buffer_view(state, &view->bv);
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_drag_view: Unhandled View kind: %d", view->kind);
+        } break;
+    }
+}
+
+void input_mouse_drag_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+    buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
+}
+
+void input_mouse_click_global(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+    View *clicked_view = view_at_pos(mouse_canvas_pos, state);
+    if (clicked_view != NULL)
+    {
+        if (state->active_view != clicked_view)
+        {
+            // Active view switched, don't pass click inside the view
+
+            view_set_active(clicked_view, state);
+
+            Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
+            if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+            {
+                state->mouse_state.resized_view = clicked_view;
+            }
+            else
+            {
+                state->mouse_state.dragged_view = clicked_view;
+            }
+        }
+        else
+        {
+            Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
+            if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+            {
+                state->mouse_state.resized_view = clicked_view;
+            }
+            else
+            {
+                bool click_handled_inside_view = input_mouse_click_view(state, clicked_view);
+                if (!click_handled_inside_view)
+                {
+                    state->mouse_state.dragged_view = clicked_view;
+                }
+            }
+        }
+    }
+}
+
+bool input_mouse_click_view(Editor_State *state, View *view)
+{
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            if (input_mouse_click_buffer_view(state, &view->bv))
+            {
+                state->mouse_state.inner_drag_view = view;
+                return true;
+            }
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_click_view: Unhandled View kind: %d", view->kind);
+        } break;
+    }
+    return false;
+}
+
+bool input_mouse_click_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+    SDL_Keymod mods = SDL_GetModState();
+    bool is_shift_pressed = (mods & SDL_KMOD_SHIFT);
+
+    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, &state->render_state);
     if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
     {
         if (is_shift_pressed)
@@ -267,13 +393,13 @@ bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas
             if (!buffer_view->mark.active)
                 buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
 
-            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
 
             buffer_view_validate_mark(buffer_view);
         }
         else
         {
-            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
             buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
         }
         return true;
@@ -281,88 +407,91 @@ bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas
     return false;
 }
 
-void view_handle_mouse_click(View *view, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, bool is_shift_pressed, bool should_propagate_inside, Render_State *render_state)
+void input_mouse_release_global(Editor_State *state)
 {
-    Rect resize_handle_rect = view_get_resize_handle_rect(view, render_state);
-    if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-    {
-        mouse_state->resized_view = view;
-        return;
-    }
-    else if (should_propagate_inside)
-    {
-        switch (view->kind)
-        {
-            case VIEW_KIND_BUFFER:
-            {
-                if (buffer_view_handle_mouse_click(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state))
-                {
-                    mouse_state->inner_drag_view = view;
-                    return;
-                }
-            } break;
-
-            default:
-            {
-                log_warning("view_handle_mouse_click: Unhandled View kind: %d", view->kind);
-            } break;
-        }
-    }
-    mouse_state->dragged_view = view;
-}
-
-void handle_mouse_click(GLFWwindow *window, Editor_State *state)
-{
-    Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-    bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-    View *clicked_view = view_at_pos(mouse_canvas_pos, state);
-    if (clicked_view != NULL)
-    {
-        if (state->active_view != clicked_view)
-        {
-            view_set_active(clicked_view, state);
-            view_handle_mouse_click(clicked_view, mouse_canvas_pos, &state->mouse_state, is_shift_pressed, false, &state->render_state);
-        }
-        else
-        {
-            view_handle_mouse_click(clicked_view, mouse_canvas_pos, &state->mouse_state, is_shift_pressed, true, &state->render_state);
-        }
-    }
-}
-
-void buffer_view_handle_mouse_release(Buffer_View *buffer_view)
-{
-    buffer_view_validate_mark(buffer_view);
-}
-
-void view_handle_mouse_release(View *view)
-{
-    if (view->kind == VIEW_KIND_BUFFER)
-    {
-        buffer_view_handle_mouse_release(&view->bv);
-    }
-}
-
-void handle_mouse_release(Mouse_State *mouse_state)
-{
+    Mouse_State *mouse_state = &state->mouse_state;
     mouse_state->resized_view = NULL;
     mouse_state->dragged_view = NULL;
     mouse_state->scrolled_view = NULL;
     if (mouse_state->inner_drag_view)
     {
-        view_handle_mouse_release(mouse_state->inner_drag_view);
+        input_mouse_release_view(state, mouse_state->inner_drag_view);
         mouse_state->inner_drag_view = NULL;
     }
 }
 
-void handle_mouse_input(GLFWwindow *window, Editor_State *state)
+void input_mouse_release_view(Editor_State *state, View *view)
 {
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    switch (view->kind)
     {
-        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        Vec_2 mouse_delta = get_mouse_delta(window, &state->mouse_state);
-        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-        handle_mouse_click_drag(mouse_canvas_pos, mouse_delta, is_shift_pressed, &state->mouse_state, &state->render_state);
+        case VIEW_KIND_BUFFER:
+        {
+            input_mouse_release_buffer_view(state, &view->bv);
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_release_view: Unhandled View kind: %d");
+        } break;
     }
+}
+
+void input_mouse_release_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+{
+    (void)state;
+    buffer_view_validate_mark(buffer_view);
+}
+
+void input_mouse_scroll_global(Editor_State *state, const SDL_Event *e)
+{
+    if (state->mouse_state.scroll_timeout <= 0.0f)
+    {
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+        state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
+    }
+    state->mouse_state.scroll_timeout = SCROLL_TIMEOUT; // There's an ongoing scroll when this function is called, so reset the scroll timeout
+
+    bool scroll_handled_by_view = false;
+    if (state->mouse_state.scrolled_view)
+    {
+        scroll_handled_by_view = input_mouse_scroll_view(state, state->mouse_state.scrolled_view, e);
+    }
+    if (!scroll_handled_by_view)
+    {
+        state->canvas_viewport.rect.x -= e->wheel.x * SCROLL_SENS;
+        state->canvas_viewport.rect.y -= e->wheel.y * SCROLL_SENS;
+    }
+}
+
+bool input_mouse_scroll_view(Editor_State *state, View *view, const SDL_Event *e)
+{
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            return input_mouse_scroll_buffer_view(state, &view->bv, e);
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_scroll_view: Unhandled View kind: %d", view->kind);
+        } break;
+    }
+    return false;
+}
+
+bool input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const SDL_Event *e)
+{
+    buffer_view->viewport.rect.x -= e->wheel.x * SCROLL_SENS;
+    buffer_view->viewport.rect.y -= e->wheel.y * SCROLL_SENS;
+
+    if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;
+    float buffer_max_x = 256 * get_font_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
+    if (buffer_view->viewport.rect.x > buffer_max_x) buffer_view->viewport.rect.x = buffer_max_x;
+
+    if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
+    float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
+    if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
+
+    return true;
 }

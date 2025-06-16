@@ -4,13 +4,14 @@
 #include <stdbool.h>
 #include <time.h>
 
+#include <SDL3/sdl.h>
 #include <OpenGL/gl3.h>
-#include <GLFW/glfw3.h>
 #include <stb_image.h>
 #include <stb_truetype.h>
 
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
+#define SCROLL_TIMEOUT 0.1f
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
 #define VIEWPORT_CURSOR_BOUNDARY_COLUMNS 5
 #define GO_TO_LINE_CHAR_MAX 32
@@ -136,7 +137,7 @@ typedef struct {
     GLuint image_shader_mvp_loc;
     GLuint framebuffer_shader_mvp_loc;
     Vec_2 window_dim;
-    Vec_2 framebuffer_dim;
+    Vec_2 window_dim_px;
     float dpi_scale;
     Render_Font font;
     GLuint white_texture;
@@ -231,7 +232,7 @@ typedef struct {
 struct Live_Scene {
     void *state;
     Live_Scene_Dylib dylib;
-} ;
+};
 
 typedef struct {
     Live_Scene *live_scene;
@@ -260,6 +261,7 @@ typedef struct {
     View *dragged_view;
     View *scrolled_view;
     View *inner_drag_view;
+    Vec_2 pos;
     Vec_2 prev_mouse_pos;
     float scroll_timeout;
 } Mouse_State;
@@ -278,9 +280,9 @@ typedef struct {
 
     char *copy_buffer;
     bool should_break;
-    float delta_time;
-    float last_frame_time;
-    float last_fps_time;
+    double delta_time;
+    double last_frame_time;
+    double last_fps_time;
     int fps_frame_count;
     float fps;
     long long frame_count;
@@ -289,7 +291,7 @@ typedef struct {
 
     char *prev_search;
 
-    GLFWwindow *window;
+    SDL_Window *window;
 } Editor_State;
 
 typedef enum {
@@ -311,17 +313,12 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void _init(GLFWwindow *window, void *_state);
-void _hotreload_init(GLFWwindow *window);
-void _render(GLFWwindow *window, void *_state);
-
-void char_callback(GLFWwindow *window, unsigned int codepoint);
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
-void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
-void framebuffer_size_callback(GLFWwindow *window, int w, int h);
-void window_size_callback(GLFWwindow *window, int w, int h);
-void refresh_callback(GLFWwindow *window);
+void on_init(SDL_Window *window, Editor_State *state);
+void on_reload(Editor_State *state);
+void on_render(Editor_State *state, bool *running);
+void on_resize(Editor_State *state, int px_w, int px_h, int win_w, int win_h);
+void on_input_event(Editor_State *state, const SDL_Event *e);
+void on_destroy(Editor_State *state);
 
 bool gl_check_compile_success(GLuint shader, const char *src);
 bool gl_check_link_success(GLuint prog);
@@ -329,7 +326,7 @@ GLuint gl_create_shader_program(const char *vs_src, const char *fs_src);
 void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 Framebuffer gl_create_framebuffer(int width, int height);
 
-void initialize_render_state(GLFWwindow *window, Render_State *render_state);
+void initialize_render_state(SDL_Window *window, Render_State *render_state);
 void perform_timing_calculations(Editor_State *state);
 
 Buffer **buffer_create_new_slot(Editor_State *state);
@@ -358,7 +355,6 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state);
 void view_set_active(View *view, Editor_State *state);
 Rect view_get_resize_handle_rect(View *view, const Render_State *render_state);
 View *view_at_pos(Vec_2 pos, Editor_State *state);
-bool view_handle_scroll(View *view, float x_offset, float y_offset, const Render_State *render_state);
 
 Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state);
 Rect buffer_view_get_text_area_rect(Buffer_View *buffer_view, const Render_State *render_state);
@@ -384,7 +380,7 @@ Prompt_Context prompt_create_context_search_next(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_change_working_dir();
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
-bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
+bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, Editor_State *state);
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);
@@ -419,7 +415,7 @@ void draw_image_view(Image_View *image_view, Render_State *render_state);
 
 void draw_live_scene_view(Live_Scene_View *live_scene_view, Render_State *render_state, float delta_time);
 
-void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
+void draw_status_bar(Editor_State *state, Render_State *render_state);
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
 void make_view(float offset_x, float offset_y, float scale, float *out);
@@ -434,9 +430,6 @@ void transform_set_screen_space(Render_State *render_state);
 
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
-Vec_2 get_mouse_screen_pos(GLFWwindow *window);
-Vec_2 get_mouse_canvas_pos(Editor_State *state);
-Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
 

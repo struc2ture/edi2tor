@@ -7,9 +7,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <SDL3/sdl.h>
 #include <OpenGL/gl3.h>
-#include <GLFW/glfw3.h>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -20,11 +19,9 @@
 #include "shaders.h"
 #include "util.h"
 
-void _init(GLFWwindow *window, void *_state)
+void on_init(SDL_Window *window, Editor_State *state)
 {
-    (void)window; Editor_State *state = _state; (void)state;
     bassert(sizeof(*state) < 4096);
-    glfwSetWindowUserPointer(window, _state);
 
     state->window = window;
 
@@ -34,25 +31,20 @@ void _init(GLFWwindow *window, void *_state)
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
 
     state->working_dir = sys_get_working_dir();
+
+    SDL_StartTextInput(window);
 }
 
-void _hotreload_init(GLFWwindow *window)
+void on_reload(Editor_State *state)
 {
-    (void)window;
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCharCallback(window, char_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetWindowSizeCallback(window, window_size_callback);
-    glfwSetWindowRefreshCallback(window, refresh_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    (void)state;
 }
 
-void _render(GLFWwindow *window, void *_state)
+void on_render(Editor_State *state, bool *running)
 {
-    (void)window; Editor_State *state = _state; (void)state;
-
-    if (state->should_break) {
+    (void)running;
+    if (state->should_break)
+    {
         __builtin_debugtrap();
         state->should_break = false;
     }
@@ -61,6 +53,8 @@ void _render(GLFWwindow *window, void *_state)
     glClear(GL_COLOR_BUFFER_BIT);
 
     perform_timing_calculations(state);
+
+    input_mouse_update(state);
 
     glBindVertexArray(state->render_state.vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
@@ -78,102 +72,58 @@ void _render(GLFWwindow *window, void *_state)
         draw_view(view, is_active, state->canvas_viewport, &state->render_state, state->delta_time);
     }
 
-    draw_status_bar(window, state, &state->render_state);
-
-    handle_mouse_input(window, state);
-
-    state->mouse_state.prev_mouse_pos = get_mouse_screen_pos(window);
-
-    if (state->mouse_state.scroll_timeout > 0.0f)
-    {
-        state->mouse_state.scroll_timeout -= state->delta_time;
-    }
-    else
-    {
-        state->mouse_state.scrolled_view = NULL;
-    }
-
-    glfwSwapBuffers(window);
-    glfwPollEvents();
-
-    state->frame_count++;
-    state->fps_frame_count++;
+    draw_status_bar(state, &state->render_state);
 }
 
-void char_callback(GLFWwindow *window, unsigned int codepoint)
+void on_resize(Editor_State *state, int px_w, int px_h, int win_w, int win_h)
 {
-    (void)window; Editor_State *state = glfwGetWindowUserPointer(window);
-    if (state->active_view != NULL && state->active_view->kind == VIEW_KIND_BUFFER)
-    {
-        action_buffer_view_input_char(state, &state->active_view->bv, (char)codepoint);
-    }
+    glViewport(0, 0, px_w, px_h);
+    state->render_state.window_dim_px.x = px_w;
+    state->render_state.window_dim_px.y = px_h;
+    state->render_state.window_dim.x = win_w;
+    state->render_state.window_dim.y = win_h;
+    state->render_state.dpi_scale = state->render_state.window_dim_px.x / state->render_state.window_dim.x;
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+void on_input_event(Editor_State *state, const SDL_Event *e)
 {
-    (void)scancode; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window);
-    handle_key_input(window, state, key, action, mods);
-}
-
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
-{
-    (void)window; (void)button; (void)action; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
+    switch (e->type)
     {
-        if (action == GLFW_PRESS)
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
         {
-            handle_mouse_click(window, state);
-        }
-        else if (action == GLFW_RELEASE)
+            input_key_global(state, e);
+        } break;
+
+        case SDL_EVENT_TEXT_INPUT:
         {
-            handle_mouse_release(&state->mouse_state);
-        }
+            if (state->active_view != NULL && state->active_view->kind == VIEW_KIND_BUFFER)
+            {
+                action_buffer_view_input_char(state, &state->active_view->bv, (char)(*e->text.text));
+            }
+        } break;
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        {
+            if (e->button.button == SDL_BUTTON_LEFT)
+                input_mouse_click_global(state);
+        } break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        {
+            if (e->button.button == SDL_BUTTON_LEFT)
+                input_mouse_release_global(state);
+        } break;
+        case SDL_EVENT_MOUSE_WHEEL:
+        {
+            input_mouse_scroll_global(state, e);
+        } break;
     }
 }
 
-void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
+void on_destroy(Editor_State *state)
 {
-    (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    if (state->mouse_state.scroll_timeout <= 0.0f)
-    {
-        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-        state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
-    }
-    state->mouse_state.scroll_timeout = 0.1f;
-    bool scroll_handled_by_view = false;
-    if (state->mouse_state.scrolled_view)
-    {
-        scroll_handled_by_view = view_handle_scroll(state->mouse_state.scrolled_view, x_offset, y_offset, &state->render_state);
-    }
-    if (!scroll_handled_by_view)
-    {
-        state->canvas_viewport.rect.x -= x_offset * SCROLL_SENS;
-        state->canvas_viewport.rect.y -= y_offset * SCROLL_SENS;
-    }
-}
-
-void framebuffer_size_callback(GLFWwindow *window, int w, int h)
-{
-    (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    glViewport(0, 0, w, h);
-    state->render_state.framebuffer_dim.x = w;
-    state->render_state.framebuffer_dim.y = h;
-    state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
-}
-
-void window_size_callback(GLFWwindow *window, int w, int h)
-{
-    (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    state->render_state.window_dim.x = w;
-    state->render_state.window_dim.y = h;
-    state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
-}
-
-void refresh_callback(GLFWwindow* window) {
-    (void)window; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    // TODO: This seems to cause an issue with window resize action not ending in macos, main program loop still being blocked
-    // _render(window, state);
+    (void)state;
+    // Nothing for now
 }
 
 bool gl_check_compile_success(GLuint shader, const char *src)
@@ -275,14 +225,14 @@ Framebuffer gl_create_framebuffer(int w, int h)
     return framebuffer;
 }
 
-void initialize_render_state(GLFWwindow *window, Render_State *render_state)
+void initialize_render_state(SDL_Window *window, Render_State *render_state)
 {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    int framebuffer_w, framebuffer_h;
-    glfwGetFramebufferSize(window, &framebuffer_w, &framebuffer_h);
-    glViewport(0, 0, framebuffer_w, framebuffer_h);
+    int window_w_px, window_h_px;
+    SDL_GetWindowSizeInPixels(window, &window_w_px, &window_h_px);
+    glViewport(0, 0, window_w_px, window_h_px);
 
     render_state->main_shader = gl_create_shader_program(shader_main_vert_src, shader_main_frag_src);
     render_state->grid_shader = gl_create_shader_program(shader_main_vert_src, shader_grid_frag_src);
@@ -320,26 +270,29 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     render_state->buffer_view_resize_handle_radius = 5.0f;
 
     int window_w, window_h;
-    glfwGetWindowSize(window, &window_w, &window_h);
+    SDL_GetWindowSize(window, &window_w, &window_h);
     render_state->window_dim.x = window_w;
     render_state->window_dim.y = window_h;
-    render_state->framebuffer_dim.x = framebuffer_w;
-    render_state->framebuffer_dim.y = framebuffer_h;
-    render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
+    render_state->window_dim_px.x = window_w_px;
+    render_state->window_dim_px.y = window_h_px;
+    render_state->dpi_scale = render_state->window_dim_px.x / render_state->window_dim.x;
 }
 
 void perform_timing_calculations(Editor_State *state)
 {
-    float current_time = (float)glfwGetTime();
+    double current_time = SDL_GetTicksNS() / 1e9;
     state->delta_time = current_time - state->last_frame_time;
     state->last_frame_time = current_time;
 
     if (current_time - state->last_fps_time > 0.1f)
     {
-        state->fps = (float)state->fps_frame_count / (current_time - state->last_fps_time);
+        state->fps = state->fps_frame_count / (current_time - state->last_fps_time);
         state->last_fps_time = current_time;
         state->fps_frame_count = 0;
     }
+
+    state->frame_count++;
+    state->fps_frame_count++;
 }
 
 Buffer **buffer_create_new_slot(Editor_State *state)
@@ -670,24 +623,6 @@ View *view_at_pos(Vec_2 pos, Editor_State *state)
     return NULL;
 }
 
-bool view_handle_scroll(View *view, float x_offset, float y_offset, const Render_State *render_state)
-{
-    if (view->kind == VIEW_KIND_BUFFER)
-    {
-        Buffer_View *buffer_view = &view->bv;
-        buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
-        buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
-        if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;
-        if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
-        float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(render_state->font);
-        if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
-        float buffer_max_x = 256 * get_font_line_height(render_state->font); // TODO: Determine max x coordinates based on longest line
-        if (buffer_view->viewport.rect.x > buffer_max_x) buffer_view->viewport.rect.x = buffer_max_x;
-        return true;
-    }
-    return false;
-}
-
 Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state)
 {
     View *view = view_create(state);
@@ -874,9 +809,8 @@ Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
     return result;
 }
 
-bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state)
+bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, Editor_State *state)
 {
-    (void)window; (void)state;
     switch (context.kind)
     {
         case PROMPT_OPEN_FILE:
@@ -1216,7 +1150,7 @@ void draw_grid(Viewport canvas_viewport, Render_State *render_state)
 
     glUniformMatrix4fv(render_state->grid_shader_mvp_loc, 1, GL_FALSE, proj);
 
-    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
+    glUniform2f(render_state->grid_shader_resolution_loc, render_state->window_dim_px.x, render_state->window_dim_px.y);
 
     float scaled_offset_x = canvas_viewport.rect.x * render_state->dpi_scale;
     float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
@@ -1392,9 +1326,8 @@ void draw_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport ca
         draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
 }
 
-void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state)
+void draw_status_bar(Editor_State *state, Render_State *render_state)
 {
-    (void)window;
     transform_set_screen_space(render_state);
 
     const float font_line_height = get_font_line_height(render_state->font);
@@ -1451,7 +1384,7 @@ void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, 
     ls_view->live_scene->dylib.render(ls_view->live_scene->state, delta_time);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
+    glViewport(0, 0, (int)render_state->window_dim_px.x, (int)render_state->window_dim_px.y);
     glClearColor(0, 0, 0, 1.0f);
     glBindVertexArray(render_state->vao);
     glDisable(GL_DEPTH_TEST);
@@ -1639,30 +1572,6 @@ Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport)
     canvas_pos.x = canvas_viewport.rect.x + screen_pos.x / canvas_viewport.zoom;
     canvas_pos.y = canvas_viewport.rect.y + screen_pos.y / canvas_viewport.zoom;
     return canvas_pos;
-}
-
-Vec_2 get_mouse_screen_pos(GLFWwindow *window)
-{
-    double mouse_x, mouse_y;
-    glfwGetCursorPos(window, &mouse_x, &mouse_y);
-    Vec_2 p = {mouse_x, mouse_y};
-    return p;
-}
-
-Vec_2 get_mouse_canvas_pos(Editor_State *state)
-{
-    Vec_2 p = screen_pos_to_canvas_pos(get_mouse_screen_pos(state->window), state->canvas_viewport);
-    return p;
-}
-
-Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state)
-{
-    Vec_2 current_mouse_pos = get_mouse_screen_pos(window);
-    Vec_2 delta_mouse_pos = {
-        .x = current_mouse_pos.x - mouse_state->prev_mouse_pos.x,
-        .y = current_mouse_pos.y - mouse_state->prev_mouse_pos.y
-    };
-    return delta_mouse_pos;
 }
 
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)
