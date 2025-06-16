@@ -10,7 +10,7 @@ bool action_rebuild_live_scene(Editor_State *state);
 bool action_reset_live_scene(Editor_State *state);
 bool action_link_live_scene(Editor_State *state);
 bool action_debug_break(Editor_State *state);
-bool action_destroy_active_frame(Editor_State *state);
+bool action_destroy_active_view(Editor_State *state);
 bool action_open_test_file1(Editor_State *state);
 bool action_open_test_image(Editor_State *state);
 bool action_open_test_live_scene(Editor_State *state);
@@ -18,7 +18,7 @@ bool action_prompt_open_file(Editor_State *state);
 bool action_prompt_new_file(Editor_State *state);
 
 bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_shift, bool with_alt, bool with_super);
-bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view, Frame *frame);
+bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view, char c);
 bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view);

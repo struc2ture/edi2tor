@@ -10,7 +10,6 @@
 #include <sys/stat.h>
 #include <time.h>
 
-
 #include "editor.h"
 
 inline static void bassert(bool condition)
@@ -230,3 +229,5 @@ static void * xdlsym(void *handle, const char *name)
     }
     return sym;
 }
+
+#define outer_view(child_view_ptr) ((View *)(child_view_ptr))

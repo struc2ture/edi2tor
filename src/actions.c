@@ -11,39 +11,39 @@ bool action_run_unit_tests(Editor_State *state)
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
     Text_Buffer log_buffer = {0};
     unit_tests_run(&log_buffer, true);
-    Frame *frame = frame_create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
-    frame->view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, frame->view->bv.cursor.pos);
-    viewport_snap_to_cursor(log_buffer, frame->view->bv.cursor.pos, &frame->view->bv.viewport, &state->render_state);
+    View *view = create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+    view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, view->bv.cursor.pos);
+    viewport_snap_to_cursor(log_buffer, view->bv.cursor.pos, &view->bv.viewport, &state->render_state);
     return true;
 }
 
 bool action_change_working_dir(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    Frame *frame = frame_create_buffer_view_prompt(
+    View *view = create_buffer_view_prompt(
         "Change working dir:",
         prompt_create_context_change_working_dir(),
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 100},
         state);
     Text_Line current_path_line = text_line_make_f("%s", state->working_dir);
-    text_buffer_insert_line(&frame->view->bv.buffer->text_buffer, current_path_line, 1);
-    frame->view->bv.cursor.pos = cursor_pos_to_end_of_line(frame->view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
+    text_buffer_insert_line(&view->bv.buffer->text_buffer, current_path_line, 1);
+    view->bv.cursor.pos = cursor_pos_to_end_of_line(view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
     return true;
 }
 
 bool action_rebuild_live_scene(Editor_State *state)
 {
     // TODO: view level action
-    Frame *frame = state->active_frame;
-    if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
+    View *view = state->active_view;
+    if (view->kind == VIEW_KIND_LIVE_SCENE)
     {
-        live_scene_rebuild(frame->view->lsv.live_scene);
+        live_scene_rebuild(view->lsv.live_scene);
     }
-    else if (frame->view->kind == VIEW_KIND_BUFFER &&
-        frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
-        frame->view->bv.buffer->file.linked_live_scene)
+    else if (view->kind == VIEW_KIND_BUFFER &&
+        view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        view->bv.buffer->file.linked_live_scene)
     {
-        live_scene_rebuild(frame->view->bv.buffer->file.linked_live_scene);
+        live_scene_rebuild(view->bv.buffer->file.linked_live_scene);
     }
     return true;
 }
@@ -51,30 +51,30 @@ bool action_rebuild_live_scene(Editor_State *state)
 bool action_reset_live_scene(Editor_State *state)
 {
     // TODO: view level action
-    Frame *frame = state->active_frame;
-    if (frame->view->kind == VIEW_KIND_LIVE_SCENE)
+    View *view = state->active_view;
+    if (view->kind == VIEW_KIND_LIVE_SCENE)
     {
-        live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
+        live_scene_reset(&view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h);
     }
-    else if (frame->view->kind == VIEW_KIND_BUFFER &&
-        frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
-        frame->view->bv.buffer->file.linked_live_scene)
+    else if (view->kind == VIEW_KIND_BUFFER &&
+        view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        view->bv.buffer->file.linked_live_scene)
     {
-        live_scene_reset(&frame->view->lsv.live_scene, frame->outer_rect.w, frame->outer_rect.h);
+        live_scene_reset(&view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h);
     }
     return true;
 }
 
 bool action_link_live_scene(Editor_State *state)
 {
-    Frame *frame = state->active_frame;
-    if (frame->view->kind == VIEW_KIND_BUFFER &&
-        frame->view->bv.buffer->kind == BUFFER_KIND_FILE &&
-        state->frame_count_ > 1 &&
-        state->frames[1]->view->kind == VIEW_KIND_LIVE_SCENE)
+    View *view = state->active_view;
+    if (view->kind == VIEW_KIND_BUFFER &&
+        view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        state->view_count > 1 &&
+        state->views[1]->kind == VIEW_KIND_LIVE_SCENE)
     {
-        frame->view->bv.buffer->file.linked_live_scene = state->frames[1]->view->lsv.live_scene;
-        trace_log("Linked live scene to buffer %s", frame->view->bv.buffer->file.info.path);
+        view->bv.buffer->file.linked_live_scene = state->views[1]->lsv.live_scene;
+        trace_log("Linked live scene to buffer %s", view->bv.buffer->file.info.path);
     }
     return true;
 }
@@ -85,15 +85,15 @@ bool action_debug_break(Editor_State *state)
     return true;
 }
 
-bool action_destroy_active_frame(Editor_State *state)
+bool action_destroy_active_view(Editor_State *state)
 {
-    // TODO: Should this be frame/view level action?
+    // TODO: Should this be view level action?
     //       then it doesn't have to target "active" specifically
     //       and do this weird "will_propagate_to_view" logic.
-    //       Although, it does make sense, to "kill frame" from outside the frame
-    if (state->active_frame != NULL)
+    //       Although, it does make sense, to "kill view" from outside the view
+    if (state->active_view != NULL)
     {
-        frame_destroy(state->active_frame, state);
+        view_destroy(state->active_view, state);
     }
     return true;
 }
@@ -101,7 +101,7 @@ bool action_destroy_active_frame(Editor_State *state)
 bool action_open_test_file1(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_buffer_view_open_file(
+    create_buffer_view_open_file(
         FILE_PATH1,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
@@ -111,7 +111,7 @@ bool action_open_test_file1(Editor_State *state)
 bool action_open_test_image(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_image_view(
+    create_image_view(
         IMAGE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
@@ -121,7 +121,7 @@ bool action_open_test_image(Editor_State *state)
 bool action_open_test_live_scene(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_live_scene_view(
+    create_live_scene_view(
         LIVE_CUBE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
@@ -131,7 +131,7 @@ bool action_open_test_live_scene(Editor_State *state)
 bool action_prompt_open_file(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_buffer_view_prompt(
+    create_buffer_view_prompt(
         "Open file:",
         prompt_create_context_open_file(),
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
@@ -142,7 +142,7 @@ bool action_prompt_open_file(Editor_State *state)
 bool action_prompt_new_file(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_buffer_view_empty_file(
+    create_buffer_view_empty_file(
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
     return true;
@@ -189,11 +189,11 @@ bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_vie
     return true;
 }
 
-bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view, Frame *frame)
+bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view)
 {
     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
-    if (prompt_submit(buffer_view->buffer->prompt.context, prompt_result, frame->outer_rect, state->window, state))
-        frame_destroy(frame, state);
+    if (prompt_submit(buffer_view->buffer->prompt.context, prompt_result, outer_view(buffer_view)->outer_rect, state->window, state))
+        view_destroy(outer_view(buffer_view), state);
     return true;
 }
 
@@ -391,7 +391,7 @@ bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_vie
 bool action_buffer_view_prompt_save_file_as(Editor_State *state, Buffer_View *buffer_view)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_buffer_view_prompt(
+    create_buffer_view_prompt(
         "Save as:",
         prompt_create_context_save_as(buffer_view),
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
@@ -418,7 +418,7 @@ bool action_buffer_view_change_zoom(Editor_State *state, Buffer_View *buffer_vie
 bool action_buffer_view_prompt_go_to_line(Editor_State *state, Buffer_View *buffer_view)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    frame_create_buffer_view_prompt(
+    create_buffer_view_prompt(
         "Go to line:",
         prompt_create_context_go_to_line(buffer_view),
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
@@ -429,7 +429,7 @@ bool action_buffer_view_prompt_go_to_line(Editor_State *state, Buffer_View *buff
 bool action_buffer_view_prompt_search_next(Editor_State *state, Buffer_View *buffer_view)
 {
     Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-    Frame *prompt_frame = frame_create_buffer_view_prompt(
+    View *prompt_view = create_buffer_view_prompt(
         "Search next:",
         prompt_create_context_search_next(buffer_view),
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
@@ -437,8 +437,8 @@ bool action_buffer_view_prompt_search_next(Editor_State *state, Buffer_View *buf
     if (state->prev_search)
     {
         Text_Line current_path_line = text_line_make_f("%s", state->prev_search);
-        text_buffer_insert_line(&prompt_frame->view->bv.buffer->text_buffer, current_path_line, 1);
-        prompt_frame->view->bv.cursor.pos = cursor_pos_to_end_of_line(prompt_frame->view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
+        text_buffer_insert_line(&prompt_view->bv.buffer->text_buffer, current_path_line, 1);
+        prompt_view->bv.cursor.pos = cursor_pos_to_end_of_line(prompt_view->bv.buffer->text_buffer, (Cursor_Pos){1, 0});
     }
     return true;
 }

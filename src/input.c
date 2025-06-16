@@ -6,7 +6,7 @@
 #include "editor.h"
 #include "util.h"
 
-void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
     (void)window;
     switch(key)
@@ -33,7 +33,7 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
             {
                 case BUFFER_KIND_PROMPT:
                 {
-                    action_buffer_view_prompt_submit(state, buffer_view, frame);
+                    action_buffer_view_prompt_submit(state, buffer_view);
                 } break;
 
                 default:
@@ -121,13 +121,13 @@ void buffer_view_handle_key(Buffer_View *buffer_view, Frame *frame, GLFWwindow *
     }
 }
 
-void view_handle_key(View *view, Frame *frame, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
+void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods)
 {
     switch (view->kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            buffer_view_handle_key(&view->bv, frame, window, state, key, action, mods);
+            buffer_view_handle_key(&view->bv, window, state, key, action, mods);
         } break;
 
         case VIEW_KIND_IMAGE:
@@ -179,7 +179,7 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         case GLFW_KEY_W: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
             will_propagate_to_view = false;
-            action_destroy_active_frame(state);
+            action_destroy_active_view(state);
         } break;
         case GLFW_KEY_1: if (mods == GLFW_MOD_SUPER && action == GLFW_PRESS)
         {
@@ -203,61 +203,61 @@ void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int acti
         } break;
     }
 
-    if (will_propagate_to_view && state->active_frame)
+    if (will_propagate_to_view && state->active_view)
     {
-        view_handle_key(state->active_frame->view, state->active_frame, window, state, key, action, mods);
+        view_handle_key(state->active_view, window, state, key, action, mods);
     }
 }
 
-void buffer_view_handle_click_drag(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+void buffer_view_handle_click_drag(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
 {
     (void)is_shift_pressed;
-    buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+    buffer_view___set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
 }
 
-void view_handle_click_drag(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+void view_handle_click_drag(View *view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
 {
     if (view->kind == VIEW_KIND_BUFFER)
     {
-        buffer_view_handle_click_drag(&view->bv, frame_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+        buffer_view_handle_click_drag(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state);
     }
 }
 
-void frame_handle_drag(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
+void view_handle_drag(View *view, Vec_2 drag_delta, Render_State *render_state)
 {
-    Rect new_rect = frame->outer_rect;
+    Rect new_rect = view->outer_rect;
     new_rect.x += drag_delta.x;
     new_rect.y += drag_delta.y;
-    frame_set_rect(frame, new_rect, render_state);
+    view_set_rect(view, new_rect, render_state);
 }
 
-void frame_handle_resize(Frame *frame, Vec_2 drag_delta, Render_State *render_state)
+void view_handle_resize(View *view, Vec_2 drag_delta, Render_State *render_state)
 {
-    Rect new_rect = frame->outer_rect;
+    Rect new_rect = view->outer_rect;
     new_rect.w += drag_delta.x;
     new_rect.h += drag_delta.y;
-    frame_set_rect(frame, new_rect, render_state);
+    view_set_rect(view, new_rect, render_state);
 }
 
 void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
 {
-    if (mouse_state->drag_in_view_frame)
+    if (mouse_state->inner_drag_view)
     {
-        view_handle_click_drag(mouse_state->drag_in_view_frame->view, mouse_state->drag_in_view_frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state);
+        view_handle_click_drag(mouse_state->inner_drag_view, mouse_canvas_pos, is_shift_pressed, render_state);
     }
-    else if (mouse_state->dragged_frame)
+    else if (mouse_state->dragged_view)
     {
-        frame_handle_drag(mouse_state->dragged_frame, mouse_delta, render_state);
+        view_handle_drag(mouse_state->dragged_view, mouse_delta, render_state);
     }
-    else if (mouse_state->resized_frame)
+    else if (mouse_state->resized_view)
     {
-        frame_handle_resize(mouse_state->resized_frame, mouse_delta, render_state);
+        view_handle_resize(mouse_state->resized_view, mouse_delta, render_state);
     }
 }
 
-bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
 {
-    Rect text_area_rect = buffer_view_get_text_area_rect(*buffer_view, frame_rect, render_state);
+    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
     if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
     {
         if (is_shift_pressed)
@@ -265,13 +265,13 @@ bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, V
             if (!buffer_view->mark.active)
                 buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
 
-            buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+            buffer_view___set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
 
             buffer_view___validate_mark(buffer_view);
         }
         else
         {
-            buffer_view___set_cursor_to_pixel_position(buffer_view, frame_rect, mouse_canvas_pos, render_state);
+            buffer_view___set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
             buffer_view___set_mark(buffer_view, buffer_view->cursor.pos);
         }
         return true;
@@ -279,24 +279,36 @@ bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Rect frame_rect, V
     return false;
 }
 
-bool view_handle_mouse_click(View *view, Rect frame_rect, Vec_2 mouse_canvas_pos, bool is_shift_pressed, Render_State *render_state)
+void view_handle_mouse_click(View *view, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, bool is_shift_pressed, bool should_propagate_inside, Render_State *render_state)
 {
-    if (view->kind == VIEW_KIND_BUFFER)
-    {
-        return buffer_view_handle_mouse_click(&view->bv, frame_rect, mouse_canvas_pos, is_shift_pressed, render_state);
-    }
-    return false;
-}
-
-void frame_handle_mouse_click(Frame *frame, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, Render_State *render_state, bool is_shift_pressed, bool will_propagate_to_view)
-{
-    Rect resize_handle_rect = frame_get_resize_handle_rect(*frame, render_state);
+    Rect resize_handle_rect = view_get_resize_handle_rect(view, render_state);
     if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-        mouse_state->resized_frame = frame;
-    else if (will_propagate_to_view && view_handle_mouse_click(frame->view, frame->outer_rect, mouse_canvas_pos, is_shift_pressed, render_state))
-        mouse_state->drag_in_view_frame = frame;
+    {
+        mouse_state->resized_view = view;
+    }
+    else if (should_propagate_inside)
+    {
+        bool click_accepted;
+        switch (view->kind)
+        {
+            case VIEW_KIND_BUFFER:
+            {
+                click_accepted = buffer_view_handle_mouse_click(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state);
+            } break;
+
+            default:
+            {
+                click_accepted = false;
+                log_warning("view_handle_mouse_click: Unhandled View kind: %d", view->kind);
+            } break;
+
+        }
+        if (click_accepted) mouse_state->inner_drag_view = view;
+    }
     else
-        mouse_state->dragged_frame = frame;
+    {
+        mouse_state->dragged_view = view;
+    }
 }
 
 void handle_mouse_click(GLFWwindow *window, Editor_State *state)
@@ -304,17 +316,17 @@ void handle_mouse_click(GLFWwindow *window, Editor_State *state)
     Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
     bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-    Frame *clicked_frame = frame_at_pos(mouse_canvas_pos, state);
-    if (clicked_frame != NULL)
+    View *clicked_view = view_at_pos(mouse_canvas_pos, state);
+    if (clicked_view != NULL)
     {
-        if (state->active_frame != clicked_frame)
+        if (state->active_view != clicked_view)
         {
-            frame_set_active(clicked_frame, state);
-            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, is_shift_pressed, false);
+            view_set_active(clicked_view, state);
+            view_handle_mouse_click(clicked_view, mouse_canvas_pos, &state->mouse_state, is_shift_pressed, false, &state->render_state);
         }
         else
         {
-            frame_handle_mouse_click(clicked_frame, mouse_canvas_pos, &state->mouse_state, &state->render_state, is_shift_pressed, true);
+            view_handle_mouse_click(clicked_view, mouse_canvas_pos, &state->mouse_state, is_shift_pressed, true, &state->render_state);
         }
     }
 }
@@ -334,13 +346,13 @@ void view_handle_mouse_release(View *view)
 
 void handle_mouse_release(Mouse_State *mouse_state)
 {
-    mouse_state->resized_frame = NULL;
-    mouse_state->dragged_frame = NULL;
-    mouse_state->scrolled_frame = NULL;
-    if (mouse_state->drag_in_view_frame)
+    mouse_state->resized_view = NULL;
+    mouse_state->dragged_view = NULL;
+    mouse_state->scrolled_view = NULL;
+    if (mouse_state->inner_drag_view)
     {
-        view_handle_mouse_release(mouse_state->drag_in_view_frame->view);
-        mouse_state->drag_in_view_frame = NULL;
+        view_handle_mouse_release(mouse_state->inner_drag_view);
+        mouse_state->inner_drag_view = NULL;
     }
 }
 
