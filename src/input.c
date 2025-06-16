@@ -285,30 +285,28 @@ void view_handle_mouse_click(View *view, Vec_2 mouse_canvas_pos, Mouse_State *mo
     if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
     {
         mouse_state->resized_view = view;
+        return;
     }
     else if (should_propagate_inside)
     {
-        bool click_accepted;
         switch (view->kind)
         {
             case VIEW_KIND_BUFFER:
             {
-                click_accepted = buffer_view_handle_mouse_click(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state);
+                if (buffer_view_handle_mouse_click(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state))
+                {
+                    mouse_state->inner_drag_view = view;
+                    return;
+                }
             } break;
 
             default:
             {
-                click_accepted = false;
                 log_warning("view_handle_mouse_click: Unhandled View kind: %d", view->kind);
             } break;
-
         }
-        if (click_accepted) mouse_state->inner_drag_view = view;
     }
-    else
-    {
-        mouse_state->dragged_view = view;
-    }
+    mouse_state->dragged_view = view;
 }
 
 void handle_mouse_click(GLFWwindow *window, Editor_State *state)

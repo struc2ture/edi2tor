@@ -587,6 +587,7 @@ bool view_exists(View *view, Editor_State *state)
 
 void view_set_rect(View *view, Rect rect, const Render_State *render_state)
 {
+    view->outer_rect = rect;
     switch (view->kind)
     {
         case VIEW_KIND_BUFFER:
