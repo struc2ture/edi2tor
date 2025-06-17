@@ -9,6 +9,8 @@
 #include <stb_image.h>
 #include <stb_truetype.h>
 
+#include "platform_event.h"
+
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
@@ -311,9 +313,11 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void _init(GLFWwindow *window, void *_state);
-void _hotreload_init(GLFWwindow *window);
-void _render(GLFWwindow *window, void *_state);
+void on_init(GLFWwindow *window, Editor_State *state);
+void on_reload(Editor_State *state);
+void on_render(Editor_State *state);
+void on_platform_event(Editor_State *state, const Platform_Event *event);
+void on_destroy(Editor_State *state);
 
 void char_callback(GLFWwindow *window, unsigned int codepoint);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -419,7 +423,7 @@ void draw_image_view(Image_View *image_view, Render_State *render_state);
 
 void draw_live_scene_view(Live_Scene_View *live_scene_view, Render_State *render_state, float delta_time);
 
-void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state);
+void draw_status_bar(Editor_State *state, Render_State *render_state);
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
 void make_view(float offset_x, float offset_y, float scale, float *out);

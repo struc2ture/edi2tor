@@ -356,12 +356,12 @@ void handle_mouse_release(Mouse_State *mouse_state)
     }
 }
 
-void handle_mouse_input(GLFWwindow *window, Editor_State *state)
+void handle_mouse_input(Editor_State *state)
 {
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    if (glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
-        bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        Vec_2 mouse_delta = get_mouse_delta(window, &state->mouse_state);
+        bool is_shift_pressed = glfwGetKey(state->window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(state->window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+        Vec_2 mouse_delta = get_mouse_delta(state->window, &state->mouse_state);
         Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
         handle_mouse_click_drag(mouse_canvas_pos, mouse_delta, is_shift_pressed, &state->mouse_state, &state->render_state);
     }

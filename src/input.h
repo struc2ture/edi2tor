@@ -22,4 +22,4 @@ void buffer_view_handle_mouse_release(Buffer_View *buffer_view);
 void view_handle_mouse_release(View *view);
 void handle_mouse_release(Mouse_State *mouse_state);
 
-void handle_mouse_input(GLFWwindow *window, Editor_State *state);
+void handle_mouse_input(Editor_State *state);

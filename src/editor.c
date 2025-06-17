@@ -9,22 +9,19 @@
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-#include "actions.h"
+// #include "actions.h"
 #include "input.h"
 #include "shaders.h"
 #include "util.h"
 
-void _init(GLFWwindow *window, void *_state)
+void on_init(GLFWwindow *window, Editor_State *state)
 {
-    (void)window; Editor_State *state = _state; (void)state;
     bassert(sizeof(*state) < 4096);
-    glfwSetWindowUserPointer(window, _state);
 
     state->window = window;
 
@@ -36,23 +33,15 @@ void _init(GLFWwindow *window, void *_state)
     state->working_dir = sys_get_working_dir();
 }
 
-void _hotreload_init(GLFWwindow *window)
+void on_reload(Editor_State *state)
 {
-    (void)window;
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCharCallback(window, char_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetWindowSizeCallback(window, window_size_callback);
-    glfwSetWindowRefreshCallback(window, refresh_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    (void)state;
 }
 
-void _render(GLFWwindow *window, void *_state)
+void on_render(Editor_State *state)
 {
-    (void)window; Editor_State *state = _state; (void)state;
-
-    if (state->should_break) {
+    if (state->should_break)
+    {
         __builtin_debugtrap();
         state->should_break = false;
     }
@@ -78,11 +67,11 @@ void _render(GLFWwindow *window, void *_state)
         draw_view(view, is_active, state->canvas_viewport, &state->render_state, state->delta_time);
     }
 
-    draw_status_bar(window, state, &state->render_state);
+    draw_status_bar(state, &state->render_state);
 
-    handle_mouse_input(window, state);
+    handle_mouse_input(state);
 
-    state->mouse_state.prev_mouse_pos = get_mouse_screen_pos(window);
+    state->mouse_state.prev_mouse_pos = get_mouse_screen_pos(state->window);
 
     if (state->mouse_state.scroll_timeout > 0.0f)
     {
@@ -93,13 +82,21 @@ void _render(GLFWwindow *window, void *_state)
         state->mouse_state.scrolled_view = NULL;
     }
 
-    glfwSwapBuffers(window);
-    glfwPollEvents();
-
     state->frame_count++;
     state->fps_frame_count++;
 }
 
+void on_platform_event(Editor_State *state, const Platform_Event *event)
+{
+    (void)state; (void)event;
+}
+
+void on_destroy(Editor_State *state)
+{
+    (void)state;
+}
+
+#if 0
 void char_callback(GLFWwindow *window, unsigned int codepoint)
 {
     (void)window; Editor_State *state = glfwGetWindowUserPointer(window);
@@ -169,12 +166,7 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     state->render_state.window_dim.y = h;
     state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
 }
-
-void refresh_callback(GLFWwindow* window) {
-    (void)window; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    // TODO: This seems to cause an issue with window resize action not ending in macos, main program loop still being blocked
-    // _render(window, state);
-}
+#endif
 
 bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -1392,9 +1384,8 @@ void draw_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport ca
         draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
 }
 
-void draw_status_bar(GLFWwindow *window, Editor_State *state, Render_State *render_state)
+void draw_status_bar(Editor_State *state, Render_State *render_state)
 {
-    (void)window;
     transform_set_screen_space(render_state);
 
     const float font_line_height = get_font_line_height(render_state->font);
