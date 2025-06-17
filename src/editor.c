@@ -814,9 +814,9 @@ Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
     return result;
 }
 
-bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state)
+bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, Editor_State *state)
 {
-    (void)window; (void)state;
+    (void)state;
     switch (context.kind)
     {
         case PROMPT_OPEN_FILE:
@@ -1578,12 +1578,6 @@ Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport)
     canvas_pos.x = canvas_viewport.rect.x + screen_pos.x / canvas_viewport.zoom;
     canvas_pos.y = canvas_viewport.rect.y + screen_pos.y / canvas_viewport.zoom;
     return canvas_pos;
-}
-
-Vec_2 get_mouse_canvas_pos(Editor_State *state)
-{
-    Vec_2 p = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
-    return p;
 }
 
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)

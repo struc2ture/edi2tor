@@ -369,7 +369,7 @@ Prompt_Context prompt_create_context_search_next(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_change_working_dir();
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
-bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, GLFWwindow *window, Editor_State *state);
+bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, Editor_State *state);
 
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);

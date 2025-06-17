@@ -1,6 +1,6 @@
 #include "actions.h"
 
-#include <stdbool.h>
+#include "common.h"
 
 #include <GLFW/glfw3.h>
 
@@ -10,7 +10,7 @@
 
 bool action_run_unit_tests(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     Text_Buffer log_buffer = {0};
     unit_tests_run(&log_buffer, true);
     View *view = create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
@@ -21,7 +21,7 @@ bool action_run_unit_tests(Editor_State *state)
 
 bool action_change_working_dir(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     View *view = create_buffer_view_prompt(
         "Change working dir:",
         prompt_create_context_change_working_dir(),
@@ -102,7 +102,7 @@ bool action_destroy_active_view(Editor_State *state)
 
 bool action_open_test_file1(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_buffer_view_open_file(
         FILE_PATH1,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -112,7 +112,7 @@ bool action_open_test_file1(Editor_State *state)
 
 bool action_open_test_image(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_image_view(
         IMAGE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -122,7 +122,7 @@ bool action_open_test_image(Editor_State *state)
 
 bool action_open_test_live_scene(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_live_scene_view(
         LIVE_CUBE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
@@ -132,7 +132,7 @@ bool action_open_test_live_scene(Editor_State *state)
 
 bool action_prompt_open_file(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_buffer_view_prompt(
         "Open file:",
         prompt_create_context_open_file(),
@@ -143,7 +143,7 @@ bool action_prompt_open_file(Editor_State *state)
 
 bool action_prompt_new_file(Editor_State *state)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_buffer_view_empty_file(
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
@@ -194,7 +194,7 @@ bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_vie
 bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view)
 {
     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
-    if (prompt_submit(buffer_view->buffer->prompt.context, prompt_result, outer_view(buffer_view)->outer_rect, state->window, state))
+    if (prompt_submit(buffer_view->buffer->prompt.context, prompt_result, outer_view(buffer_view)->outer_rect, state))
         view_destroy(outer_view(buffer_view), state);
     return true;
 }
@@ -392,7 +392,7 @@ bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_vie
 
 bool action_buffer_view_prompt_save_file_as(Editor_State *state, Buffer_View *buffer_view)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_buffer_view_prompt(
         "Save as:",
         prompt_create_context_save_as(buffer_view),
@@ -419,7 +419,7 @@ bool action_buffer_view_change_zoom(Editor_State *state, Buffer_View *buffer_vie
 
 bool action_buffer_view_prompt_go_to_line(Editor_State *state, Buffer_View *buffer_view)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     create_buffer_view_prompt(
         "Go to line:",
         prompt_create_context_go_to_line(buffer_view),
@@ -430,7 +430,7 @@ bool action_buffer_view_prompt_go_to_line(Editor_State *state, Buffer_View *buff
 
 bool action_buffer_view_prompt_search_next(Editor_State *state, Buffer_View *buffer_view)
 {
-    Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);;
     View *prompt_view = create_buffer_view_prompt(
         "Search next:",
         prompt_create_context_search_next(buffer_view),
