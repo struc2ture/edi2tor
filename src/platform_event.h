@@ -1,10 +1,13 @@
 #pragma once
 
+#include "common.h"
+
 typedef enum {
     PLATFORM_EVENT_CHAR,
     PLATFORM_EVENT_KEY,
     PLATFORM_EVENT_MOUSE_BUTTON,
-    PLATFORM_EVENT_SCROLL,
+    PLATFORM_EVENT_MOUSE_MOTION,
+    PLATFORM_EVENT_MOUSE_SCROLL,
     PLATFORM_EVENT_WINDOW_RESIZE
 } Platform_Event_Kind;
 
@@ -29,13 +32,20 @@ typedef struct {
             int button;
             int action;
             int mods;
+            Vec_2 pos;
         } mouse_button;
 
         struct
         {
-            double x_offset;
-            double y_offset;
-        } scroll;
+            Vec_2 pos;
+            Vec_2 delta;
+        } mouse_motion;
+
+        struct
+        {
+            Vec_2 scroll;
+            Vec_2 pos;
+        } mouse_scroll;
 
         struct
         {

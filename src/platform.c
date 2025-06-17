@@ -1,3 +1,5 @@
+#include "common.h"
+
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +10,7 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
+#include "glfw_helpers.h"
 #include "platform_event.h"
 
 #define PROGRAM_NAME "edi2tor"
@@ -34,6 +37,7 @@ typedef struct {
 
 static Dl_Info g_dl;
 static void *g_dl_state;
+static Vec_2 g_mouse_prev_pos;
 
 time_t get_file_timestamp(const char *path)
 {
@@ -107,15 +111,27 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     g_dl.on_platform_event(g_dl_state, &e);
 }
 
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+void mouse_cursor_pos_callback(GLFWwindow *window, double xpos, double ypos)
 {
     (void)window;
 
+    Platform_Event e;
+    e.kind = PLATFORM_EVENT_MOUSE_MOTION;
+    e.mouse_motion.pos = (Vec_2){(float)xpos, (float)ypos};
+    e.mouse_motion.delta = vec2_sub(e.mouse_motion.pos, g_mouse_prev_pos);
+    g_mouse_prev_pos = e.mouse_motion.pos;
+
+    g_dl.on_platform_event(g_dl_state, &e);
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
     Platform_Event e;
     e.kind = PLATFORM_EVENT_MOUSE_BUTTON;
     e.mouse_button.button = button;
     e.mouse_button.action = action;
     e.mouse_button.mods = mods;
+    e.mouse_button.pos = glfwh_get_mouse_position(window);
 
     g_dl.on_platform_event(g_dl_state, &e);
 }
@@ -125,9 +141,9 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     (void)window;
 
     Platform_Event e;
-    e.kind = PLATFORM_EVENT_SCROLL;
-    e.scroll.x_offset = x_offset;
-    e.scroll.y_offset = y_offset;
+    e.kind = PLATFORM_EVENT_MOUSE_SCROLL;
+    e.mouse_scroll.scroll = (Vec_2){(float)x_offset, (float)y_offset};
+    e.mouse_scroll.pos = glfwh_get_mouse_position(window);
 
     g_dl.on_platform_event(g_dl_state, &e);
 }
@@ -183,6 +199,7 @@ int main()
     glfwSetWindowSizeCallback(window, window_size_callback);
     // glfwSetWindowRefreshCallback(window, refresh_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetCursorPosCallback(window, mouse_cursor_pos_callback);
 
     while (!glfwWindowShouldClose(window))
     {

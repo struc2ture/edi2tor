@@ -92,21 +92,15 @@ void on_platform_event(Editor_State *state, const Platform_Event *event)
 
         case PLATFORM_EVENT_MOUSE_BUTTON:
         {
-            if (event->mouse_button.button == GLFW_MOUSE_BUTTON_LEFT)
-            {
-                if (event->mouse_button.action == GLFW_PRESS)
-                {
-                    input_mouse_click_global(state);
-                }
-                else if (event->mouse_button.action == GLFW_RELEASE)
-                {
-                    input_mouse_release_global(state);
-                }
-            }
-
+            input_mouse_button_global(state, event);
         } break;
 
-        case PLATFORM_EVENT_SCROLL:
+        case PLATFORM_EVENT_MOUSE_MOTION:
+        {
+            input_mouse_motion_global(state, event);
+        } break;
+
+        case PLATFORM_EVENT_MOUSE_SCROLL:
         {
             input_mouse_scroll_global(state, event);
         } break;
@@ -541,6 +535,24 @@ bool view_exists(View *view, Editor_State *state)
             return true;
     }
     return false;
+}
+
+Rect view_get_inner_rect(View *view, const Render_State *render_state)
+{
+    Rect rect;
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            rect = buffer_view_get_text_area_rect(&view->bv, render_state);
+        } break;
+
+        default:
+        {
+            rect = (Rect){0};
+        } break;
+    }
+    return rect;
 }
 
 void view_set_rect(View *view, Rect rect, const Render_State *render_state)

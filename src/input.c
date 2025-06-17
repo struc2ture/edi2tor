@@ -251,15 +251,6 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
 
 void input_mouse_update(Editor_State *state)
 {
-    state->mouse_state.current_pos = glfwh_get_mouse_position(state->window);
-    state->mouse_state.delta = vec2_sub(state->mouse_state.current_pos, state->mouse_state.prev_pos);
-    state->mouse_state.prev_pos = state->mouse_state.current_pos;
-
-    if (glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-    {
-        input_mouse_drag_global(state);
-    }
-
     if (state->mouse_state.scroll_timeout > 0.0f)
     {
         state->mouse_state.scroll_timeout -= state->delta_time;
@@ -270,36 +261,38 @@ void input_mouse_update(Editor_State *state)
     }
 }
 
-void input_mouse_drag_global(Editor_State *state)
+void input_mouse_motion_global(Editor_State *state, const Platform_Event *e)
 {
     Mouse_State *m_state = &state->mouse_state;
-    if (m_state->inner_drag_view)
-    {
-        input_mouse_drag_view(state, m_state->inner_drag_view);
-    }
-    else if (m_state->dragged_view)
+    m_state->pos = e->mouse_motion.pos;
+    if (m_state->dragged_view)
     {
         Rect new_rect = m_state->dragged_view->outer_rect;
-        new_rect.x += m_state->delta.x;
-        new_rect.y += m_state->delta.y;
+        new_rect.x += e->mouse_motion.delta.x;
+        new_rect.y += e->mouse_motion.delta.y;
         view_set_rect(m_state->dragged_view, new_rect, &state->render_state);
     }
     else if (m_state->resized_view)
     {
         Rect new_rect = m_state->resized_view->outer_rect;
-        new_rect.w += m_state->delta.x;
-        new_rect.h += m_state->delta.y;
+        new_rect.w += e->mouse_motion.delta.x;
+        new_rect.h += e->mouse_motion.delta.y;
         view_set_rect(m_state->resized_view, new_rect, &state->render_state);
+    }
+    else if (state->active_view)
+    {
+        // TODO: Offset mouse position to top left of inner view
+        input_mouse_motion_view(state, state->active_view, e);
     }
 }
 
-void input_mouse_drag_view(Editor_State *state, View *view)
+void input_mouse_motion_view(Editor_State *state, View *view, const Platform_Event *e)
 {
     switch (view->kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            input_mouse_drag_buffer_view(state, &view->bv);
+            input_mouse_motion_buffer_view(state, &view->bv, e);
         } break;
 
         default:
@@ -309,64 +302,88 @@ void input_mouse_drag_view(Editor_State *state, View *view)
     }
 }
 
-void input_mouse_drag_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+void input_mouse_motion_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
 {
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
-    buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
+    if (buffer_view->is_mouse_drag)
+    {
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_motion.pos, state->canvas_viewport);
+        buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
+    }
 }
 
-void input_mouse_click_global(Editor_State *state)
+void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
 {
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
-    View *clicked_view = view_at_pos(mouse_canvas_pos, state);
-    if (clicked_view != NULL)
+    if (e->mouse_button.button == GLFW_MOUSE_BUTTON_LEFT)
     {
-        if (state->active_view != clicked_view)
+        if (e->mouse_button.action == GLFW_PRESS)
         {
-            // Active view switched, don't pass click inside the view
+            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
+            View *clicked_view = view_at_pos(mouse_canvas_pos, state);
+            if (clicked_view != NULL)
+            {
+                bool will_propagate_to_inner_view = true;
 
-            view_set_active(clicked_view, state);
+                // 1. Check if active view is being switched
+                if (state->active_view != clicked_view)
+                {
+                    view_set_active(clicked_view, state);
+                    will_propagate_to_inner_view = false;
+                }
 
-            Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
-            if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-            {
-                state->mouse_state.resized_view = clicked_view;
-            }
-            else
-            {
-                state->mouse_state.dragged_view = clicked_view;
-            }
-        }
-        else
-        {
-            Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
-            if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-            {
-                state->mouse_state.resized_view = clicked_view;
-            }
-            else
-            {
-                bool click_handled_inside_view = input_mouse_click_view(state, clicked_view);
-                if (!click_handled_inside_view)
+                bool found_target = false;
+
+                // 2. Check if view is being resized
+                Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
+                if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+                {
+                    state->mouse_state.resized_view = clicked_view;
+                    will_propagate_to_inner_view = false;
+                    found_target = true;
+                }
+
+                // 3. If active view wasn't just switched, and view isn't being resized, propagate click to inner view
+                if (will_propagate_to_inner_view)
+                {
+                    Rect inner_view_rect = view_get_inner_rect(clicked_view, &state->render_state);
+                    if (rect_p_intersect(mouse_canvas_pos, inner_view_rect))
+                    {
+                        // TODO: Offset mouse position to top left of inner view
+                        input_mouse_button_view(state, state->active_view, e);
+                        found_target = true;
+                    }
+                }
+
+                // 4. If view is not being resized, and click didn't propagate to inner view, view is being dragged
+                if (!found_target)
                 {
                     state->mouse_state.dragged_view = clicked_view;
                 }
             }
         }
+        else if (e->mouse_button.action == GLFW_RELEASE)
+        {
+            // Only pass release event to inner view if it doesn't follow resizing or dragging view
+            if (state->mouse_state.resized_view || state->mouse_state.dragged_view)
+            {
+                state->mouse_state.resized_view = NULL;
+                state->mouse_state.dragged_view = NULL;
+            }
+            else
+            {
+                // I think it's ok to send release event to active view, because only mouse press can switch active view, so nothing could've switched it before GLFW_RELEASE is sent.
+                input_mouse_button_view(state, state->active_view, e);
+            }
+        }
     }
 }
 
-bool input_mouse_click_view(Editor_State *state, View *view)
+bool input_mouse_button_view(Editor_State *state, View *view, const Platform_Event *e)
 {
     switch (view->kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            if (input_mouse_click_buffer_view(state, &view->bv))
-            {
-                state->mouse_state.inner_drag_view = view;
-                return true;
-            }
+            input_mouse_button_buffer_view(state, &view->bv, e);
         } break;
 
         default:
@@ -377,12 +394,11 @@ bool input_mouse_click_view(Editor_State *state, View *view)
     return false;
 }
 
-bool input_mouse_click_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+void input_mouse_button_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
 {
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
-    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, &state->render_state);
-    if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
+    if (e->mouse_button.action == GLFW_PRESS)
     {
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
         if (glfwh_is_shift_pressed(state->window))
         {
             if (!buffer_view->mark.active)
@@ -397,51 +413,20 @@ bool input_mouse_click_buffer_view(Editor_State *state, Buffer_View *buffer_view
             buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
             buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
         }
-        return true;
+        buffer_view->is_mouse_drag = true;
     }
-    return false;
-}
-
-void input_mouse_release_global(Editor_State *state)
-{
-    Mouse_State *mouse_state = &state->mouse_state;
-    mouse_state->resized_view = NULL;
-    mouse_state->dragged_view = NULL;
-    mouse_state->scrolled_view = NULL;
-    if (mouse_state->inner_drag_view)
+    else if (e->mouse_button.action == GLFW_RELEASE)
     {
-        input_mouse_release_view(state, mouse_state->inner_drag_view);
-        mouse_state->inner_drag_view = NULL;
+        buffer_view_validate_mark(buffer_view);
+        buffer_view->is_mouse_drag = false;
     }
-}
-
-void input_mouse_release_view(Editor_State *state, View *view)
-{
-    switch (view->kind)
-    {
-        case VIEW_KIND_BUFFER:
-        {
-            input_mouse_release_buffer_view(state, &view->bv);
-        } break;
-
-        default:
-        {
-            log_warning("input_mouse_release_view: Unhandled View kind: %d");
-        } break;
-    }
-}
-
-void input_mouse_release_buffer_view(Editor_State *state, Buffer_View *buffer_view)
-{
-    (void)state;
-    buffer_view_validate_mark(buffer_view);
 }
 
 void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
 {
     if (state->mouse_state.scroll_timeout <= 0.0f)
     {
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_scroll.pos, state->canvas_viewport);
         state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
     }
     state->mouse_state.scroll_timeout = SCROLL_TIMEOUT; // There's an ongoing scroll when this function is called, so reset the scroll timeout
@@ -449,12 +434,13 @@ void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
     bool scroll_handled_by_view = false;
     if (state->mouse_state.scrolled_view)
     {
+        // TODO: Offset mouse position to top left of inner view
         scroll_handled_by_view = input_mouse_scroll_view(state, state->mouse_state.scrolled_view, e);
     }
     if (!scroll_handled_by_view)
     {
-        state->canvas_viewport.rect.x -= e->scroll.x_offset * SCROLL_SENS;
-        state->canvas_viewport.rect.y -= e->scroll.y_offset * SCROLL_SENS;
+        state->canvas_viewport.rect.x -= e->mouse_scroll.scroll.x * SCROLL_SENS;
+        state->canvas_viewport.rect.y -= e->mouse_scroll.scroll.y * SCROLL_SENS;
     }
 }
 
@@ -464,7 +450,8 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Eve
     {
         case VIEW_KIND_BUFFER:
         {
-            return input_mouse_scroll_buffer_view(state, &view->bv, e);
+            input_mouse_scroll_buffer_view(state, &view->bv, e);
+            return true;
         } break;
 
         default:
@@ -475,10 +462,10 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Eve
     return false;
 }
 
-bool input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
+void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
 {
-    buffer_view->viewport.rect.x -= e->scroll.x_offset * SCROLL_SENS;
-    buffer_view->viewport.rect.y -= e->scroll.y_offset * SCROLL_SENS;
+    buffer_view->viewport.rect.x -= e->mouse_scroll.scroll.x * SCROLL_SENS;
+    buffer_view->viewport.rect.y -= e->mouse_scroll.scroll.y * SCROLL_SENS;
 
     if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;
     float buffer_max_x = 256 * get_font_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
@@ -487,6 +474,4 @@ bool input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
     float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
     if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
-
-    return true;
 }

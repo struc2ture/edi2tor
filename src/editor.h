@@ -195,6 +195,7 @@ struct Buffer_View {
     Display_Cursor cursor;
     Text_Selection selection;
     Text_Mark mark;
+    bool is_mouse_drag;
 };
 
 typedef struct {
@@ -248,10 +249,7 @@ typedef struct {
     View *resized_view;
     View *dragged_view;
     View *scrolled_view;
-    View *inner_drag_view;
-    Vec_2 prev_pos;
-    Vec_2 current_pos;
-    Vec_2 delta;
+    Vec_2 pos;
     float scroll_timeout;
 } Mouse_State;
 
@@ -339,6 +337,7 @@ void view_free_slot(View *view, Editor_State *state);
 View *view_create(Editor_State *state);
 void view_destroy(View *view, Editor_State *state);
 bool view_exists(View *view, Editor_State *state);
+Rect view_get_inner_rect(View *view, const Render_State *render_state);
 void view_set_rect(View *view, Rect rect, const Render_State *render_state);
 void view_set_active(View *view, Editor_State *state);
 Rect view_get_resize_handle_rect(View *view, const Render_State *render_state);
