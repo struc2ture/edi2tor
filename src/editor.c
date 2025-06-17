@@ -1,5 +1,6 @@
 #include "editor.h"
-#include "platform_event.h"
+
+#include "common.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -17,6 +18,7 @@
 
 #include "actions.h"
 #include "input.h"
+#include "platform_event.h"
 #include "shaders.h"
 #include "util.h"
 
@@ -47,11 +49,12 @@ void on_render(Editor_State *state)
         state->should_break = false;
     }
 
-    glDisable(GL_SCISSOR_TEST);
-    glClear(GL_COLOR_BUFFER_BIT);
-
     perform_timing_calculations(state);
 
+    input_mouse_update(state);
+
+    glDisable(GL_SCISSOR_TEST);
+    glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(state->render_state.vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
 
@@ -69,22 +72,6 @@ void on_render(Editor_State *state)
     }
 
     draw_status_bar(state, &state->render_state);
-
-    handle_mouse_input(state);
-
-    state->mouse_state.prev_mouse_pos = get_mouse_screen_pos(state->window);
-
-    if (state->mouse_state.scroll_timeout > 0.0f)
-    {
-        state->mouse_state.scroll_timeout -= state->delta_time;
-    }
-    else
-    {
-        state->mouse_state.scrolled_view = NULL;
-    }
-
-    state->frame_count++;
-    state->fps_frame_count++;
 }
 
 void on_platform_event(Editor_State *state, const Platform_Event *event)
@@ -109,11 +96,11 @@ void on_platform_event(Editor_State *state, const Platform_Event *event)
             {
                 if (event->mouse_button.action == GLFW_PRESS)
                 {
-                    handle_mouse_click(state->window, state);
+                    input_mouse_click_global(state);
                 }
                 else if (event->mouse_button.action == GLFW_RELEASE)
                 {
-                    handle_mouse_release(&state->mouse_state);
+                    input_mouse_release_global(state);
                 }
             }
 
@@ -121,23 +108,7 @@ void on_platform_event(Editor_State *state, const Platform_Event *event)
 
         case PLATFORM_EVENT_SCROLL:
         {
-            if (state->mouse_state.scroll_timeout <= 0.0f)
-            {
-                Vec_2 mouse_screen_pos = get_mouse_screen_pos(state->window);
-                Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-                state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
-            }
-            state->mouse_state.scroll_timeout = 0.1f;
-            bool scroll_handled_by_view = false;
-            if (state->mouse_state.scrolled_view)
-            {
-                scroll_handled_by_view = view_handle_scroll(state->mouse_state.scrolled_view, event->scroll.x_offset, event->scroll.y_offset, &state->render_state);
-            }
-            if (!scroll_handled_by_view)
-            {
-                state->canvas_viewport.rect.x -= event->scroll.x_offset * SCROLL_SENS;
-                state->canvas_viewport.rect.y -= event->scroll.y_offset * SCROLL_SENS;
-            }
+            input_mouse_scroll_global(state, event);
         } break;
 
         case PLATFORM_EVENT_WINDOW_RESIZE:
@@ -321,6 +292,9 @@ void perform_timing_calculations(Editor_State *state)
         state->last_fps_time = current_time;
         state->fps_frame_count = 0;
     }
+
+    state->frame_count++;
+    state->fps_frame_count++;
 }
 
 Buffer **buffer_create_new_slot(Editor_State *state)
@@ -652,24 +626,6 @@ View *view_at_pos(Vec_2 pos, Editor_State *state)
         }
     }
     return NULL;
-}
-
-bool view_handle_scroll(View *view, float x_offset, float y_offset, const Render_State *render_state)
-{
-    if (view->kind == VIEW_KIND_BUFFER)
-    {
-        Buffer_View *buffer_view = &view->bv;
-        buffer_view->viewport.rect.x -= x_offset * SCROLL_SENS;
-        buffer_view->viewport.rect.y -= y_offset * SCROLL_SENS;
-        if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;
-        if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
-        float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(render_state->font);
-        if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
-        float buffer_max_x = 256 * get_font_line_height(render_state->font); // TODO: Determine max x coordinates based on longest line
-        if (buffer_view->viewport.rect.x > buffer_max_x) buffer_view->viewport.rect.x = buffer_max_x;
-        return true;
-    }
-    return false;
 }
 
 Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state)
@@ -1624,28 +1580,10 @@ Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport)
     return canvas_pos;
 }
 
-Vec_2 get_mouse_screen_pos(GLFWwindow *window)
-{
-    double mouse_x, mouse_y;
-    glfwGetCursorPos(window, &mouse_x, &mouse_y);
-    Vec_2 p = {mouse_x, mouse_y};
-    return p;
-}
-
 Vec_2 get_mouse_canvas_pos(Editor_State *state)
 {
-    Vec_2 p = screen_pos_to_canvas_pos(get_mouse_screen_pos(state->window), state->canvas_viewport);
+    Vec_2 p = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
     return p;
-}
-
-Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state)
-{
-    Vec_2 current_mouse_pos = get_mouse_screen_pos(window);
-    Vec_2 delta_mouse_pos = {
-        .x = current_mouse_pos.x - mouse_state->prev_mouse_pos.x,
-        .y = current_mouse_pos.y - mouse_state->prev_mouse_pos.y
-    };
-    return delta_mouse_pos;
 }
 
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)

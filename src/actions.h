@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdbool.h>
+#include "common.h" // IWYU pragma: keep
 
 #include "editor.h"
 

@@ -1,11 +1,12 @@
 #include "input.h"
 
-#include <stdbool.h>
+#include "common.h"
 
 #include <GLFW/glfw3.h>
 
 #include "actions.h"
 #include "editor.h"
+#include "glfw_helpers.h"
 #include "platform_event.h"
 #include "util.h"
 
@@ -246,69 +247,154 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
     }
 }
 
-void buffer_view_handle_click_drag(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
-{
-    (void)is_shift_pressed;
-    buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
-}
+// --------------------------------
 
-void view_handle_click_drag(View *view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+void input_mouse_update(Editor_State *state)
 {
-    if (view->kind == VIEW_KIND_BUFFER)
+    state->mouse_state.current_pos = glfwh_get_mouse_position(state->window);
+    state->mouse_state.delta = vec2_sub(state->mouse_state.current_pos, state->mouse_state.prev_pos);
+    state->mouse_state.prev_pos = state->mouse_state.current_pos;
+
+    if (glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
-        buffer_view_handle_click_drag(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state);
+        input_mouse_drag_global(state);
+    }
+
+    if (state->mouse_state.scroll_timeout > 0.0f)
+    {
+        state->mouse_state.scroll_timeout -= state->delta_time;
+    }
+    else
+    {
+        state->mouse_state.scrolled_view = NULL;
     }
 }
 
-void view_handle_drag(View *view, Vec_2 drag_delta, Render_State *render_state)
+void input_mouse_drag_global(Editor_State *state)
 {
-    Rect new_rect = view->outer_rect;
-    new_rect.x += drag_delta.x;
-    new_rect.y += drag_delta.y;
-    view_set_rect(view, new_rect, render_state);
-}
-
-void view_handle_resize(View *view, Vec_2 drag_delta, Render_State *render_state)
-{
-    Rect new_rect = view->outer_rect;
-    new_rect.w += drag_delta.x;
-    new_rect.h += drag_delta.y;
-    view_set_rect(view, new_rect, render_state);
-}
-
-void handle_mouse_click_drag(Vec_2 mouse_canvas_pos, Vec_2 mouse_delta, bool is_shift_pressed, Mouse_State *mouse_state, Render_State *render_state)
-{
-    if (mouse_state->inner_drag_view)
+    Mouse_State *m_state = &state->mouse_state;
+    if (m_state->inner_drag_view)
     {
-        view_handle_click_drag(mouse_state->inner_drag_view, mouse_canvas_pos, is_shift_pressed, render_state);
+        input_mouse_drag_view(state, m_state->inner_drag_view);
     }
-    else if (mouse_state->dragged_view)
+    else if (m_state->dragged_view)
     {
-        view_handle_drag(mouse_state->dragged_view, mouse_delta, render_state);
+        Rect new_rect = m_state->dragged_view->outer_rect;
+        new_rect.x += m_state->delta.x;
+        new_rect.y += m_state->delta.y;
+        view_set_rect(m_state->dragged_view, new_rect, &state->render_state);
     }
-    else if (mouse_state->resized_view)
+    else if (m_state->resized_view)
     {
-        view_handle_resize(mouse_state->resized_view, mouse_delta, render_state);
+        Rect new_rect = m_state->resized_view->outer_rect;
+        new_rect.w += m_state->delta.x;
+        new_rect.h += m_state->delta.y;
+        view_set_rect(m_state->resized_view, new_rect, &state->render_state);
     }
 }
 
-bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state)
+void input_mouse_drag_view(Editor_State *state, View *view)
 {
-    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            input_mouse_drag_buffer_view(state, &view->bv);
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_drag_view: Unhandled View kind: %d", view->kind);
+        } break;
+    }
+}
+
+void input_mouse_drag_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
+    buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
+}
+
+void input_mouse_click_global(Editor_State *state)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
+    View *clicked_view = view_at_pos(mouse_canvas_pos, state);
+    if (clicked_view != NULL)
+    {
+        if (state->active_view != clicked_view)
+        {
+            // Active view switched, don't pass click inside the view
+
+            view_set_active(clicked_view, state);
+
+            Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
+            if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+            {
+                state->mouse_state.resized_view = clicked_view;
+            }
+            else
+            {
+                state->mouse_state.dragged_view = clicked_view;
+            }
+        }
+        else
+        {
+            Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
+            if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+            {
+                state->mouse_state.resized_view = clicked_view;
+            }
+            else
+            {
+                bool click_handled_inside_view = input_mouse_click_view(state, clicked_view);
+                if (!click_handled_inside_view)
+                {
+                    state->mouse_state.dragged_view = clicked_view;
+                }
+            }
+        }
+    }
+}
+
+bool input_mouse_click_view(Editor_State *state, View *view)
+{
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            if (input_mouse_click_buffer_view(state, &view->bv))
+            {
+                state->mouse_state.inner_drag_view = view;
+                return true;
+            }
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_click_view: Unhandled View kind: %d", view->kind);
+        } break;
+    }
+    return false;
+}
+
+bool input_mouse_click_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
+    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, &state->render_state);
     if (rect_p_intersect(mouse_canvas_pos, text_area_rect))
     {
-        if (is_shift_pressed)
+        if (glfwh_is_shift_pressed(state->window))
         {
             if (!buffer_view->mark.active)
                 buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
 
-            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
 
             buffer_view_validate_mark(buffer_view);
         }
         else
         {
-            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, render_state);
+            buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
             buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
         }
         return true;
@@ -316,88 +402,91 @@ bool buffer_view_handle_mouse_click(Buffer_View *buffer_view, Vec_2 mouse_canvas
     return false;
 }
 
-void view_handle_mouse_click(View *view, Vec_2 mouse_canvas_pos, Mouse_State *mouse_state, bool is_shift_pressed, bool should_propagate_inside, Render_State *render_state)
+void input_mouse_release_global(Editor_State *state)
 {
-    Rect resize_handle_rect = view_get_resize_handle_rect(view, render_state);
-    if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-    {
-        mouse_state->resized_view = view;
-        return;
-    }
-    else if (should_propagate_inside)
-    {
-        switch (view->kind)
-        {
-            case VIEW_KIND_BUFFER:
-            {
-                if (buffer_view_handle_mouse_click(&view->bv, mouse_canvas_pos, is_shift_pressed, render_state))
-                {
-                    mouse_state->inner_drag_view = view;
-                    return;
-                }
-            } break;
-
-            default:
-            {
-                log_warning("view_handle_mouse_click: Unhandled View kind: %d", view->kind);
-            } break;
-        }
-    }
-    mouse_state->dragged_view = view;
-}
-
-void handle_mouse_click(GLFWwindow *window, Editor_State *state)
-{
-    Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-    bool is_shift_pressed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-    View *clicked_view = view_at_pos(mouse_canvas_pos, state);
-    if (clicked_view != NULL)
-    {
-        if (state->active_view != clicked_view)
-        {
-            view_set_active(clicked_view, state);
-            view_handle_mouse_click(clicked_view, mouse_canvas_pos, &state->mouse_state, is_shift_pressed, false, &state->render_state);
-        }
-        else
-        {
-            view_handle_mouse_click(clicked_view, mouse_canvas_pos, &state->mouse_state, is_shift_pressed, true, &state->render_state);
-        }
-    }
-}
-
-void buffer_view_handle_mouse_release(Buffer_View *buffer_view)
-{
-    buffer_view_validate_mark(buffer_view);
-}
-
-void view_handle_mouse_release(View *view)
-{
-    if (view->kind == VIEW_KIND_BUFFER)
-    {
-        buffer_view_handle_mouse_release(&view->bv);
-    }
-}
-
-void handle_mouse_release(Mouse_State *mouse_state)
-{
+    Mouse_State *mouse_state = &state->mouse_state;
     mouse_state->resized_view = NULL;
     mouse_state->dragged_view = NULL;
     mouse_state->scrolled_view = NULL;
     if (mouse_state->inner_drag_view)
     {
-        view_handle_mouse_release(mouse_state->inner_drag_view);
+        input_mouse_release_view(state, mouse_state->inner_drag_view);
         mouse_state->inner_drag_view = NULL;
     }
 }
 
-void handle_mouse_input(Editor_State *state)
+void input_mouse_release_view(Editor_State *state, View *view)
 {
-    if (glfwGetMouseButton(state->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    switch (view->kind)
     {
-        bool is_shift_pressed = glfwGetKey(state->window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(state->window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        Vec_2 mouse_delta = get_mouse_delta(state->window, &state->mouse_state);
-        Vec_2 mouse_canvas_pos = get_mouse_canvas_pos(state);
-        handle_mouse_click_drag(mouse_canvas_pos, mouse_delta, is_shift_pressed, &state->mouse_state, &state->render_state);
+        case VIEW_KIND_BUFFER:
+        {
+            input_mouse_release_buffer_view(state, &view->bv);
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_release_view: Unhandled View kind: %d");
+        } break;
     }
+}
+
+void input_mouse_release_buffer_view(Editor_State *state, Buffer_View *buffer_view)
+{
+    (void)state;
+    buffer_view_validate_mark(buffer_view);
+}
+
+void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
+{
+    if (state->mouse_state.scroll_timeout <= 0.0f)
+    {
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.current_pos, state->canvas_viewport);
+        state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
+    }
+    state->mouse_state.scroll_timeout = SCROLL_TIMEOUT; // There's an ongoing scroll when this function is called, so reset the scroll timeout
+
+    bool scroll_handled_by_view = false;
+    if (state->mouse_state.scrolled_view)
+    {
+        scroll_handled_by_view = input_mouse_scroll_view(state, state->mouse_state.scrolled_view, e);
+    }
+    if (!scroll_handled_by_view)
+    {
+        state->canvas_viewport.rect.x -= e->scroll.x_offset * SCROLL_SENS;
+        state->canvas_viewport.rect.y -= e->scroll.y_offset * SCROLL_SENS;
+    }
+}
+
+bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Event *e)
+{
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            return input_mouse_scroll_buffer_view(state, &view->bv, e);
+        } break;
+
+        default:
+        {
+            log_warning("input_mouse_scroll_view: Unhandled View kind: %d", view->kind);
+        } break;
+    }
+    return false;
+}
+
+bool input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
+{
+    buffer_view->viewport.rect.x -= e->scroll.x_offset * SCROLL_SENS;
+    buffer_view->viewport.rect.y -= e->scroll.y_offset * SCROLL_SENS;
+
+    if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;
+    float buffer_max_x = 256 * get_font_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
+    if (buffer_view->viewport.rect.x > buffer_max_x) buffer_view->viewport.rect.x = buffer_max_x;
+
+    if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
+    float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
+    if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
+
+    return true;
 }

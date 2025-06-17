@@ -138,8 +138,8 @@ void framebuffer_size_callback(GLFWwindow *window, int w, int h)
 
     Platform_Event e;
     e.kind = PLATFORM_EVENT_WINDOW_RESIZE;
-    e.window_resize.px_h = w;
-    e.window_resize.px_w = h;
+    e.window_resize.px_w = w;
+    e.window_resize.px_h = h;
     glfwGetWindowSize(window, &e.window_resize.logical_w, &e.window_resize.logical_h);
 
     g_dl.on_platform_event(g_dl_state, &e);
@@ -150,9 +150,9 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     (void)window;
     Platform_Event e;
     e.kind = PLATFORM_EVENT_WINDOW_RESIZE;
-    e.window_resize.logical_h = w;
-    e.window_resize.logical_w = h;
-    glfwGetWindowSize(window, &e.window_resize.px_w, &e.window_resize.px_h);
+    e.window_resize.logical_w = w;
+    e.window_resize.logical_h = h;
+    glfwGetFramebufferSize(window, &e.window_resize.px_w, &e.window_resize.px_h);
 
     g_dl.on_platform_event(g_dl_state, &e);
 }

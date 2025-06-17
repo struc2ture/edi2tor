@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <stdarg.h>
 #include <stdbool.h>
 #include <time.h>
@@ -13,6 +15,7 @@
 
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
+#define SCROLL_TIMEOUT 0.1f
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
 #define VIEWPORT_CURSOR_BOUNDARY_COLUMNS 5
 #define GO_TO_LINE_CHAR_MAX 32
@@ -29,22 +32,6 @@
 #define FILE_PATH2 "src/editor.c"
 #define IMAGE_PATH "res/DUCKS.png"
 #define LIVE_CUBE_PATH "bin/live_cube.dylib"
-
-typedef struct {
-    float x, y;
-} Vec_2;
-#define VEC2_FMT "<%0.2f, %0.2f>"
-#define VEC2_ARG(v) (v).x, (v).y
-
-typedef struct {
-    float x, y;
-    float w, h;
-} Rect;
-
-typedef struct {
-    float min_x, min_y;
-    float max_x, max_y;
-} Rect_Bounds;
 
 typedef struct {
     float x, y;
@@ -262,7 +249,9 @@ typedef struct {
     View *dragged_view;
     View *scrolled_view;
     View *inner_drag_view;
-    Vec_2 prev_mouse_pos;
+    Vec_2 prev_pos;
+    Vec_2 current_pos;
+    Vec_2 delta;
     float scroll_timeout;
 } Mouse_State;
 
@@ -318,14 +307,6 @@ void on_reload(Editor_State *state);
 void on_render(Editor_State *state);
 void on_platform_event(Editor_State *state, const Platform_Event *event);
 void on_destroy(Editor_State *state);
-
-void char_callback(GLFWwindow *window, unsigned int codepoint);
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
-void scroll_callback(GLFWwindow *window, double x_offset, double y_offset);
-void framebuffer_size_callback(GLFWwindow *window, int w, int h);
-void window_size_callback(GLFWwindow *window, int w, int h);
-void refresh_callback(GLFWwindow *window);
 
 bool gl_check_compile_success(GLuint shader, const char *src);
 bool gl_check_link_success(GLuint prog);
@@ -438,9 +419,6 @@ void transform_set_screen_space(Render_State *render_state);
 
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
-Vec_2 get_mouse_screen_pos(GLFWwindow *window);
-Vec_2 get_mouse_canvas_pos(Editor_State *state);
-Vec_2 get_mouse_delta(GLFWwindow *window, Mouse_State *mouse_state);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
 
