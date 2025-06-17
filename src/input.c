@@ -2,7 +2,7 @@
 
 #include <stdbool.h>
 
-#include <SDL3/sdl.h>
+#include <SDL3/SDL.h>
 
 #include "actions.h"
 #include "editor.h"
@@ -40,7 +40,7 @@ void input_key_global(Editor_State *state, const SDL_Event *e)
                 } break;
             }
         }
-        else if (ke->mod == SDL_KMOD_SHIFT)
+        else if ((ke->mod & SDL_KMOD_SHIFT) && !(ke->mod & ~SDL_KMOD_SHIFT))
         {
             switch (ke->key)
             {
@@ -50,15 +50,10 @@ void input_key_global(Editor_State *state, const SDL_Event *e)
                 } break;
             }
         }
-        else if (ke->mod == SDL_KMOD_GUI)
+        else if ((ke->mod & SDL_KMOD_GUI) && !(ke->mod & ~SDL_KMOD_GUI))
         {
-            switch (ke->mod)
+            switch (ke->key)
             {
-                case SDLK_W:
-                {
-                    will_propagate_to_view = false;
-                    action_destroy_active_view(state);
-                } break;
                 case SDLK_1:
                 {
                     action_open_test_file1(state);
@@ -78,6 +73,17 @@ void input_key_global(Editor_State *state, const SDL_Event *e)
                 case SDLK_N:
                 {
                     action_prompt_new_file(state);
+                } break;
+            }
+        }
+        else if ((ke->mod & SDL_KMOD_GUI) && (ke->mod & SDL_KMOD_SHIFT) && !(ke->mod & ~(SDL_KMOD_GUI | SDL_KMOD_SHIFT)))
+        {
+            switch (ke->key)
+            {
+                case SDLK_W:
+                {
+                    will_propagate_to_view = false;
+                    action_destroy_active_view(state);
                 } break;
             }
         }
@@ -458,7 +464,7 @@ void input_mouse_scroll_global(Editor_State *state, const SDL_Event *e)
     }
     if (!scroll_handled_by_view)
     {
-        state->canvas_viewport.rect.x -= e->wheel.x * SCROLL_SENS;
+        state->canvas_viewport.rect.x += e->wheel.x * SCROLL_SENS;
         state->canvas_viewport.rect.y -= e->wheel.y * SCROLL_SENS;
     }
 }
@@ -482,7 +488,7 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const SDL_Event *e
 
 bool input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const SDL_Event *e)
 {
-    buffer_view->viewport.rect.x -= e->wheel.x * SCROLL_SENS;
+    buffer_view->viewport.rect.x += e->wheel.x * SCROLL_SENS;
     buffer_view->viewport.rect.y -= e->wheel.y * SCROLL_SENS;
 
     if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;

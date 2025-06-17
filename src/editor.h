@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include <SDL3/sdl.h>
+#include <SDL3/SDL.h>
 #include <OpenGL/gl3.h>
 #include <stb_image.h>
 #include <stb_truetype.h>

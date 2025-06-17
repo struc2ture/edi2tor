@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <SDL3/sdl.h>
+#include <SDL3/SDL.h>
 #include <OpenGL/gl3.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -284,7 +284,7 @@ void perform_timing_calculations(Editor_State *state)
     state->delta_time = current_time - state->last_frame_time;
     state->last_frame_time = current_time;
 
-    if (current_time - state->last_fps_time > 0.1f)
+    if (current_time - state->last_fps_time > 0.1)
     {
         state->fps = state->fps_frame_count / (current_time - state->last_fps_time);
         state->last_fps_time = current_time;
@@ -526,6 +526,9 @@ void view_destroy(View *view, Editor_State *state)
             log_warning("view_destroy: Unhandled View kind: %d", view->kind);
         } break;
     }
+
+    if (state->active_view == view)
+        state->active_view = state->view_count > 1 ? state->views[0] : NULL;
 }
 
 bool view_exists(View *view, Editor_State *state)

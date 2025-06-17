@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <time.h>
 
-#include <SDL3/sdl.h>
+#include <SDL3/SDL.h>
 #include <OpenGL/gl3.h>
 
 #define PROGRAM_NAME "edi2tor"
@@ -79,6 +79,8 @@ Dl_Info load_dl(const char *path)
 
 int main()
 {
+    SDL_SetHint(SDL_HINT_MAC_SCROLL_MOMENTUM, "1");
+    // SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
     SDL_Init(SDL_INIT_VIDEO);
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
@@ -86,15 +88,13 @@ int main()
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 
-    SDL_Window *window = SDL_CreateWindow(PROGRAM_NAME, INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, SDL_WINDOW_OPENGL);
+    SDL_Window *window = SDL_CreateWindow(PROGRAM_NAME, INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, context);
 
     printf("[PLATFORM] OpenGL Vendor: %s\n", glGetString(GL_VENDOR));
     printf("[PLATFORM] OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
     printf("[PLATFORM] OpenGL Version: %s\n", glGetString(GL_VERSION));
-    printf("[PLATFORM] OpenGL GLSL Version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-    printf("[PLATFORM] OpenGL Extensions: %s\n", glGetString(GL_EXTENSIONS));
 
     Dl_Info dl_info = load_dl(DL_PATH);
     void *dl_state = calloc(1, 4096);
@@ -111,7 +111,13 @@ int main()
             {
                 case SDL_EVENT_QUIT:
                 {
+                    printf("SDL_EVENT_QUIT\n");
                     running = false;
+                } break;
+
+                case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                {
+                    printf("SDL_EVENT_WINDOW_CLOSE_REQUESTED\n");
                 } break;
 
                 case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:

@@ -2,7 +2,7 @@
 
 #include <stdbool.h>
 
-#include <SDL3/sdl.h>
+#include <SDL3/SDL.h>
 
 #include "editor.h"
 
