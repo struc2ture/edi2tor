@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "platform_event.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -14,7 +15,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-// #include "actions.h"
+#include "actions.h"
 #include "input.h"
 #include "shaders.h"
 #include "util.h"
@@ -89,84 +90,72 @@ void on_render(Editor_State *state)
 void on_platform_event(Editor_State *state, const Platform_Event *event)
 {
     (void)state; (void)event;
+    switch (event->kind)
+    {
+        case PLATFORM_EVENT_CHAR:
+        {
+            if (state->active_view != NULL && state->active_view->kind == VIEW_KIND_BUFFER)
+                action_buffer_view_input_char(state, &state->active_view->bv, (char)event->character.codepoint);
+        } break;
+
+        case PLATFORM_EVENT_KEY:
+        {
+            input_key_global(state, event);
+        } break;
+
+        case PLATFORM_EVENT_MOUSE_BUTTON:
+        {
+            if (event->mouse_button.button == GLFW_MOUSE_BUTTON_LEFT)
+            {
+                if (event->mouse_button.action == GLFW_PRESS)
+                {
+                    handle_mouse_click(state->window, state);
+                }
+                else if (event->mouse_button.action == GLFW_RELEASE)
+                {
+                    handle_mouse_release(&state->mouse_state);
+                }
+            }
+
+        } break;
+
+        case PLATFORM_EVENT_SCROLL:
+        {
+            if (state->mouse_state.scroll_timeout <= 0.0f)
+            {
+                Vec_2 mouse_screen_pos = get_mouse_screen_pos(state->window);
+                Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
+                state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
+            }
+            state->mouse_state.scroll_timeout = 0.1f;
+            bool scroll_handled_by_view = false;
+            if (state->mouse_state.scrolled_view)
+            {
+                scroll_handled_by_view = view_handle_scroll(state->mouse_state.scrolled_view, event->scroll.x_offset, event->scroll.y_offset, &state->render_state);
+            }
+            if (!scroll_handled_by_view)
+            {
+                state->canvas_viewport.rect.x -= event->scroll.x_offset * SCROLL_SENS;
+                state->canvas_viewport.rect.y -= event->scroll.y_offset * SCROLL_SENS;
+            }
+        } break;
+
+        case PLATFORM_EVENT_WINDOW_RESIZE:
+        {
+            glViewport(0, 0, event->window_resize.px_w, event->window_resize.px_h);
+            state->render_state.window_dim.x = event->window_resize.logical_w;
+            state->render_state.window_dim.y = event->window_resize.logical_h;
+            state->render_state.framebuffer_dim.x = event->window_resize.px_w;
+            state->render_state.framebuffer_dim.y = event->window_resize.px_h;
+            state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
+        } break;
+    }
 }
 
 void on_destroy(Editor_State *state)
 {
     (void)state;
 }
-
-#if 0
-void char_callback(GLFWwindow *window, unsigned int codepoint)
-{
-    (void)window; Editor_State *state = glfwGetWindowUserPointer(window);
-    if (state->active_view != NULL && state->active_view->kind == VIEW_KIND_BUFFER)
-    {
-        action_buffer_view_input_char(state, &state->active_view->bv, (char)codepoint);
-    }
-}
-
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
-{
-    (void)scancode; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window);
-    handle_key_input(window, state, key, action, mods);
-}
-
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
-{
-    (void)window; (void)button; (void)action; (void)mods; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
-    {
-        if (action == GLFW_PRESS)
-        {
-            handle_mouse_click(window, state);
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            handle_mouse_release(&state->mouse_state);
-        }
-    }
-}
-
-void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
-{
-    (void)window; (void)x_offset; (void)y_offset; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    if (state->mouse_state.scroll_timeout <= 0.0f)
-    {
-        Vec_2 mouse_screen_pos = get_mouse_screen_pos(window);
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(mouse_screen_pos, state->canvas_viewport);
-        state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
-    }
-    state->mouse_state.scroll_timeout = 0.1f;
-    bool scroll_handled_by_view = false;
-    if (state->mouse_state.scrolled_view)
-    {
-        scroll_handled_by_view = view_handle_scroll(state->mouse_state.scrolled_view, x_offset, y_offset, &state->render_state);
-    }
-    if (!scroll_handled_by_view)
-    {
-        state->canvas_viewport.rect.x -= x_offset * SCROLL_SENS;
-        state->canvas_viewport.rect.y -= y_offset * SCROLL_SENS;
-    }
-}
-
-void framebuffer_size_callback(GLFWwindow *window, int w, int h)
-{
-    (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    glViewport(0, 0, w, h);
-    state->render_state.framebuffer_dim.x = w;
-    state->render_state.framebuffer_dim.y = h;
-    state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
-}
-
-void window_size_callback(GLFWwindow *window, int w, int h)
-{
-    (void)window; (void)w; (void)h; Editor_State *state = glfwGetWindowUserPointer(window); (void)state;
-    state->render_state.window_dim.x = w;
-    state->render_state.window_dim.y = h;
-    state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
-}
-#endif
 
 bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -565,6 +554,9 @@ void view_destroy(View *view, Editor_State *state)
             log_warning("view_destroy: Unhandled View kind: %d", view->kind);
         } break;
     }
+
+    if (state->active_view == view)
+        state->active_view = state->view_count > 0 ? state->views[0] : NULL;
 }
 
 bool view_exists(View *view, Editor_State *state)

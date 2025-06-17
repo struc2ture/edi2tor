@@ -90,7 +90,7 @@ void char_callback(GLFWwindow *window, unsigned int codepoint)
     e.kind = PLATFORM_EVENT_CHAR;
     e.character.codepoint = codepoint;
 
-    g_dl.on_platform_event(&g_dl_state, &e);
+    g_dl.on_platform_event(g_dl_state, &e);
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -104,7 +104,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     e.key.action = action;
     e.key.mods = mods;
 
-    g_dl.on_platform_event(&g_dl_state, &e);
+    g_dl.on_platform_event(g_dl_state, &e);
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
@@ -117,7 +117,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     e.mouse_button.action = action;
     e.mouse_button.mods = mods;
 
-    g_dl.on_platform_event(&g_dl_state, &e);
+    g_dl.on_platform_event(g_dl_state, &e);
 }
 
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
@@ -129,7 +129,7 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     e.scroll.x_offset = x_offset;
     e.scroll.y_offset = y_offset;
 
-    g_dl.on_platform_event(&g_dl_state, &e);
+    g_dl.on_platform_event(g_dl_state, &e);
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
@@ -142,7 +142,7 @@ void framebuffer_size_callback(GLFWwindow *window, int w, int h)
     e.window_resize.px_w = h;
     glfwGetWindowSize(window, &e.window_resize.logical_w, &e.window_resize.logical_h);
 
-    g_dl.on_platform_event(&g_dl_state, &e);
+    g_dl.on_platform_event(g_dl_state, &e);
 }
 
 void window_size_callback(GLFWwindow *window, int w, int h)
@@ -154,7 +154,7 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     e.window_resize.logical_w = h;
     glfwGetWindowSize(window, &e.window_resize.px_w, &e.window_resize.px_h);
 
-    g_dl.on_platform_event(&g_dl_state, &e);
+    g_dl.on_platform_event(g_dl_state, &e);
 }
 
 int main()
@@ -175,6 +175,14 @@ int main()
     g_dl_state = calloc(1, 4096);
 
     g_dl.on_init(window, g_dl_state);
+
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCharCallback(window, char_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetWindowSizeCallback(window, window_size_callback);
+    // glfwSetWindowRefreshCallback(window, refresh_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
 
     while (!glfwWindowShouldClose(window))
     {

@@ -4,9 +4,9 @@
 
 #include "editor.h"
 
-void buffer_view_handle_key(Buffer_View *buffer_view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void view_handle_key(View *view, GLFWwindow *window, Editor_State *state, int key, int action, int mods);
-void handle_key_input(GLFWwindow *window, Editor_State *state, int key, int action, int mods);
+void input_key_global(Editor_State *state, const Platform_Event *e);
+void input_key_view(Editor_State *state, View *view, const Platform_Event *e);
+void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e);
 
 void buffer_view_handle_click_drag(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
 void view_handle_click_drag(View *view, Vec_2 mouse_canvas_pos, bool is_shift_pressed, const Render_State *render_state);
