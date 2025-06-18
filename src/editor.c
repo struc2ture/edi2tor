@@ -21,7 +21,7 @@
 #include "shaders.h"
 #include "util.h"
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene)
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo)
 {
     bassert(sizeof(*state) < 4096);
 
@@ -30,7 +30,7 @@ void on_init(Editor_State *state, GLFWwindow *window, float window_w, float wind
 
     state->window = window;
 
-    initialize_render_state(&state->render_state, window_w, window_h, window_px_w, window_px_h);
+    initialize_render_state(&state->render_state, window_w, window_h, window_px_w, window_px_h, fbo);
 
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
@@ -223,7 +223,7 @@ Framebuffer gl_create_framebuffer(int w, int h)
     return framebuffer;
 }
 
-void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h)
+void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo)
 {
     render_state->window_dim.x = window_w;
     render_state->window_dim.y = window_h;
@@ -231,6 +231,8 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     render_state->framebuffer_dim.y = window_px_h;
     render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
     // glViewport(0, 0, (GLsizei)render_state->framebuffer_dim.x, (GLsizei)render_state->framebuffer_dim.y);
+
+    render_state->default_fbo = fbo;
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -427,7 +429,7 @@ View *create_image_view(const char *file_path, Rect rect, Editor_State *state)
 View *create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state)
 {
     Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    Live_Scene *live_scene = live_scene_create(state, dylib_path, rect.w, rect.h);
+    Live_Scene *live_scene = live_scene_create(state, dylib_path, rect.w, rect.h, framebuffer.fbo);
     Live_Scene_View *live_scene_view = live_scene_view_create(framebuffer, live_scene, rect, state);
     view_set_active(outer_view(live_scene_view), state);
     return outer_view(live_scene_view);
@@ -718,12 +720,12 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state)
     return (Image_View *)view;
 }
 
-Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h)
+Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo)
 {
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
     live_scene->dylib = live_scene_load_dylib(path);
-    live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true);
+    live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo);
     return live_scene;
 }
 
@@ -1386,7 +1388,7 @@ void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, 
 
     ls_view->live_scene->dylib.on_render(ls_view->live_scene->state, t);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
     glClearColor(0, 0, 0, 1.0f);
     glBindVertexArray(render_state->vao);
@@ -2523,11 +2525,11 @@ Live_Scene_Dylib live_scene_load_dylib(const char *path)
     return dylib;
 }
 
-void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h)
+void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo)
 {
     const char *dl_path = xstrdup((*live_scene)->dylib.dl_path);
     live_scene_destroy(*live_scene);
-    *live_scene = live_scene_create(state, dl_path, w, h);
+    *live_scene = live_scene_create(state, dl_path, w, h, fbo);
 }
 
 void live_scene_rebuild(Live_Scene *live_scene)
