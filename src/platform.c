@@ -11,17 +11,18 @@
 #include <GLFW/glfw3.h>
 
 #include "glfw_helpers.h"
-#include "platform_event.h"
+#include "platform_types.h"
 
 #define PROGRAM_NAME "edi2tor"
 #define DL_PATH "/Users/struc/dev/jects/edi2tor/bin/editor.dylib"
 #define INITIAL_WINDOW_WIDTH 1000
 #define INITIAL_WINDOW_HEIGHT 900
+#define FPS_MEASUREMENT_FREQ 0.1f
 
 typedef void (*on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h);
 typedef void (*on_reload_t)(void *state);
-typedef void (*on_render_t)(void *state);
-typedef void (*on_platform_event_t)(void *state, const Platform_Event *event);
+typedef void (*on_render_t)(void *state, const Platform_Timing *t);
+typedef void (*on_platform_event_t)(void *state, const Platform_Event *e);
 typedef void (*on_destroy_t)(void *state);
 
 typedef struct {
@@ -38,6 +39,7 @@ typedef struct {
 static Dl_Info g_dl;
 static void *g_dl_state;
 static Vec_2 g_mouse_prev_pos;
+static Platform_Timing g_timing;
 
 time_t get_file_timestamp(const char *path)
 {
@@ -82,6 +84,24 @@ Dl_Info load_dl(const char *path)
     dl_info.on_platform_event = xdlsym(dl_info.handle, "on_platform_event");
     dl_info.on_destroy = xdlsym(dl_info.handle, "on_destroy");
     return dl_info;
+}
+
+void perform_timing_calculations(Platform_Timing *t)
+{
+    t->prev_frame_time = (float)glfwGetTime();
+    t->prev_delta_time = t->prev_frame_time - t->prev_prev_frame_time;
+    t->prev_prev_frame_time = t->prev_frame_time;
+    t->fps_instant = 1.0f / t->prev_delta_time;
+
+    if (t->prev_frame_time - t->last_fps_measurement_time > FPS_MEASUREMENT_FREQ)
+    {
+        t->fps_avg = (float)t->frame_running_count / (t->prev_frame_time - t->last_fps_measurement_time);
+        t->last_fps_measurement_time = t->prev_frame_time;
+        t->frame_running_count = 0;
+    }
+
+    t->frame_total_count++;
+    t->frame_running_count++;
 }
 
 // --------------------------------------------------------
@@ -173,6 +193,8 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     g_dl.on_platform_event(g_dl_state, &e);
 }
 
+// --------------------------------------------------------
+
 int main()
 {
     glfwInit();
@@ -215,7 +237,9 @@ int main()
             printf("[PLATFORM] Reloaded dl\n");
         }
 
-        g_dl.on_render(g_dl_state);
+        perform_timing_calculations(&g_timing);
+
+        g_dl.on_render(g_dl_state, &g_timing);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

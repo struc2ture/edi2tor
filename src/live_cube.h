@@ -4,7 +4,7 @@
 
 #include <OpenGL/gl3.h>
 
-#include "platform_event.h"
+#include "platform_types.h"
 
 typedef struct {
     GLuint prog;
@@ -23,6 +23,6 @@ typedef struct {
 
 void on_init(Live_Cube_State *state, float w, float h);
 void on_reload(Live_Cube_State *state);
-void on_render(Live_Cube_State *state, float delta_time);
+void on_render(Live_Cube_State *state, const Platform_Timing *t);
 void on_platform_event(Live_Cube_State *state, const Platform_Event *e);
 void on_destroy(Live_Cube_State *state);

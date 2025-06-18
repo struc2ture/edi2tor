@@ -11,7 +11,7 @@
 #include <stb_image.h>
 #include <stb_truetype.h>
 
-#include "platform_event.h"
+#include "platform_types.h"
 
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
@@ -205,7 +205,7 @@ typedef struct {
 
 typedef void (*live_scene_on_init_t)(void *state, float w, float h);
 typedef void (*live_scene_on_reload_t)(void *state);
-typedef void (*live_scene_on_render_t)(void *state, float delta_time);
+typedef void (*live_scene_on_render_t)(void *state, const Platform_Timing *t);
 typedef void (*live_scene_on_platform_event_t)(void *state, const Platform_Event *e);
 typedef void (*live_scene_on_destroy_t)(void *state);
 
@@ -269,12 +269,6 @@ typedef struct {
 
     char *copy_buffer;
     bool should_break;
-    float delta_time;
-    float last_frame_time;
-    float last_fps_time;
-    int fps_frame_count;
-    float fps;
-    long long frame_count;
 
     char *working_dir;
 
@@ -304,7 +298,7 @@ typedef enum {
 
 void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h);
 void on_reload(Editor_State *state);
-void on_render(Editor_State *state);
+void on_render(Editor_State *state, const Platform_Timing *t);
 void on_platform_event(Editor_State *state, const Platform_Event *event);
 void on_destroy(Editor_State *state);
 
@@ -315,7 +309,6 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 Framebuffer gl_create_framebuffer(int width, int height);
 
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h);
-void perform_timing_calculations(Editor_State *state);
 
 Buffer **buffer_create_new_slot(Editor_State *state);
 void buffer_free_slot(Buffer *buffer, Editor_State *state);
@@ -393,7 +386,7 @@ void draw_string(const char *str, Render_Font font, float x, float y, const unsi
 
 void draw_grid(Viewport canvas_viewport, Render_State *render_state);
 
-void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
 void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
 void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
@@ -403,9 +396,9 @@ void draw_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport ca
 
 void draw_image_view(Image_View *image_view, Render_State *render_state);
 
-void draw_live_scene_view(Live_Scene_View *live_scene_view, Render_State *render_state, float delta_time);
+void draw_live_scene_view(Live_Scene_View *live_scene_view, Render_State *render_state, const Platform_Timing *t);
 
-void draw_status_bar(Editor_State *state, Render_State *render_state);
+void draw_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t);
 
 void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
 void make_view(float offset_x, float offset_y, float scale, float *out);

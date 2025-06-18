@@ -7,7 +7,7 @@
 #include "actions.h"
 #include "editor.h"
 #include "glfw_helpers.h"
-#include "platform_event.h"
+#include "platform_types.h"
 #include "util.h"
 
 void input_key_global(Editor_State *state, const Platform_Event *e)
@@ -249,11 +249,11 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
 
 // --------------------------------
 
-void input_mouse_update(Editor_State *state)
+void input_mouse_update(Editor_State *state, float delta_time)
 {
     if (state->mouse_state.scroll_timeout > 0.0f)
     {
-        state->mouse_state.scroll_timeout -= state->delta_time;
+        state->mouse_state.scroll_timeout -= delta_time;
     }
     else
     {

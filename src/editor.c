@@ -18,7 +18,7 @@
 
 #include "actions.h"
 #include "input.h"
-#include "platform_event.h"
+#include "platform_types.h"
 #include "shaders.h"
 #include "util.h"
 
@@ -41,7 +41,7 @@ void on_reload(Editor_State *state)
     (void)state;
 }
 
-void on_render(Editor_State *state)
+void on_render(Editor_State *state, const Platform_Timing *t)
 {
     if (state->should_break)
     {
@@ -49,9 +49,7 @@ void on_render(Editor_State *state)
         state->should_break = false;
     }
 
-    perform_timing_calculations(state);
-
-    input_mouse_update(state);
+    input_mouse_update(state, t->prev_delta_time);
 
     glDisable(GL_SCISSOR_TEST);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -68,49 +66,49 @@ void on_render(Editor_State *state)
     {
         View *view = state->views[i];
         bool is_active = view == state->active_view;
-        draw_view(view, is_active, state->canvas_viewport, &state->render_state, state->delta_time);
+        draw_view(view, is_active, state->canvas_viewport, &state->render_state, t);
     }
 
-    draw_status_bar(state, &state->render_state);
+    draw_status_bar(state, &state->render_state, t);
 }
 
-void on_platform_event(Editor_State *state, const Platform_Event *event)
+void on_platform_event(Editor_State *state, const Platform_Event *e)
 {
-    (void)state; (void)event;
-    switch (event->kind)
+    (void)state; (void)e;
+    switch (e->kind)
     {
         case PLATFORM_EVENT_CHAR:
         {
             if (state->active_view != NULL && state->active_view->kind == VIEW_KIND_BUFFER)
-                action_buffer_view_input_char(state, &state->active_view->bv, (char)event->character.codepoint);
+                action_buffer_view_input_char(state, &state->active_view->bv, (char)e->character.codepoint);
         } break;
 
         case PLATFORM_EVENT_KEY:
         {
-            input_key_global(state, event);
+            input_key_global(state, e);
         } break;
 
         case PLATFORM_EVENT_MOUSE_BUTTON:
         {
-            input_mouse_button_global(state, event);
+            input_mouse_button_global(state, e);
         } break;
 
         case PLATFORM_EVENT_MOUSE_MOTION:
         {
-            input_mouse_motion_global(state, event);
+            input_mouse_motion_global(state, e);
         } break;
 
         case PLATFORM_EVENT_MOUSE_SCROLL:
         {
-            input_mouse_scroll_global(state, event);
+            input_mouse_scroll_global(state, e);
         } break;
 
         case PLATFORM_EVENT_WINDOW_RESIZE:
         {
-            state->render_state.window_dim.x = event->window_resize.logical_w;
-            state->render_state.window_dim.y = event->window_resize.logical_h;
-            state->render_state.framebuffer_dim.x = event->window_resize.px_w;
-            state->render_state.framebuffer_dim.y = event->window_resize.px_h;
+            state->render_state.window_dim.x = e->window_resize.logical_w;
+            state->render_state.window_dim.y = e->window_resize.logical_h;
+            state->render_state.framebuffer_dim.x = e->window_resize.px_w;
+            state->render_state.framebuffer_dim.y = e->window_resize.px_h;
             state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
             glViewport(0, 0, state->render_state.framebuffer_dim.x, state->render_state.framebuffer_dim.y);
         } break;
@@ -267,23 +265,6 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
     render_state->buffer_view_resize_handle_radius = 5.0f;
-}
-
-void perform_timing_calculations(Editor_State *state)
-{
-    float current_time = (float)glfwGetTime();
-    state->delta_time = current_time - state->last_frame_time;
-    state->last_frame_time = current_time;
-
-    if (current_time - state->last_fps_time > 0.1f)
-    {
-        state->fps = (float)state->fps_frame_count / (current_time - state->last_fps_time);
-        state->last_fps_time = current_time;
-        state->fps_frame_count = 0;
-    }
-
-    state->frame_count++;
-    state->fps_frame_count++;
 }
 
 Buffer **buffer_create_new_slot(Editor_State *state)
@@ -1177,7 +1158,7 @@ void draw_grid(Viewport canvas_viewport, Render_State *render_state)
     draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
 }
 
-void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
+void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
 {
     transform_set_canvas_space(canvas_viewport, render_state);
     if (is_active)
@@ -1189,7 +1170,7 @@ void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_Stat
     {
         case VIEW_KIND_BUFFER:
         {
-            draw_buffer_view(&view->bv, is_active, canvas_viewport, render_state, delta_time);
+            draw_buffer_view(&view->bv, is_active, canvas_viewport, render_state, t->prev_delta_time);
         } break;
 
         case VIEW_KIND_IMAGE:
@@ -1199,7 +1180,7 @@ void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_Stat
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            draw_live_scene_view(&view->lsv, render_state, delta_time);
+            draw_live_scene_view(&view->lsv, render_state, t);
         } break;
 
         default:
@@ -1344,7 +1325,7 @@ void draw_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport ca
         draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
 }
 
-void draw_status_bar(Editor_State *state, Render_State *render_state)
+void draw_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t)
 {
     transform_set_screen_space(render_state);
 
@@ -1381,7 +1362,7 @@ void draw_status_bar(Editor_State *state, Render_State *render_state)
         status_str_y += font_line_height;
     }
 
-    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s", state->fps, state->delta_time, state->working_dir);
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s", t->fps_avg, t->prev_delta_time, state->working_dir);
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
 }
 
@@ -1392,14 +1373,14 @@ void draw_image_view(Image_View *image_view, Render_State *render_state)
     glUseProgram(render_state->main_shader);
 }
 
-void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, float delta_time)
+void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t)
 {
     live_scene_check_hot_reload(ls_view->live_scene);
 
     glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
     glViewport(0, 0, ls_view->framebuffer.w, ls_view->framebuffer.h);
 
-    ls_view->live_scene->dylib.on_render(ls_view->live_scene->state, delta_time);
+    ls_view->live_scene->dylib.on_render(ls_view->live_scene->state, t);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);

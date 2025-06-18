@@ -10,7 +10,7 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#include "platform_event.h"
+#include "platform_types.h"
 
 static bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -186,7 +186,7 @@ void on_reload(Live_Cube_State *state)
     (void)state;
 }
 
-void on_render(Live_Cube_State *state, float delta_time)
+void on_render(Live_Cube_State *state, const Platform_Timing *t)
 {
     glEnable(GL_DEPTH_TEST);
 
@@ -195,8 +195,8 @@ void on_render(Live_Cube_State *state, float delta_time)
     glUseProgram(state->prog);
     glBindVertexArray(state->vao);
 
-    state->position.x += state->velocity.x * delta_time;
-    state->position.y += state->velocity.y * delta_time;
+    state->position.x += state->velocity.x * t->prev_delta_time;
+    state->position.y += state->velocity.y * t->prev_delta_time;
 
     mat4 rot_roll, rot_yaw, model, view, proj, mv, mvp;
 

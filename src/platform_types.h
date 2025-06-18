@@ -57,3 +57,14 @@ typedef struct {
     };
     Platform_Event_Kind kind;
 } Platform_Event;
+
+typedef struct {
+    float prev_frame_time;
+    float prev_prev_frame_time;
+    float prev_delta_time;
+    float last_fps_measurement_time;
+    int frame_running_count;
+    int frame_total_count;
+    float fps_avg;
+    float fps_instant;
+} Platform_Timing;
