@@ -19,6 +19,14 @@ typedef struct {
     float max_x, max_y;
 } Rect_Bounds;
 
+typedef enum {
+    DIR_NONE,
+    DIR_LEFT,
+    DIR_UP,
+    DIR_RIGHT,
+    DIR_DOWN
+} Cardinal_Direction;
+
 static inline Vec_2 vec2_sub(Vec_2 a, Vec_2 b)
 {
     return (Vec_2){a.x - b.x, a.y - b.y};

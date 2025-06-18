@@ -1,12 +1,16 @@
+#include "live_cube.h"
+
+#include "common.h"
+
 #include <math.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <OpenGL/gl3.h>
+#include <GLFW/glfw3.h>
 
-#include "live_cube.h"
+#include "platform_event.h"
 
 static bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -101,10 +105,12 @@ void mat4_rotate_x(mat4 m, float angle) {
     m[10] =  c;
 }
 
-void mat4_mul(mat4 out, mat4 a, mat4 b) {
+void mat4_mul(mat4 out, mat4 a, mat4 b)
+{
     mat4 res;
     for (int col = 0; col < 4; col++)
-    for (int row = 0; row < 4; row++) {
+    for (int row = 0; row < 4; row++)
+{
         res[col*4 + row] = 0.0f;
         for (int i = 0; i < 4; i++)
             res[col*4 + row] += a[i*4 + row] * b[col*4 + i];
@@ -112,7 +118,7 @@ void mat4_mul(mat4 out, mat4 a, mat4 b) {
     memcpy(out, res, sizeof(mat4));
 }
 
-void on_init(Live_Scene_State *state, float w, float h)
+void on_init(Live_Cube_State *state, float w, float h)
 {
     const char *vs_src =
         "#version 410 core\n"
@@ -175,12 +181,12 @@ void on_init(Live_Scene_State *state, float w, float h)
     state->h = h;
 }
 
-void on_reload(Live_Scene_State *state)
+void on_reload(Live_Cube_State *state)
 {
     (void)state;
 }
 
-void on_render(Live_Scene_State *state, float delta_time)
+void on_render(Live_Cube_State *state, float delta_time)
 {
     glEnable(GL_DEPTH_TEST);
 
@@ -189,13 +195,17 @@ void on_render(Live_Scene_State *state, float delta_time)
     glUseProgram(state->prog);
     glBindVertexArray(state->vao);
 
-    mat4 rot_x, rot_y, model, view, proj, mv, mvp;
+    state->position.x += state->velocity.x * delta_time;
+    state->position.y += state->velocity.y * delta_time;
 
-    state->angle += delta_time;
+    mat4 rot_roll, rot_yaw, model, view, proj, mv, mvp;
 
-    mat4_rotate_x(rot_x, state->angle * 0.7f);
-    mat4_rotate_y(rot_y, state->angle);
-    mat4_mul(model, rot_y, rot_x);
+    mat4_translate(model, state->position.x, state->position.y, 0.0f);
+    mat4_rotate_y(rot_yaw, state->angle_yaw);
+    mat4_rotate_x(rot_roll, state->angle_roll);
+    mat4_mul(model, model, rot_roll);
+    mat4_mul(model, model, rot_yaw);
+
     mat4_translate(view, 0.0f, 0.0f, -5.0f); // simple "look at" from z = -5
     mat4_perspective(proj, 3.14f / 3.0f, state->w / state->h, 0.1f, 100.0f);
 
@@ -209,7 +219,87 @@ void on_render(Live_Scene_State *state, float delta_time)
     glDisable(GL_DEPTH_TEST);
 }
 
-void on_destroy(Live_Scene_State *state)
+#define TRANSLATION_SPEED 1.0f;
+
+void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
+{
+    switch (e->kind)
+    {
+        case PLATFORM_EVENT_KEY:
+        {
+            if (e->key.action == GLFW_PRESS)
+            {
+                switch (e->key.key)
+                {
+                    case GLFW_KEY_LEFT:
+                    {
+                        state->velocity.x = -TRANSLATION_SPEED;
+                    } break;
+
+                    case GLFW_KEY_UP:
+                    {
+                        state->velocity.y = +TRANSLATION_SPEED;
+                    } break;
+
+                    case GLFW_KEY_RIGHT:
+                    {
+                        state->velocity.x = +TRANSLATION_SPEED;
+                    } break;
+
+                    case GLFW_KEY_DOWN:
+                    {
+                        state->velocity.y = -TRANSLATION_SPEED;
+                    } break;
+                }
+            }
+            else if (e->key.action == GLFW_RELEASE)
+            {
+                switch (e->key.key)
+                {
+                    case GLFW_KEY_LEFT:
+                    case GLFW_KEY_RIGHT:
+                    {
+                        state->velocity.x = 0.0f;
+                    } break;
+
+                    case GLFW_KEY_UP:
+                    case GLFW_KEY_DOWN:
+                    {
+                        state->velocity.y = 0.0f;
+                    } break;
+                }
+            }
+        } break;
+
+        case PLATFORM_EVENT_MOUSE_BUTTON:
+        {
+            if (e->mouse_button.button == GLFW_MOUSE_BUTTON_LEFT)
+            {
+                if (e->mouse_button.action == GLFW_PRESS)
+                {
+                    state->is_mouse_drag = true;
+                }
+                else
+                {
+                    state->is_mouse_drag = false;
+                }
+            }
+        } break;
+
+        case PLATFORM_EVENT_MOUSE_MOTION:
+        {
+            if (state->is_mouse_drag)
+            {
+                state->angle_yaw -= 0.01f * e->mouse_motion.delta.x;
+                state->angle_roll -= 0.01f * e->mouse_motion.delta.y;
+            }
+        } break;
+
+        default: break;
+    }
+}
+
+void on_destroy(Live_Cube_State *state)
 {
     glDeleteBuffers(1, &state->vbo);
     glDeleteVertexArrays(1, &state->vao);

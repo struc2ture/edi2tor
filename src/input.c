@@ -105,7 +105,7 @@ void input_key_view(Editor_State *state, View *view, const Platform_Event *e)
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            // Nothing for now
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
         } break;
 
         default:
@@ -295,6 +295,11 @@ void input_mouse_motion_view(Editor_State *state, View *view, const Platform_Eve
             input_mouse_motion_buffer_view(state, &view->bv, e);
         } break;
 
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+        } break;
+
         default:
         {
             log_warning("input_mouse_drag_view: Unhandled View kind: %d", view->kind);
@@ -386,6 +391,11 @@ bool input_mouse_button_view(Editor_State *state, View *view, const Platform_Eve
             input_mouse_button_buffer_view(state, &view->bv, e);
         } break;
 
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+        } break;
+
         default:
         {
             log_warning("input_mouse_click_view: Unhandled View kind: %d", view->kind);
@@ -452,6 +462,11 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Eve
         {
             input_mouse_scroll_buffer_view(state, &view->bv, e);
             return true;
+        } break;
+
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
         } break;
 
         default:

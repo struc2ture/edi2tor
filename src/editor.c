@@ -542,6 +542,11 @@ Rect view_get_inner_rect(View *view, const Render_State *render_state)
             rect = buffer_view_get_text_area_rect(&view->bv, render_state);
         } break;
 
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            rect = view->lsv.framebuffer_rect;
+        } break;
+
         default:
         {
             rect = (Rect){0};
@@ -734,7 +739,7 @@ Live_Scene *live_scene_create(const char *path, float w, float h)
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
     live_scene->dylib = live_scene_load_dylib(path);
-    live_scene->dylib.init(live_scene->state, w, h);
+    live_scene->dylib.on_init(live_scene->state, w, h);
     return live_scene;
 }
 
@@ -745,14 +750,14 @@ void live_scene_check_hot_reload(Live_Scene *live_scene)
     {
         dlclose(live_scene->dylib.dl_handle);
         live_scene->dylib= live_scene_load_dylib(live_scene->dylib.dl_path);
-        live_scene->dylib.reload(live_scene->state);
+        live_scene->dylib.on_reload(live_scene->state);
         trace_log("live_scene_check_hot_reload: Reloaded live scene (%s)", live_scene->dylib.dl_path);
     }
 }
 
 void live_scene_destroy(Live_Scene *live_scene)
 {
-    live_scene->dylib.destroy(live_scene->state);
+    live_scene->dylib.on_destroy(live_scene->state);
     free(live_scene->state);
     live_scene->state = NULL;
     dlclose(live_scene->dylib.dl_handle);
@@ -1394,7 +1399,7 @@ void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, 
     glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
     glViewport(0, 0, ls_view->framebuffer.w, ls_view->framebuffer.h);
 
-    ls_view->live_scene->dylib.render(ls_view->live_scene->state, delta_time);
+    ls_view->live_scene->dylib.on_render(ls_view->live_scene->state, delta_time);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
@@ -2516,10 +2521,11 @@ Live_Scene_Dylib live_scene_load_dylib(const char *path)
     dylib.dl_handle = xdlopen(path);
     dylib.dl_path = xstrdup(path);
     dylib.dl_timestamp = get_file_timestamp(path);
-    dylib.init = xdlsym(dylib.dl_handle, "on_init");
-    dylib.reload = xdlsym(dylib.dl_handle, "on_reload");
-    dylib.render = xdlsym(dylib.dl_handle, "on_render");
-    dylib.destroy = xdlsym(dylib.dl_handle, "on_destroy");
+    dylib.on_init = xdlsym(dylib.dl_handle, "on_init");
+    dylib.on_reload = xdlsym(dylib.dl_handle, "on_reload");
+    dylib.on_render = xdlsym(dylib.dl_handle, "on_render");
+    dylib.on_platform_event = xdlsym(dylib.dl_handle, "on_platform_event");
+    dylib.on_destroy = xdlsym(dylib.dl_handle, "on_destroy");
     return dylib;
 }
 

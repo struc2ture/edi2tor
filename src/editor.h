@@ -203,19 +203,21 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
-typedef void (*live_scene_init_t)(void *state, float w, float h);
-typedef void (*live_scene_reload_t)(void *state);
-typedef void (*live_scene_render_t)(void *state, float delta_time);
-typedef void (*live_scene_destroy_t)(void *state);
+typedef void (*live_scene_on_init_t)(void *state, float w, float h);
+typedef void (*live_scene_on_reload_t)(void *state);
+typedef void (*live_scene_on_render_t)(void *state, float delta_time);
+typedef void (*live_scene_on_platform_event_t)(void *state, const Platform_Event *e);
+typedef void (*live_scene_on_destroy_t)(void *state);
 
 typedef struct {
     void *dl_handle;
     char *dl_path;
     time_t dl_timestamp;
-    live_scene_init_t init;
-    live_scene_reload_t reload;
-    live_scene_render_t render;
-    live_scene_destroy_t destroy;
+    live_scene_on_init_t on_init;
+    live_scene_on_reload_t on_reload;
+    live_scene_on_render_t on_render;
+    live_scene_on_platform_event_t on_platform_event;
+    live_scene_on_destroy_t on_destroy;
 } Live_Scene_Dylib;
 
 struct Live_Scene {
