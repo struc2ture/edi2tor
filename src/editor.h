@@ -300,7 +300,7 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void on_init(GLFWwindow *window, Editor_State *state);
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h);
 void on_reload(Editor_State *state);
 void on_render(Editor_State *state);
 void on_platform_event(Editor_State *state, const Platform_Event *event);
@@ -312,7 +312,7 @@ GLuint gl_create_shader_program(const char *vs_src, const char *fs_src);
 void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
 Framebuffer gl_create_framebuffer(int width, int height);
 
-void initialize_render_state(GLFWwindow *window, Render_State *render_state);
+void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h);
 void perform_timing_calculations(Editor_State *state);
 
 Buffer **buffer_create_new_slot(Editor_State *state);

@@ -18,7 +18,7 @@
 #define INITIAL_WINDOW_WIDTH 1000
 #define INITIAL_WINDOW_HEIGHT 900
 
-typedef void (*on_init_t)(GLFWwindow *window, void *state);
+typedef void (*on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h);
 typedef void (*on_reload_t)(void *state);
 typedef void (*on_render_t)(void *state);
 typedef void (*on_platform_event_t)(void *state, const Platform_Event *event);
@@ -190,7 +190,10 @@ int main()
     g_dl = load_dl(DL_PATH);
     g_dl_state = calloc(1, 4096);
 
-    g_dl.on_init(window, g_dl_state);
+    int window_w, window_h, window_px_w, window_px_h;
+    glfwGetWindowSize(window, &window_w, &window_h);
+    glfwGetFramebufferSize(window, &window_px_w, &window_px_h);
+    g_dl.on_init(g_dl_state, window, (float)window_w, (float)window_h, (float)window_px_w, (float)window_px_h);
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetCharCallback(window, char_callback);

@@ -22,13 +22,13 @@
 #include "shaders.h"
 #include "util.h"
 
-void on_init(GLFWwindow *window, Editor_State *state)
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h)
 {
     bassert(sizeof(*state) < 4096);
 
     state->window = window;
 
-    initialize_render_state(window, &state->render_state);
+    initialize_render_state(&state->render_state, window_w, window_h, window_px_w, window_px_h);
 
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
@@ -107,12 +107,12 @@ void on_platform_event(Editor_State *state, const Platform_Event *event)
 
         case PLATFORM_EVENT_WINDOW_RESIZE:
         {
-            glViewport(0, 0, event->window_resize.px_w, event->window_resize.px_h);
             state->render_state.window_dim.x = event->window_resize.logical_w;
             state->render_state.window_dim.y = event->window_resize.logical_h;
             state->render_state.framebuffer_dim.x = event->window_resize.px_w;
             state->render_state.framebuffer_dim.y = event->window_resize.px_h;
             state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
+            glViewport(0, 0, state->render_state.framebuffer_dim.x, state->render_state.framebuffer_dim.y);
         } break;
     }
 }
@@ -221,14 +221,17 @@ Framebuffer gl_create_framebuffer(int w, int h)
     return framebuffer;
 }
 
-void initialize_render_state(GLFWwindow *window, Render_State *render_state)
+void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h)
 {
+    render_state->window_dim.x = window_w;
+    render_state->window_dim.y = window_h;
+    render_state->framebuffer_dim.x = window_px_w;
+    render_state->framebuffer_dim.y = window_px_h;
+    render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
+    glViewport(0, 0, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    int framebuffer_w, framebuffer_h;
-    glfwGetFramebufferSize(window, &framebuffer_w, &framebuffer_h);
-    glViewport(0, 0, framebuffer_w, framebuffer_h);
 
     render_state->main_shader = gl_create_shader_program(shader_main_vert_src, shader_main_frag_src);
     render_state->grid_shader = gl_create_shader_program(shader_main_vert_src, shader_grid_frag_src);
@@ -264,14 +267,6 @@ void initialize_render_state(GLFWwindow *window, Render_State *render_state)
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
     render_state->buffer_view_resize_handle_radius = 5.0f;
-
-    int window_w, window_h;
-    glfwGetWindowSize(window, &window_w, &window_h);
-    render_state->window_dim.x = window_w;
-    render_state->window_dim.y = window_h;
-    render_state->framebuffer_dim.x = framebuffer_w;
-    render_state->framebuffer_dim.y = framebuffer_h;
-    render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
 }
 
 void perform_timing_calculations(Editor_State *state)
