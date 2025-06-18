@@ -51,38 +51,128 @@ time_t get_file_timestamp(const char *path)
     exit(1);
 }
 
-void *xdlopen(const char *dl_path)
+void copy_file(const char *src, const char *dest)
 {
-    void *handle = dlopen(dl_path, RTLD_NOW);
-    if (!handle) {
-        fprintf(stderr, "[PLATFORM] dlopen error: %s\n", dlerror());
-        exit(1);
+    FILE *in = fopen(src, "rb");
+    if (!in)
+    {
+        fprintf(stderr, "[PLATFORM] copy_file: failed to open file for read at: %s\n", src);
+        return;
     }
-    return handle;
+
+    FILE *out = fopen(dest, "wb");
+    if (!out)
+    {
+        fprintf(stderr, "[PLATFORM] copy_file: failed to open file for write at: %s\n", dest);
+        fclose(in);
+        return;
+    }
+
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+    {
+        fwrite(buf, 1, n, out);
+    }
+
+    fclose(in);
+    fclose(out);
+
+    printf("[PLATFORM] copy_file: copied file to %s\n", dest);
 }
 
-void * xdlsym(void *handle, const char *name)
+void delete_file(const char *path)
 {
-    void *sym = dlsym(handle, name);
-    if (!sym) {
-        fprintf(stderr, "[PLATFORM] dlsym error: %s\n", dlerror());
-        exit(1);
+    if (remove(path) == 0)
+    {
+        printf("[PLATFORM] delete_file: deleted file at %s\n", path);
     }
-    return sym;
+    else
+    {
+        fprintf(stderr,"[PLATFORM] delete_file: failed to deleted file at %s\n", path);
+    }
 }
 
-Dl_Info load_dl(const char *path)
+Dl_Info dylib_open(const char *path)
 {
+    const char *dot = strrchr(path, '.');
+    size_t base_len = dot - path;
+    time_t now = time(NULL);
+
+    char temp_path[256];
+    snprintf(temp_path, sizeof(temp_path), "%.*s_%ld.dylib", (int)base_len, path, now);
+    copy_file(path, temp_path);
+
+    printf("[PLATFORM] dylib_open: loading dylib at %s\n", temp_path);
+
     Dl_Info dl_info = {0};
-    dl_info.handle = xdlopen(path);
-    dl_info.dl_path = strdup(path);
-    dl_info.dl_timestamp = get_file_timestamp(path);
-    dl_info.on_init = xdlsym(dl_info.handle, "on_init");
-    dl_info.on_reload = xdlsym(dl_info.handle, "on_reload");
-    dl_info.on_render = xdlsym(dl_info.handle, "on_render");
-    dl_info.on_platform_event = xdlsym(dl_info.handle, "on_platform_event");
-    dl_info.on_destroy = xdlsym(dl_info.handle, "on_destroy");
+    dl_info.handle = dlopen(temp_path, RTLD_NOW);
+    if (dl_info.handle)
+    {
+        dl_info.on_init = dlsym(dl_info.handle, "on_init");
+        if (!dl_info.on_init)
+        {
+            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
+            dlclose(temp_path);
+            delete_file(temp_path);
+            return (Dl_Info){0};
+        }
+        dl_info.on_reload = dlsym(dl_info.handle, "on_reload");
+        if (!dl_info.on_init)
+        {
+            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
+            dlclose(temp_path);
+            delete_file(temp_path);
+            return (Dl_Info){0};
+        }
+        dl_info.on_render = dlsym(dl_info.handle, "on_render");
+        if (!dl_info.on_init)
+        {
+            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
+            dlclose(temp_path);
+            delete_file(temp_path);
+            return (Dl_Info){0};
+        }
+        dl_info.on_platform_event = dlsym(dl_info.handle, "on_platform_event");
+        if (!dl_info.on_init)
+        {
+            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
+            dlclose(temp_path);
+            delete_file(temp_path);
+            return (Dl_Info){0};
+        }
+        dl_info.on_destroy = dlsym(dl_info.handle, "on_destroy");
+        if (!dl_info.on_init)
+        {
+            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
+            dlclose(temp_path);
+            delete_file(temp_path);
+            return (Dl_Info){0};
+        }
+
+        dl_info.dl_path = strdup(temp_path);
+        dl_info.dl_timestamp = get_file_timestamp(path);
+    }
+    else
+    {
+        fprintf(stderr, "[PLATFORM] Failed to open dylib: %s\n", temp_path);
+        dlclose(temp_path);
+        delete_file(temp_path);
+        return (Dl_Info){0};
+    }
+
     return dl_info;
+}
+
+void dylib_close(Dl_Info *dl_info)
+{
+    printf("[PLATFORM] dylib_close: closing dylib at %s\n", dl_info->dl_path);
+
+    dlclose(dl_info->handle);
+    delete_file(dl_info->dl_path);
+    free(dl_info->dl_path);
+
+    *dl_info = (Dl_Info){0};
 }
 
 void perform_timing_calculations(Platform_Timing *t)
@@ -216,7 +306,7 @@ int main(int argc, char **argv)
     printf("[PLATFORM] OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
     printf("[PLATFORM] OpenGL Version: %s\n", glGetString(GL_VERSION));
 
-    g_dl = load_dl(dylib_path);
+    g_dl = dylib_open(dylib_path);
     g_dl_state = calloc(1, 4096);
 
     int window_w, window_h, window_px_w, window_px_h;
@@ -235,13 +325,22 @@ int main(int argc, char **argv)
 
     while (!glfwWindowShouldClose(window))
     {
-        time_t dl_current_timestamp = get_file_timestamp(g_dl.dl_path);
+        time_t dl_current_timestamp = get_file_timestamp(dylib_path);
         if (dl_current_timestamp != g_dl.dl_timestamp)
         {
-            dlclose(g_dl.handle);
-            g_dl = load_dl(g_dl.dl_path);
-            g_dl.on_reload(g_dl_state);
-            printf("[PLATFORM] Reloaded dl\n");
+            Dl_Info old_dylib = g_dl;
+            g_dl = dylib_open(dylib_path);
+            if (!g_dl.handle)
+            {
+                fprintf(stderr, "[PLATFORM] Failed to reload dylib.\n");
+                g_dl = old_dylib;
+            }
+            else
+            {
+                g_dl.on_reload(g_dl_state);
+                printf("[PLATFORM] Reloaded dylib.\n");
+                dylib_close(&old_dylib);
+            }
         }
 
         perform_timing_calculations(&g_timing);
@@ -254,7 +353,7 @@ int main(int argc, char **argv)
 
     g_dl.on_destroy(g_dl_state);
     free(g_dl_state);
-    dlclose(g_dl.handle);
+    dylib_close(&g_dl);
 
     glfwDestroyWindow(window);
     glfwTerminate();
