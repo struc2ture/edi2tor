@@ -48,7 +48,7 @@ time_t get_file_timestamp(const char *path)
         return attr.st_mtime;
     }
     fprintf(stderr, "[PLATFORM] Failed to get timestamp for file at %s\n", path);
-    exit(1);
+    return 0;
 }
 
 void copy_file(const char *src, const char *dest)
@@ -326,7 +326,7 @@ int main(int argc, char **argv)
     while (!glfwWindowShouldClose(window))
     {
         time_t dl_current_timestamp = get_file_timestamp(dylib_path);
-        if (dl_current_timestamp != g_dl.dl_timestamp)
+        if (dl_current_timestamp != 0 && dl_current_timestamp != g_dl.dl_timestamp)
         {
             Dl_Info old_dylib = g_dl;
             g_dl = dylib_open(dylib_path);
@@ -334,6 +334,7 @@ int main(int argc, char **argv)
             {
                 fprintf(stderr, "[PLATFORM] Failed to reload dylib.\n");
                 g_dl = old_dylib;
+                g_dl.dl_timestamp = dl_current_timestamp;
             }
             else
             {
