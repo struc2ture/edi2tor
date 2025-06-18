@@ -22,9 +22,11 @@
 #include "shaders.h"
 #include "util.h"
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h)
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene)
 {
     bassert(sizeof(*state) < 4096);
+
+    if (!is_live_scene) glfwSetWindowTitle(window, "edi2tor");
 
     state->window = window;
 
@@ -50,6 +52,8 @@ void on_render(Editor_State *state, const Platform_Timing *t)
     }
 
     input_mouse_update(state, t->prev_delta_time);
+
+    glViewport(0, 0, (GLsizei)state->render_state.framebuffer_dim.x, (GLsizei)state->render_state.framebuffer_dim.y);
 
     glDisable(GL_SCISSOR_TEST);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -110,7 +114,7 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
             state->render_state.framebuffer_dim.x = e->window_resize.px_w;
             state->render_state.framebuffer_dim.y = e->window_resize.px_h;
             state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
-            glViewport(0, 0, state->render_state.framebuffer_dim.x, state->render_state.framebuffer_dim.y);
+            // glViewport(0, 0, state->render_state.framebuffer_dim.x, state->render_state.framebuffer_dim.y);
         } break;
     }
 }
@@ -226,7 +230,7 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     render_state->framebuffer_dim.x = window_px_w;
     render_state->framebuffer_dim.y = window_px_h;
     render_state->dpi_scale = render_state->framebuffer_dim.x / render_state->window_dim.x;
-    glViewport(0, 0, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
+    // glViewport(0, 0, (GLsizei)render_state->framebuffer_dim.x, (GLsizei)render_state->framebuffer_dim.y);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -423,7 +427,7 @@ View *create_image_view(const char *file_path, Rect rect, Editor_State *state)
 View *create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state)
 {
     Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    Live_Scene *live_scene = live_scene_create(dylib_path, rect.w, rect.h);
+    Live_Scene *live_scene = live_scene_create(state, dylib_path, rect.w, rect.h);
     Live_Scene_View *live_scene_view = live_scene_view_create(framebuffer, live_scene, rect, state);
     view_set_active(outer_view(live_scene_view), state);
     return outer_view(live_scene_view);
@@ -575,6 +579,15 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
             view->lsv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
             view->lsv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
             view->lsv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
+
+            Platform_Event resize_event;
+            resize_event.kind = PLATFORM_EVENT_WINDOW_RESIZE;
+            resize_event.window_resize.logical_w = view->lsv.framebuffer_rect.w;
+            resize_event.window_resize.logical_h = view->lsv.framebuffer_rect.h;
+            // TODO: Actually recreate framebuffer texture if size changed
+            resize_event.window_resize.px_w = (float)view->lsv.framebuffer.w;
+            resize_event.window_resize.px_h = (float)view->lsv.framebuffer.h;
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &resize_event);
         } break;
 
         default:
@@ -715,12 +728,12 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state)
     return (Image_View *)view;
 }
 
-Live_Scene *live_scene_create(const char *path, float w, float h)
+Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h)
 {
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
     live_scene->dylib = live_scene_load_dylib(path);
-    live_scene->dylib.on_init(live_scene->state, w, h);
+    live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true);
     return live_scene;
 }
 
@@ -1378,7 +1391,6 @@ void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, 
     live_scene_check_hot_reload(ls_view->live_scene);
 
     glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
-    glViewport(0, 0, ls_view->framebuffer.w, ls_view->framebuffer.h);
 
     ls_view->live_scene->dylib.on_render(ls_view->live_scene->state, t);
 
@@ -2510,11 +2522,11 @@ Live_Scene_Dylib live_scene_load_dylib(const char *path)
     return dylib;
 }
 
-void live_scene_reset(Live_Scene **live_scene, float w, float h)
+void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h)
 {
     const char *dl_path = xstrdup((*live_scene)->dylib.dl_path);
     live_scene_destroy(*live_scene);
-    *live_scene = live_scene_create(dl_path, w, h);
+    *live_scene = live_scene_create(state, dl_path, w, h);
 }
 
 void live_scene_rebuild(Live_Scene *live_scene)

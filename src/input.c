@@ -373,7 +373,7 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
                 state->mouse_state.resized_view = NULL;
                 state->mouse_state.dragged_view = NULL;
             }
-            else
+            else if (state->active_view)
             {
                 // I think it's ok to send release event to active view, because only mouse press can switch active view, so nothing could've switched it before GLFW_RELEASE is sent.
                 input_mouse_button_view(state, state->active_view, e);

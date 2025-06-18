@@ -203,7 +203,7 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
-typedef void (*live_scene_on_init_t)(void *state, float w, float h);
+typedef void (*live_scene_on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene);
 typedef void (*live_scene_on_reload_t)(void *state);
 typedef void (*live_scene_on_render_t)(void *state, const Platform_Timing *t);
 typedef void (*live_scene_on_platform_event_t)(void *state, const Platform_Event *e);
@@ -296,7 +296,7 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h);
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene);
 void on_reload(Editor_State *state);
 void on_render(Editor_State *state, const Platform_Timing *t);
 void on_platform_event(Editor_State *state, const Platform_Event *event);
@@ -352,7 +352,7 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state);
 
 void framebuffer_destroy(Framebuffer framebuffer);
 
-Live_Scene *live_scene_create(const char *path, float w, float h);
+Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h);
 void live_scene_destroy(Live_Scene *render_scene);
 
 Live_Scene_View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state);
@@ -488,7 +488,7 @@ void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
 
 Live_Scene_Dylib live_scene_load_dylib(const char *path);
-void live_scene_reset(Live_Scene **live_scene, float w, float h);
+void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h);
 void live_scene_rebuild(Live_Scene *live_scene);
 
 bool file_is_image(const char *path);

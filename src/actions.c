@@ -56,13 +56,13 @@ bool action_reset_live_scene(Editor_State *state)
     View *view = state->active_view;
     if (view->kind == VIEW_KIND_LIVE_SCENE)
     {
-        live_scene_reset(&view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h);
+        live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h);
     }
     else if (view->kind == VIEW_KIND_BUFFER &&
         view->bv.buffer->kind == BUFFER_KIND_FILE &&
         view->bv.buffer->file.linked_live_scene)
     {
-        live_scene_reset(&view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h);
+        live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h);
     }
     return true;
 }

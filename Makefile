@@ -1,9 +1,9 @@
 .PHONY: run dl clean debug
 
-bin/platform: src/platform.c bin/editor.dylib bin/live_cube.dylib | bin
+bin/platform: src/platform.c | bin
 	clang src/platform.c -g -lglfw -framework OpenGL -I/opt/homebrew/include -isystemthird_party -L/opt/homebrew/lib -DGL_SILENCE_DEPRECATION -Wall -Wextra -Werror -Wno-unused-function -o bin/platform
 
-bin/editor.dylib: src/editor.c src/editor.h src/util.h src/shaders.h src/unit_tests.h src/unit_tests.c src/actions.h src/actions.c src/input.h src/input.c | bin
+bin/editor.dylib: src/editor.c src/editor.h src/util.h src/shaders.h src/unit_tests.h src/unit_tests.c src/actions.h src/actions.c src/input.h src/input.c bin/live_cube.dylib | bin
 	clang -dynamiclib src/editor.c -g -lglfw -framework OpenGL -I/opt/homebrew/include -isystemthird_party -L/opt/homebrew/lib -DGL_SILENCE_DEPRECATION -Wall -Wextra -Werror -Wno-unused-function -o bin/editor.dylib
 
 bin/live_cube.dylib: src/live_cube.c src/live_cube.h | bin
@@ -12,8 +12,11 @@ bin/live_cube.dylib: src/live_cube.c src/live_cube.h | bin
 bin:
 	mkdir -p bin
 
-run: bin/platform
-	bin/platform
+run: bin/platform bin/editor.dylib
+	bin/platform bin/editor.dylib
+
+run_cube: bin/platform bin/live_cube.dylib
+	bin/platform bin/live_cube.dylib
 
 debug: bin/platform
 	lldb -s .lldb

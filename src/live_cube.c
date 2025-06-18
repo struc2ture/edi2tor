@@ -118,8 +118,15 @@ void mat4_mul(mat4 out, mat4 a, mat4 b)
     memcpy(out, res, sizeof(mat4));
 }
 
-void on_init(Live_Cube_State *state, float w, float h)
+void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene)
 {
+    if (!is_live_scene) glfwSetWindowTitle(window, "live_cube");
+
+    state->window_dim.x = window_w;
+    state->window_dim.y = window_h;
+    state->framebuffer_dim.x = window_px_w;
+    state->framebuffer_dim.y = window_px_h;
+
     const char *vs_src =
         "#version 410 core\n"
         "layout(location = 0) in vec3 aPos;\n"
@@ -176,9 +183,6 @@ void on_init(Live_Cube_State *state, float w, float h)
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
-
-    state->w = w;
-    state->h = h;
 }
 
 void on_reload(Live_Cube_State *state)
@@ -188,6 +192,8 @@ void on_reload(Live_Cube_State *state)
 
 void on_render(Live_Cube_State *state, const Platform_Timing *t)
 {
+    glViewport(0, 0, (GLsizei)state->framebuffer_dim.x, (GLsizei)state->framebuffer_dim.y);
+
     glEnable(GL_DEPTH_TEST);
 
     glClearColor(0.4f, 0.5f, 0.6f, 1.0f);
@@ -207,7 +213,7 @@ void on_render(Live_Cube_State *state, const Platform_Timing *t)
     mat4_mul(model, model, rot_yaw);
 
     mat4_translate(view, 0.0f, 0.0f, -5.0f); // simple "look at" from z = -5
-    mat4_perspective(proj, 3.14f / 3.0f, state->w / state->h, 0.1f, 100.0f);
+    mat4_perspective(proj, 3.14f / 3.0f, state->window_dim.x / state->window_dim.y, 0.1f, 100.0f);
 
     mat4_mul(mv, view, model);
     mat4_mul(mvp, proj, mv);
@@ -216,6 +222,7 @@ void on_render(Live_Cube_State *state, const Platform_Timing *t)
     glUniformMatrix4fv(loc, 1, GL_FALSE, mvp);
 
     glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_BYTE, 0);
+
     glDisable(GL_DEPTH_TEST);
 }
 
@@ -293,6 +300,14 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
                 state->angle_yaw -= 0.01f * e->mouse_motion.delta.x;
                 state->angle_roll -= 0.01f * e->mouse_motion.delta.y;
             }
+        } break;
+
+        case PLATFORM_EVENT_WINDOW_RESIZE:
+        {
+            state->window_dim.x = e->window_resize.logical_w;
+            state->window_dim.y = e->window_resize.logical_h;
+            state->framebuffer_dim.x = e->window_resize.px_w;
+            state->framebuffer_dim.y = e->window_resize.px_h;
         } break;
 
         default: break;
