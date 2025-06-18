@@ -275,6 +275,8 @@ typedef struct {
     char *prev_search;
 
     GLFWwindow *window;
+
+    bool is_live_scene;
 } Editor_State;
 
 typedef enum {
@@ -412,6 +414,7 @@ void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_s
 void transform_set_screen_space(Render_State *render_state);
 
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
+Vec_2 canvas_pos_to_screen_pos(Vec_2 canvas_pos, Viewport canvas_viewport);
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);

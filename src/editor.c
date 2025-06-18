@@ -16,7 +16,6 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-#include "actions.h"
 #include "input.h"
 #include "platform_types.h"
 #include "shaders.h"
@@ -26,6 +25,7 @@ void on_init(Editor_State *state, GLFWwindow *window, float window_w, float wind
 {
     bassert(sizeof(*state) < 4096);
 
+    state->is_live_scene = is_live_scene;
     if (!is_live_scene) glfwSetWindowTitle(window, "edi2tor");
 
     state->window = window;
@@ -55,6 +55,7 @@ void on_render(Editor_State *state, const Platform_Timing *t)
 
     glViewport(0, 0, (GLsizei)state->render_state.framebuffer_dim.x, (GLsizei)state->render_state.framebuffer_dim.y);
 
+    glClearColor(0.4f, 0.3f, 0.1f, 1.0f);
     glDisable(GL_SCISSOR_TEST);
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(state->render_state.vao);
@@ -83,8 +84,7 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
     {
         case PLATFORM_EVENT_CHAR:
         {
-            if (state->active_view != NULL && state->active_view->kind == VIEW_KIND_BUFFER)
-                action_buffer_view_input_char(state, &state->active_view->bv, (char)e->character.codepoint);
+            input_char_global(state, e);
         } break;
 
         case PLATFORM_EVENT_KEY:
@@ -496,11 +496,6 @@ void view_destroy(View *view, Editor_State *state)
             view_free_slot(view, state);
             free(view);
         } break;
-
-        default:
-        {
-            log_warning("view_destroy: Unhandled View kind: %d", view->kind);
-        } break;
     }
 
     if (state->active_view == view)
@@ -588,11 +583,6 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
             resize_event.window_resize.px_w = (float)view->lsv.framebuffer.w;
             resize_event.window_resize.px_h = (float)view->lsv.framebuffer.h;
             view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &resize_event);
-        } break;
-
-        default:
-        {
-            log_warning("view_set_rect: Unhandled View kind: %d", view->kind);
         } break;
     }
 }
@@ -831,8 +821,8 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             {
                 .x = prompt_rect.x,
                 .y = prompt_rect.y,
-                .w = 500,
-                .h = 500
+                .w = 800,
+                .h = 600
             };
             File_Kind file_kind = file_detect_kind(result.str);
             switch (file_kind)
@@ -1375,7 +1365,9 @@ void draw_status_bar(Editor_State *state, Render_State *render_state, const Plat
         status_str_y += font_line_height;
     }
 
-    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s", t->fps_avg, t->prev_delta_time, state->working_dir);
+    Vec_2 mouse_screen_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s; M: " VEC2_FMT, t->fps_avg, t->prev_delta_time, state->working_dir, VEC2_ARG(mouse_screen_pos));
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
 }
 
@@ -1398,6 +1390,7 @@ void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, 
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
     glClearColor(0, 0, 0, 1.0f);
     glBindVertexArray(render_state->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, render_state->vbo);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
@@ -1575,6 +1568,14 @@ Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport)
     screen_rect.w = canvas_rect.w * canvas_viewport.zoom;
     screen_rect.h = canvas_rect.h * canvas_viewport.zoom;
     return screen_rect;
+}
+
+Vec_2 canvas_pos_to_screen_pos(Vec_2 canvas_pos, Viewport canvas_viewport)
+{
+    Vec_2 screen_pos;
+    screen_pos.x = (canvas_pos.x - canvas_viewport.rect.x) * canvas_viewport.zoom;
+    screen_pos.y = (canvas_pos.y - canvas_viewport.rect.y) * canvas_viewport.zoom;
+    return screen_pos;
 }
 
 Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport)

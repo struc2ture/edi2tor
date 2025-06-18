@@ -10,9 +10,39 @@
 #include "platform_types.h"
 #include "util.h"
 
+void input_char_global(Editor_State *state, const Platform_Event *e)
+{
+    if (state->active_view != NULL)
+    {
+        input_char_view(state, state->active_view, e);
+    }
+}
+
+void input_char_view(Editor_State *state, View *view, const Platform_Event *e)
+{
+    switch (view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            action_buffer_view_input_char(state, &state->active_view->bv, (char)e->character.codepoint);
+        } break;
+
+        case VIEW_KIND_IMAGE:
+        {
+            // Nothing
+        } break;
+
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+        } break;
+    }
+}
+
 void input_key_global(Editor_State *state, const Platform_Event *e)
 {
     bool will_propagate_to_view = true;
+    View *prev_active_view = state->active_view;
     if (e->key.action == GLFW_PRESS)
     {
         if (e->key.mods == 0)
@@ -84,9 +114,9 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
         }
     }
 
-    if (will_propagate_to_view && state->active_view)
+    if (will_propagate_to_view && prev_active_view)
     {
-        input_key_view(state, state->active_view, e);
+        input_key_view(state, prev_active_view, e);
     }
 }
 void input_key_view(Editor_State *state, View *view, const Platform_Event *e)
@@ -106,11 +136,6 @@ void input_key_view(Editor_State *state, View *view, const Platform_Event *e)
         case VIEW_KIND_LIVE_SCENE:
         {
             view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
-        } break;
-
-        default:
-        {
-            log_warning("view_handle_key: Unhandled View kind: %d", view->kind);
         } break;
     }
 }
@@ -281,7 +306,6 @@ void input_mouse_motion_global(Editor_State *state, const Platform_Event *e)
     }
     else if (state->active_view)
     {
-        // TODO: Offset mouse position to top left of inner view
         input_mouse_motion_view(state, state->active_view, e);
     }
 }
@@ -295,14 +319,15 @@ void input_mouse_motion_view(Editor_State *state, View *view, const Platform_Eve
             input_mouse_motion_buffer_view(state, &view->bv, e);
         } break;
 
-        case VIEW_KIND_LIVE_SCENE:
+        case VIEW_KIND_IMAGE:
         {
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+            // Nothing
         } break;
 
-        default:
+        case VIEW_KIND_LIVE_SCENE:
         {
-            log_warning("input_mouse_drag_view: Unhandled View kind: %d", view->kind);
+            Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
         } break;
     }
 }
@@ -352,7 +377,6 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
                     Rect inner_view_rect = view_get_inner_rect(clicked_view, &state->render_state);
                     if (rect_p_intersect(mouse_canvas_pos, inner_view_rect))
                     {
-                        // TODO: Offset mouse position to top left of inner view
                         input_mouse_button_view(state, state->active_view, e);
                         found_target = true;
                     }
@@ -391,14 +415,15 @@ bool input_mouse_button_view(Editor_State *state, View *view, const Platform_Eve
             input_mouse_button_buffer_view(state, &view->bv, e);
         } break;
 
-        case VIEW_KIND_LIVE_SCENE:
+        case VIEW_KIND_IMAGE:
         {
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+            // Nothing
         } break;
 
-        default:
+        case VIEW_KIND_LIVE_SCENE:
         {
-            log_warning("input_mouse_click_view: Unhandled View kind: %d", view->kind);
+            Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
         } break;
     }
     return false;
@@ -444,7 +469,6 @@ void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
     bool scroll_handled_by_view = false;
     if (state->mouse_state.scrolled_view)
     {
-        // TODO: Offset mouse position to top left of inner view
         scroll_handled_by_view = input_mouse_scroll_view(state, state->mouse_state.scrolled_view, e);
     }
     if (!scroll_handled_by_view)
@@ -464,14 +488,16 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Eve
             return true;
         } break;
 
-        case VIEW_KIND_LIVE_SCENE:
+        case VIEW_KIND_IMAGE:
         {
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+            // Nothing
         } break;
 
-        default:
+        case VIEW_KIND_LIVE_SCENE:
         {
-            log_warning("input_mouse_scroll_view: Unhandled View kind: %d", view->kind);
+            Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
+            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
+            return true;
         } break;
     }
     return false;
@@ -489,4 +515,30 @@ void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
     float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
     if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
+}
+
+Platform_Event input__adjust_mouse_event_for_live_scene_view(Editor_State *state, Live_Scene_View *lsv, const Platform_Event *e)
+{
+    Platform_Event adjusted_event = *e;
+    Vec_2 offset = canvas_pos_to_screen_pos((Vec_2){lsv->framebuffer_rect.x, lsv->framebuffer_rect.y}, state->canvas_viewport);
+    switch (adjusted_event.kind)
+    {
+        case PLATFORM_EVENT_MOUSE_BUTTON:
+        {
+            adjusted_event.mouse_button.pos = vec2_sub(e->mouse_button.pos, offset);
+        } break;
+
+        case PLATFORM_EVENT_MOUSE_MOTION:
+        {
+            adjusted_event.mouse_motion.pos = vec2_sub(e->mouse_motion.pos, offset);
+        } break;
+
+        case PLATFORM_EVENT_MOUSE_SCROLL:
+        {
+            adjusted_event.mouse_scroll.pos = vec2_sub(e->mouse_scroll.pos, offset);
+        } break;
+
+        default: break;
+    }
+    return adjusted_event;
 }

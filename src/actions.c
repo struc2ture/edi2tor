@@ -136,7 +136,7 @@ bool action_prompt_open_file(Editor_State *state)
     create_buffer_view_prompt(
         "Open file:",
         prompt_create_context_open_file(),
-        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 400, 100},
         state);
     return true;
 }
