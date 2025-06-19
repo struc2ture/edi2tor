@@ -1131,14 +1131,17 @@ void draw_string(const char *str, Render_Font font, float x, float y, const unsi
     Vert_Buffer vert_buf = {0};
     while (*str)
     {
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1);
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
-        vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
+        if (*str >= 32)
+        {
+            stbtt_aligned_quad q;
+            stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1);
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
+        }
         str++;
     }
     glActiveTexture(GL_TEXTURE0);
@@ -1200,7 +1203,6 @@ void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_
 {
     Text_Buffer *text_buffer = &buffer_view->buffer->text_buffer;
     Display_Cursor *display_cursor = &buffer_view->cursor;
-    Text_Selection *text_selection = &buffer_view->selection; (void)text_selection;
     Viewport *buffer_viewport = &buffer_view->viewport;
 
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
