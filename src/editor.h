@@ -122,6 +122,7 @@ typedef struct {
     GLuint main_shader_mvp_loc;
     GLuint grid_shader_mvp_loc;
     GLuint grid_shader_offset_loc;
+    GLuint grid_shader_spacing_loc;
     GLuint grid_shader_resolution_loc;
     GLuint image_shader_mvp_loc;
     GLuint framebuffer_shader_mvp_loc;

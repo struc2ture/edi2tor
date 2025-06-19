@@ -252,6 +252,7 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     render_state->main_shader_mvp_loc = glGetUniformLocation(render_state->main_shader, "u_mvp");
     render_state->grid_shader_mvp_loc = glGetUniformLocation(render_state->grid_shader, "u_mvp");
     render_state->grid_shader_offset_loc = glGetUniformLocation(render_state->grid_shader, "u_offset");
+    render_state->grid_shader_spacing_loc = glGetUniformLocation(render_state->grid_shader, "u_spacing");
     render_state->grid_shader_resolution_loc = glGetUniformLocation(render_state->grid_shader, "u_resolution");
     render_state->image_shader_mvp_loc = glGetUniformLocation(render_state->image_shader, "u_mvp");
     render_state->framebuffer_shader_mvp_loc = glGetUniformLocation(render_state->framebuffer_shader, "u_mvp");
@@ -1152,6 +1153,9 @@ void draw_grid(Viewport canvas_viewport, Render_State *render_state)
     float scaled_offset_x = canvas_viewport.rect.x * render_state->dpi_scale;
     float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
     glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
+
+    const float grid_spacing = 100.0f;
+    glUniform1f(render_state->grid_shader_spacing_loc, grid_spacing * render_state->dpi_scale);
 
     draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
 }
