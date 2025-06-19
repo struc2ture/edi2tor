@@ -137,7 +137,7 @@ bool scene_loader_dylib_check_and_hotreload(Scene_Dylib *scene_dylib)
         *scene_dylib = scene_loader_dylib_open(old_dylib.original_path);
         if (!scene_dylib->handle)
         {
-            fprintf(stderr, "[SCENE LOADER] Failed to reload dylib at %s.\n", scene_dylib->original_path);
+            fprintf(stderr, "[SCENE LOADER] Failed to reload dylib at %s.\n", old_dylib.original_path);
             *scene_dylib = old_dylib;
             scene_dylib->timestamp = current_timestamp;
             return true;

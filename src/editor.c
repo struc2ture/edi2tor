@@ -1,6 +1,7 @@
 #include "editor.h"
 
 #include "common.h"
+#include "scene_loader.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -121,7 +122,13 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
 
 void on_destroy(Editor_State *state)
 {
-    (void)state;
+    for (int i = 0; i < state->view_count; i++)
+    {
+        if (state->views[i]->kind == VIEW_KIND_LIVE_SCENE)
+        {
+            live_scene_destroy(state->views[i]->lsv.live_scene);
+        }
+    }
 }
 
 bool gl_check_compile_success(GLuint shader, const char *src)
@@ -724,20 +731,16 @@ Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, fl
 {
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
-    live_scene->dylib = live_scene_load_dylib(path);
+    live_scene->dylib = scene_loader_dylib_open(path);
     live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo);
     return live_scene;
 }
 
 void live_scene_check_hot_reload(Live_Scene *live_scene)
 {
-    time_t dl_current_timestamp = get_file_timestamp(live_scene->dylib.dl_path);
-    if (dl_current_timestamp != live_scene->dylib.dl_timestamp)
+    if (scene_loader_dylib_check_and_hotreload(&live_scene->dylib))
     {
-        dlclose(live_scene->dylib.dl_handle);
-        live_scene->dylib= live_scene_load_dylib(live_scene->dylib.dl_path);
         live_scene->dylib.on_reload(live_scene->state);
-        trace_log("live_scene_check_hot_reload: Reloaded live scene (%s)", live_scene->dylib.dl_path);
     }
 }
 
@@ -745,9 +748,7 @@ void live_scene_destroy(Live_Scene *live_scene)
 {
     live_scene->dylib.on_destroy(live_scene->state);
     free(live_scene->state);
-    live_scene->state = NULL;
-    dlclose(live_scene->dylib.dl_handle);
-    free(live_scene->dylib.dl_path);
+    scene_loader_dylib_close(&live_scene->dylib);
     free(live_scene);
 }
 
@@ -2511,37 +2512,23 @@ void write_clipboard_mac(const char *text)
     pclose(pipe);
 }
 
-Live_Scene_Dylib live_scene_load_dylib(const char *path)
-{
-    Live_Scene_Dylib dylib = {0};
-    dylib.dl_handle = xdlopen(path);
-    dylib.dl_path = xstrdup(path);
-    dylib.dl_timestamp = get_file_timestamp(path);
-    dylib.on_init = xdlsym(dylib.dl_handle, "on_init");
-    dylib.on_reload = xdlsym(dylib.dl_handle, "on_reload");
-    dylib.on_render = xdlsym(dylib.dl_handle, "on_render");
-    dylib.on_platform_event = xdlsym(dylib.dl_handle, "on_platform_event");
-    dylib.on_destroy = xdlsym(dylib.dl_handle, "on_destroy");
-    return dylib;
-}
-
 void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo)
 {
-    const char *dl_path = xstrdup((*live_scene)->dylib.dl_path);
+    Live_Scene *new_live_scene = live_scene_create(state, (*live_scene)->dylib.original_path, w, h, fbo);
     live_scene_destroy(*live_scene);
-    *live_scene = live_scene_create(state, dl_path, w, h, fbo);
+    *live_scene = new_live_scene;
 }
 
 void live_scene_rebuild(Live_Scene *live_scene)
 {
     char command_buf[1024];
-    snprintf(command_buf, sizeof(command_buf), "make %s", live_scene->dylib.dl_path);
+    snprintf(command_buf, sizeof(command_buf), "make %s", live_scene->dylib.original_path);
     int result = system(command_buf);
     if (result != 0)
     {
-        log_warning("live_scene_rebuild: Build failed with code %d for dylib %s", result, live_scene->dylib.dl_path);
+        log_warning("live_scene_rebuild: Build failed with code %d for dylib %s", result, live_scene->dylib.original_path);
     }
-    trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.dl_path);
+    trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.original_path);
 }
 
 bool file_is_image(const char *path)
@@ -2591,4 +2578,5 @@ bool sys_file_exists(const char *path)
 
 #include "actions.c"
 #include "input.c"
+#include "scene_loader.c"
 #include "unit_tests.c"

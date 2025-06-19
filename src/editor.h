@@ -12,6 +12,7 @@
 #include <stb_truetype.h>
 
 #include "platform_types.h"
+#include "scene_loader.h"
 
 #define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
@@ -204,26 +205,9 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
-typedef void (*live_scene_on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo);
-typedef void (*live_scene_on_reload_t)(void *state);
-typedef void (*live_scene_on_render_t)(void *state, const Platform_Timing *t);
-typedef void (*live_scene_on_platform_event_t)(void *state, const Platform_Event *e);
-typedef void (*live_scene_on_destroy_t)(void *state);
-
-typedef struct {
-    void *dl_handle;
-    char *dl_path;
-    time_t dl_timestamp;
-    live_scene_on_init_t on_init;
-    live_scene_on_reload_t on_reload;
-    live_scene_on_render_t on_render;
-    live_scene_on_platform_event_t on_platform_event;
-    live_scene_on_destroy_t on_destroy;
-} Live_Scene_Dylib;
-
 struct Live_Scene {
     void *state;
-    Live_Scene_Dylib dylib;
+    Scene_Dylib dylib;
 } ;
 
 typedef struct {
@@ -491,7 +475,6 @@ Image file_open_image(const char *path);
 void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
 
-Live_Scene_Dylib live_scene_load_dylib(const char *path);
 void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo);
 void live_scene_rebuild(Live_Scene *live_scene);
 
