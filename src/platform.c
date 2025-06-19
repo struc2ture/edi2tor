@@ -1,179 +1,25 @@
 #include "common.h"
 
-#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <time.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
 #include "glfw_helpers.h"
 #include "platform_types.h"
+#include "scene_loader.h"
 
 #define INITIAL_PROGRAM_NAME "plat4form"
 #define INITIAL_WINDOW_WIDTH 1000
 #define INITIAL_WINDOW_HEIGHT 900
 #define FPS_MEASUREMENT_FREQ 0.1f
 
-typedef void (*on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo);
-typedef void (*on_reload_t)(void *state);
-typedef void (*on_render_t)(void *state, const Platform_Timing *t);
-typedef void (*on_platform_event_t)(void *state, const Platform_Event *e);
-typedef void (*on_destroy_t)(void *state);
+static Scene_Dylib g_scene_dylib;
+static void *g_scene_state;
 
-typedef struct {
-    void *handle;
-    char *dl_path;
-    time_t dl_timestamp;
-    on_init_t on_init;
-    on_reload_t on_reload;
-    on_render_t on_render;
-    on_platform_event_t on_platform_event;
-    on_destroy_t on_destroy;
-} Dl_Info;
-
-static Dl_Info g_dl;
-static void *g_dl_state;
 static Vec_2 g_mouse_prev_pos;
 static Platform_Timing g_timing;
-
-time_t get_file_timestamp(const char *path)
-{
-    struct stat attr;
-    if (stat(path, &attr) == 0)
-    {
-        return attr.st_mtime;
-    }
-    fprintf(stderr, "[PLATFORM] Failed to get timestamp for file at %s\n", path);
-    return 0;
-}
-
-void copy_file(const char *src, const char *dest)
-{
-    FILE *in = fopen(src, "rb");
-    if (!in)
-    {
-        fprintf(stderr, "[PLATFORM] copy_file: failed to open file for read at: %s\n", src);
-        return;
-    }
-
-    FILE *out = fopen(dest, "wb");
-    if (!out)
-    {
-        fprintf(stderr, "[PLATFORM] copy_file: failed to open file for write at: %s\n", dest);
-        fclose(in);
-        return;
-    }
-
-    char buf[4096];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
-    {
-        fwrite(buf, 1, n, out);
-    }
-
-    fclose(in);
-    fclose(out);
-
-    printf("[PLATFORM] copy_file: copied file to %s\n", dest);
-}
-
-void delete_file(const char *path)
-{
-    if (remove(path) == 0)
-    {
-        printf("[PLATFORM] delete_file: deleted file at %s\n", path);
-    }
-    else
-    {
-        fprintf(stderr,"[PLATFORM] delete_file: failed to deleted file at %s\n", path);
-    }
-}
-
-Dl_Info dylib_open(const char *path)
-{
-    const char *dot = strrchr(path, '.');
-    size_t base_len = dot - path;
-    time_t now = time(NULL);
-
-    char temp_path[256];
-    snprintf(temp_path, sizeof(temp_path), "%.*s_%ld.dylib", (int)base_len, path, now);
-    copy_file(path, temp_path);
-
-    printf("[PLATFORM] dylib_open: loading dylib at %s\n", temp_path);
-
-    Dl_Info dl_info = {0};
-    dl_info.handle = dlopen(temp_path, RTLD_NOW);
-    if (dl_info.handle)
-    {
-        dl_info.on_init = dlsym(dl_info.handle, "on_init");
-        if (!dl_info.on_init)
-        {
-            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
-            dlclose(temp_path);
-            delete_file(temp_path);
-            return (Dl_Info){0};
-        }
-        dl_info.on_reload = dlsym(dl_info.handle, "on_reload");
-        if (!dl_info.on_init)
-        {
-            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
-            dlclose(temp_path);
-            delete_file(temp_path);
-            return (Dl_Info){0};
-        }
-        dl_info.on_render = dlsym(dl_info.handle, "on_render");
-        if (!dl_info.on_init)
-        {
-            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
-            dlclose(temp_path);
-            delete_file(temp_path);
-            return (Dl_Info){0};
-        }
-        dl_info.on_platform_event = dlsym(dl_info.handle, "on_platform_event");
-        if (!dl_info.on_init)
-        {
-            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
-            dlclose(temp_path);
-            delete_file(temp_path);
-            return (Dl_Info){0};
-        }
-        dl_info.on_destroy = dlsym(dl_info.handle, "on_destroy");
-        if (!dl_info.on_init)
-        {
-            fprintf(stderr, "[PLATFORM] Failed to open symbol: 'on_init' in %s\n", temp_path);
-            dlclose(temp_path);
-            delete_file(temp_path);
-            return (Dl_Info){0};
-        }
-
-        dl_info.dl_path = strdup(temp_path);
-        dl_info.dl_timestamp = get_file_timestamp(path);
-    }
-    else
-    {
-        fprintf(stderr, "[PLATFORM] Failed to open dylib: %s\n", temp_path);
-        dlclose(temp_path);
-        delete_file(temp_path);
-        return (Dl_Info){0};
-    }
-
-    return dl_info;
-}
-
-void dylib_close(Dl_Info *dl_info)
-{
-    printf("[PLATFORM] dylib_close: closing dylib at %s\n", dl_info->dl_path);
-
-    dlclose(dl_info->handle);
-    delete_file(dl_info->dl_path);
-    free(dl_info->dl_path);
-
-    *dl_info = (Dl_Info){0};
-}
 
 void perform_timing_calculations(Platform_Timing *t)
 {
@@ -198,39 +44,33 @@ void perform_timing_calculations(Platform_Timing *t)
 void char_callback(GLFWwindow *window, unsigned int codepoint)
 {
     (void) window;
-
     Platform_Event e;
     e.kind = PLATFORM_EVENT_CHAR;
     e.character.codepoint = codepoint;
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     (void) window;
-
     Platform_Event e;
     e.kind = PLATFORM_EVENT_KEY;
     e.key.key = key;
     e.key.scancode = scancode;
     e.key.action = action;
     e.key.mods = mods;
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 void mouse_cursor_pos_callback(GLFWwindow *window, double xpos, double ypos)
 {
     (void)window;
-
     Platform_Event e;
     e.kind = PLATFORM_EVENT_MOUSE_MOTION;
     e.mouse_motion.pos = (Vec_2){(float)xpos, (float)ypos};
     e.mouse_motion.delta = vec2_sub(e.mouse_motion.pos, g_mouse_prev_pos);
     g_mouse_prev_pos = e.mouse_motion.pos;
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
@@ -241,33 +81,28 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     e.mouse_button.action = action;
     e.mouse_button.mods = mods;
     e.mouse_button.pos = glfwh_get_mouse_position(window);
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     (void)window;
-
     Platform_Event e;
     e.kind = PLATFORM_EVENT_MOUSE_SCROLL;
     e.mouse_scroll.scroll = (Vec_2){(float)x_offset, (float)y_offset};
     e.mouse_scroll.pos = glfwh_get_mouse_position(window);
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int w, int h)
 {
     (void)window;
-
     Platform_Event e;
     e.kind = PLATFORM_EVENT_WINDOW_RESIZE;
     e.window_resize.px_w = w;
     e.window_resize.px_h = h;
     glfwGetWindowSize(window, &e.window_resize.logical_w, &e.window_resize.logical_h);
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 void window_size_callback(GLFWwindow *window, int w, int h)
@@ -278,8 +113,7 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     e.window_resize.logical_w = w;
     e.window_resize.logical_h = h;
     glfwGetFramebufferSize(window, &e.window_resize.px_w, &e.window_resize.px_h);
-
-    g_dl.on_platform_event(g_dl_state, &e);
+    g_scene_dylib.on_platform_event(g_scene_state, &e);
 }
 
 // --------------------------------------------------------
@@ -306,13 +140,22 @@ int main(int argc, char **argv)
     printf("[PLATFORM] OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
     printf("[PLATFORM] OpenGL Version: %s\n", glGetString(GL_VERSION));
 
-    g_dl = dylib_open(dylib_path);
-    g_dl_state = calloc(1, 4096);
+    g_scene_dylib = scene_loader_dylib_open(dylib_path);
+    g_scene_state = calloc(1, 4096);
 
     int window_w, window_h, window_px_w, window_px_h;
     glfwGetWindowSize(window, &window_w, &window_h);
     glfwGetFramebufferSize(window, &window_px_w, &window_px_h);
-    g_dl.on_init(g_dl_state, window, (float)window_w, (float)window_h, (float)window_px_w, (float)window_px_h, false, 0);
+
+    g_scene_dylib.on_init(
+        g_scene_state,
+        window,
+        (float)window_w,
+        (float)window_h,
+        (float)window_px_w,
+        (float)window_px_h,
+        false,
+        0);
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetCharCallback(window, char_callback);
@@ -325,39 +168,27 @@ int main(int argc, char **argv)
 
     while (!glfwWindowShouldClose(window))
     {
-        time_t dl_current_timestamp = get_file_timestamp(dylib_path);
-        if (dl_current_timestamp != 0 && dl_current_timestamp != g_dl.dl_timestamp)
+        if (scene_loader_dylib_check_and_hotreload(&g_scene_dylib))
         {
-            Dl_Info old_dylib = g_dl;
-            g_dl = dylib_open(dylib_path);
-            if (!g_dl.handle)
-            {
-                fprintf(stderr, "[PLATFORM] Failed to reload dylib.\n");
-                g_dl = old_dylib;
-                g_dl.dl_timestamp = dl_current_timestamp;
-            }
-            else
-            {
-                g_dl.on_reload(g_dl_state);
-                printf("[PLATFORM] Reloaded dylib.\n");
-                dylib_close(&old_dylib);
-            }
+            g_scene_dylib.on_reload(g_scene_state);
         }
 
         perform_timing_calculations(&g_timing);
 
-        g_dl.on_render(g_dl_state, &g_timing);
+        g_scene_dylib.on_render(g_scene_state, &g_timing);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    g_dl.on_destroy(g_dl_state);
-    free(g_dl_state);
-    dylib_close(&g_dl);
+    g_scene_dylib.on_destroy(g_scene_state);
+
+    free(g_scene_state);
+    scene_loader_dylib_close(&g_scene_dylib);
 
     glfwDestroyWindow(window);
     glfwTerminate();
-
     return 0;
 }
+
+#include "scene_loader.c"
