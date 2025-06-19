@@ -380,11 +380,6 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
             buffer_free_slot(buffer, state);
             free(buffer);
         } break;
-
-        default:
-        {
-            bassert(!"buffer_destroy: unhandled buffer kind.");
-        }
     }
 }
 
@@ -815,7 +810,6 @@ Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
 
 bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, Editor_State *state)
 {
-    (void)state;
     switch (context.kind)
     {
         case PROMPT_OPEN_FILE:
@@ -900,11 +894,6 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
         case PROMPT_CHANGE_WORKING_DIR:
         {
             return sys_change_working_dir(result.str, state);
-        } break;
-
-        default:
-        {
-            log_warning("prompt_submit: unhandled prompt kind");
         } break;
     }
     return true;
@@ -1190,11 +1179,6 @@ void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_Stat
         case VIEW_KIND_LIVE_SCENE:
         {
             draw_live_scene_view(&view->lsv, render_state, t);
-        } break;
-
-        default:
-        {
-            log_warning("draw_view: unhandled View kind: %d", view->kind);
         } break;
     }
 }

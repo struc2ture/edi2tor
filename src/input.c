@@ -144,25 +144,26 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
 {
     if (e->key.action == GLFW_PRESS || e->key.action == GLFW_REPEAT)
     {
+        if (e->key.key == GLFW_KEY_LEFT ||
+            e->key.key == GLFW_KEY_RIGHT ||
+            e->key.key == GLFW_KEY_UP ||
+            e->key.key == GLFW_KEY_DOWN)
+        {
+            Cursor_Movement_Dir dir = CURSOR_MOVE_UP;
+            switch (e->key.key)
+            {
+                case GLFW_KEY_LEFT: dir = CURSOR_MOVE_LEFT; break;
+                case GLFW_KEY_RIGHT: dir = CURSOR_MOVE_RIGHT; break;
+                case GLFW_KEY_UP: dir = CURSOR_MOVE_UP; break;
+                case GLFW_KEY_DOWN: dir = CURSOR_MOVE_DOWN; break;
+            }
+            action_buffer_view_move_cursor(state, buffer_view, dir, e->key.mods & GLFW_MOD_SHIFT, e->key.mods & GLFW_MOD_ALT, e->key.mods & GLFW_MOD_SUPER);
+        }
+
         if (e->key.mods == 0)
         {
             switch(e->key.key)
             {
-                case GLFW_KEY_LEFT:
-                case GLFW_KEY_RIGHT:
-                case GLFW_KEY_UP:
-                case GLFW_KEY_DOWN:
-                {
-                    Cursor_Movement_Dir dir = CURSOR_MOVE_UP;
-                    switch (e->key.key)
-                    {
-                        case GLFW_KEY_LEFT: dir = CURSOR_MOVE_LEFT; break;
-                        case GLFW_KEY_RIGHT: dir = CURSOR_MOVE_RIGHT; break;
-                        case GLFW_KEY_UP: dir = CURSOR_MOVE_UP; break;
-                        case GLFW_KEY_DOWN: dir = CURSOR_MOVE_DOWN; break;
-                    }
-                    action_buffer_view_move_cursor(state, buffer_view, dir, e->key.mods & GLFW_MOD_SHIFT, e->key.mods & GLFW_MOD_ALT, e->key.mods & GLFW_MOD_SUPER);
-                } break;
                 case GLFW_KEY_ENTER:
                 {
                     switch (buffer_view->buffer->kind)
