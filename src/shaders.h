@@ -1,11 +1,13 @@
 #pragma once
 
 const char *shader_main_vert_src =
-"#version 410 core\n"
+"#version 330 core\n"
 "layout (location = 0) in vec2 aPos;\n"
 "layout (location = 1) in vec2 aTexCoord;\n"
 "layout (location = 2) in vec4 aColor;\n"
-"uniform mat4 u_mvp;\n"
+"layout(std140) uniform Matrices {\n"
+"    mat4 u_mvp;\n"
+"};\n"
 "out vec2 TexCoord;\n"
 "out vec4 Color;\n"
 "void main() {\n"
@@ -15,7 +17,7 @@ const char *shader_main_vert_src =
 "}\n";
 
 const char *shader_main_frag_src =
-"#version 410 core\n"
+"#version 330 core\n"
 "out vec4 FragColor;\n"
 "in vec2 TexCoord;\n"
 "uniform sampler2D u_tex;\n"
@@ -25,7 +27,7 @@ const char *shader_main_frag_src =
 "}\n";
 
 const char *shader_image_frag_src =
-"#version 410 core\n"
+"#version 330 core\n"
 "out vec4 FragColor;\n"
 "in vec2 TexCoord;\n"
 "uniform sampler2D u_tex;\n"
@@ -35,11 +37,13 @@ const char *shader_image_frag_src =
 "}\n";
 
 const char *shader_framebuffer_vert_src =
-"#version 410 core\n"
+"#version 330 core\n"
 "layout (location = 0) in vec2 aPos;\n"
 "layout (location = 1) in vec2 aTexCoord;\n"
 "layout (location = 2) in vec4 aColor;\n"
-"uniform mat4 u_mvp;\n"
+"layout(std140) uniform Matrices {\n"
+"    mat4 u_mvp;\n"
+"};\n"
 "out vec2 TexCoord;\n"
 "out vec4 Color;\n"
 "void main() {\n"
@@ -49,7 +53,7 @@ const char *shader_framebuffer_vert_src =
 "}\n";
 
 const char *shader_framebuffer_frag_src =
-"#version 410 core\n"
+"#version 330 core\n"
 "out vec4 FragColor;\n"
 "in vec2 TexCoord;\n"
 "uniform sampler2D u_tex;\n"
@@ -59,7 +63,7 @@ const char *shader_framebuffer_frag_src =
 "}\n";
 
 const char *shader_grid_frag_src =
-"#version 410 core\n"
+"#version 330 core\n"
 "out vec4 FragColor;\n"
 "uniform vec2 u_resolution;\n"
 "uniform vec2 u_offset;\n"

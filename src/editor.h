@@ -120,6 +120,7 @@ typedef struct {
     GLuint framebuffer_shader;
     GLuint vao;
     GLuint vbo;
+    GLuint mvp_ubo;
     GLuint main_shader_mvp_loc;
     GLuint grid_shader_mvp_loc;
     GLuint grid_shader_offset_loc;

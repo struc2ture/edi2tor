@@ -248,13 +248,20 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     render_state->image_shader = gl_create_shader_program(shader_main_vert_src, shader_image_frag_src);
     render_state->framebuffer_shader = gl_create_shader_program(shader_framebuffer_vert_src, shader_framebuffer_frag_src);
 
-    render_state->main_shader_mvp_loc = glGetUniformLocation(render_state->main_shader, "u_mvp");
-    render_state->grid_shader_mvp_loc = glGetUniformLocation(render_state->grid_shader, "u_mvp");
     render_state->grid_shader_offset_loc = glGetUniformLocation(render_state->grid_shader, "u_offset");
     render_state->grid_shader_spacing_loc = glGetUniformLocation(render_state->grid_shader, "u_spacing");
     render_state->grid_shader_resolution_loc = glGetUniformLocation(render_state->grid_shader, "u_resolution");
-    render_state->image_shader_mvp_loc = glGetUniformLocation(render_state->image_shader, "u_mvp");
-    render_state->framebuffer_shader_mvp_loc = glGetUniformLocation(render_state->framebuffer_shader, "u_mvp");
+
+    glGenBuffers(1, &render_state->mvp_ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Mat_4), NULL, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    GLuint mvp_ubo_binding_point = 0;
+    glBindBufferBase(GL_UNIFORM_BUFFER, mvp_ubo_binding_point, render_state->mvp_ubo);
+    glUniformBlockBinding(render_state->main_shader, glGetUniformBlockIndex(render_state->main_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->grid_shader, glGetUniformBlockIndex(render_state->grid_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->image_shader, glGetUniformBlockIndex(render_state->image_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->framebuffer_shader, glGetUniformBlockIndex(render_state->framebuffer_shader, "Matrices"), mvp_ubo_binding_point);
 
     glGenVertexArrays(1, &render_state->vao);
     glGenBuffers(1, &render_state->vbo);
@@ -1470,12 +1477,16 @@ void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_s
     Mat_4 view = viewport_get_transform(canvas_viewport);
     Mat_4 mvp = mat4_mul(view, proj);
 
-    glUseProgram(render_state->image_shader);
-    glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, mvp.m);
-    glUseProgram(render_state->framebuffer_shader);
-    glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, mvp.m);
-    glUseProgram(render_state->main_shader);
-    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp.m);
+    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    // glUseProgram(render_state->image_shader);
+    // glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, mvp.m);
+    // glUseProgram(render_state->framebuffer_shader);
+    // glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, mvp.m);
+    // glUseProgram(render_state->main_shader);
+    // glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp.m);
 
     glDisable(GL_SCISSOR_TEST);
 }
@@ -1484,12 +1495,16 @@ void transform_set_screen_space(Render_State *render_state)
 {
     Mat_4 proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
 
-    glUseProgram(render_state->image_shader);
-    glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, proj.m);
-    glUseProgram(render_state->framebuffer_shader);
-    glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, proj.m);
-    glUseProgram(render_state->main_shader);
-    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, proj.m);
+    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(proj), proj.m);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    // glUseProgram(render_state->image_shader);
+    // glUniformMatrix4fv(render_state->image_shader_mvp_loc, 1, GL_FALSE, proj.m);
+    // glUseProgram(render_state->framebuffer_shader);
+    // glUniformMatrix4fv(render_state->framebuffer_shader_mvp_loc, 1, GL_FALSE, proj.m);
+    // glUseProgram(render_state->main_shader);
+    // glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, proj.m);
 
     glDisable(GL_SCISSOR_TEST);
 }
