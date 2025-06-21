@@ -166,6 +166,8 @@ int main(int argc, char **argv)
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, mouse_cursor_pos_callback);
 
+    glfwSwapInterval(1);
+
     while (!glfwWindowShouldClose(window))
     {
         if (scene_loader_dylib_check_and_hotreload(&g_scene_dylib))
