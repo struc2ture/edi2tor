@@ -25,7 +25,7 @@
 #define INDENT_SPACES 4
 #define DEFAULT_ZOOM 1.0f
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
-#define FONT_SIZE 20.0f
+#define FONT_SIZE 18.0f
 #define ENABLE_OS_CLIPBOARD true
 
 #define FILE_PATH1 "res/mock6.txt"

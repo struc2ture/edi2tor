@@ -1156,7 +1156,7 @@ void draw_grid(Viewport canvas_viewport, Render_State *render_state)
     float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
     glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
 
-    const float grid_spacing = 100.0f;
+    const float grid_spacing = 50.0f;
     glUniform1f(render_state->grid_shader_spacing_loc, grid_spacing * render_state->dpi_scale);
 
     draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
