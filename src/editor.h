@@ -110,6 +110,7 @@ typedef struct {
     float size;
     float ascent, descent, line_gap;
     int atlas_w, atlas_h;
+    float i_dpi_scale;
 } Render_Font;
 
 typedef struct {
@@ -359,7 +360,7 @@ void viewport_set_zoom(Viewport *viewport, float new_zoom);
 Vert make_vert(float x, float y, float u, float v, const unsigned char color[4]);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 
-Render_Font load_font(const char *path);
+Render_Font load_font(const char *path, float dpi_scale);
 float get_font_line_height(Render_Font font);
 float get_char_width(char c, Render_Font font);
 Rect get_string_rect(const char *str, Render_Font font, float x, float y);

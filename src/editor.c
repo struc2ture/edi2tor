@@ -274,7 +274,7 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     unsigned char white_texture_bytes[] = { 255 };
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, white_texture_bytes);
 
-    render_state->font = load_font(FONT_PATH);
+    render_state->font = load_font(FONT_PATH, render_state->dpi_scale);
     render_state->buffer_view_line_num_col_width = get_string_rect("000", render_state->font, 0, 0).w;
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
@@ -925,7 +925,7 @@ void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert)
     vert_buffer->verts[vert_buffer->vert_count++] = vert;
 }
 
-Render_Font load_font(const char *path)
+Render_Font load_font(const char *path, float dpi_scale)
 {
     Render_Font font = {0};
 
@@ -944,8 +944,9 @@ Render_Font load_font(const char *path)
     font.atlas_h = 512;
     font.char_count = 96;
     font.char_data = xcalloc(font.char_count * sizeof(font.char_data[0]));
-    stbtt_BakeFontBitmap(file_bytes, 0, font.size, atlas_bitmap, font.atlas_w, font.atlas_h, 32, font.char_count, font.char_data);
-    stbtt_GetScaledFontVMetrics(file_bytes, 0, font.size, &font.ascent, &font.descent, &font.line_gap);
+    font.i_dpi_scale = 1 / dpi_scale;
+    stbtt_BakeFontBitmap(file_bytes, 0, font.size * dpi_scale, atlas_bitmap, font.atlas_w, font.atlas_h, 32, font.char_count, font.char_data);
+    stbtt_GetScaledFontVMetrics(file_bytes, 0, font.size * dpi_scale, &font.ascent, &font.descent, &font.line_gap);
     free(file_bytes);
 
     glGenTextures(1, &font.texture);
@@ -960,13 +961,13 @@ Render_Font load_font(const char *path)
 
 float get_font_line_height(Render_Font font)
 {
-    float height = font.ascent - font.descent;
+    float height = (font.ascent - font.descent) * font.i_dpi_scale;
     return height;
 }
 
 float get_char_width(char c, Render_Font font)
 {
-    float char_width = font.char_data[c - 32].xadvance;
+    float char_width = font.char_data[c - 32].xadvance * font.i_dpi_scale;
     return char_width;
 }
 
@@ -1117,14 +1118,14 @@ void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_S
 
 void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state)
 {
-    y += font.ascent;
+    y += font.ascent * font.i_dpi_scale;
     Vert_Buffer vert_buf = {0};
     while (*str)
     {
         if (*str >= 32)
         {
             stbtt_aligned_quad q;
-            stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1);
+            stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1, font.i_dpi_scale);
             vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
             vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
             vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));

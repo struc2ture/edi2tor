@@ -17,7 +17,7 @@ inline static void bassert(bool condition)
     if (!condition) __builtin_debugtrap();
 }
 
-static void trace_log(const char *fmt, ...)
+static void _trace_log(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -26,6 +26,7 @@ static void trace_log(const char *fmt, ...)
     va_end(args);
     putchar('\n');
 }
+#define trace_log(FMT, ...) _trace_log("%s: " FMT, __func__, ##__VA_ARGS__)
 
 static void log_warning(const char *fmt, ...)
 {
