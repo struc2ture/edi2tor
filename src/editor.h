@@ -389,11 +389,7 @@ void draw_live_scene_view(Live_Scene_View *live_scene_view, Render_State *render
 
 void draw_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t);
 
-void make_ortho(float left, float right, float bottom, float top, float near, float far, float *out);
-void make_view(float offset_x, float offset_y, float scale, float *out);
-void make_viewport_transform(Viewport viewport, float *out);
-void make_mat4_identity(float *out);
-void mul_mat4(const float *a, const float *b, float *out);
+Mat_4 viewport_get_transform(Viewport viewport);
 void transform_set_buffer_view_text_area(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
 void transform_set_buffer_view_line_num_col(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
 void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state);
