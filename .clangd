@@ -2,13 +2,12 @@ CompileFlags:
     Add: [
         "-I/opt/homebrew/include",
         "-isystem/Users/struc/dev/jects/edi2tor/third_party",
-        "-L/opt/homebrew/lib",
-        "-lglfw",
-        "-framework", "OpenGL",
         "-DGL_SILENCE_DEPRECATION",
         "-Wall",
         "-Wextra",
         "-Wno-unused-function",
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
         "-xc",
         "-std=c99"
     ]
