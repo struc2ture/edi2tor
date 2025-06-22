@@ -510,11 +510,11 @@ void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     buffer_view->viewport.rect.y -= e->mouse_scroll.scroll.y * SCROLL_SENS;
 
     if (buffer_view->viewport.rect.x < 0.0f) buffer_view->viewport.rect.x = 0.0f;
-    float buffer_max_x = 256 * get_font_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
+    float buffer_max_x = 256 * draw_string_font_get_line_height(state->render_state.font); // TODO: Determine max x coordinates based on longest line
     if (buffer_view->viewport.rect.x > buffer_max_x) buffer_view->viewport.rect.x = buffer_max_x;
 
     if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
-    float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
+    float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * draw_string_font_get_line_height(state->render_state.font);
     if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
 }
 

@@ -13,8 +13,8 @@
 
 #include "platform_types.h"
 #include "scene_loader.h"
+#include "draw.h"
 
-#define VERT_MAX 4096
 #define SCROLL_SENS 10.0f
 #define SCROLL_TIMEOUT 0.1f
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
@@ -33,34 +33,6 @@
 #define FILE_PATH2 "src/editor.c"
 #define IMAGE_PATH "res/DUCKS.png"
 #define LIVE_CUBE_PATH "bin/live_cube.dylib"
-
-typedef struct {
-    float x, y;
-    float u, v;
-    unsigned char r, g, b, a;
-} Vert;
-
-typedef struct {
-    Vert verts[VERT_MAX];
-    int vert_count;
-} Vert_Buffer;
-
-typedef struct {
-    GLuint texture;
-    float width;
-    float height;
-    int channels;
-} Image;
-
-typedef struct {
-    int w;
-    int h;
-    GLuint fbo;
-    GLuint tex;
-    GLuint depth_rb;
-    GLuint prog;
-    GLuint vao;
-} Framebuffer;
 
 typedef struct {
     Rect rect;
@@ -102,43 +74,6 @@ typedef struct {
     Cursor_Pos start;
     Cursor_Pos end;
 } Text_Selection;
-
-typedef struct {
-    stbtt_bakedchar *char_data;
-    int char_count;
-    GLuint texture;
-    float size;
-    float ascent, descent, line_gap;
-    int atlas_w, atlas_h;
-    float i_dpi_scale;
-} Render_Font;
-
-typedef struct {
-    GLuint main_shader;
-    GLuint grid_shader;
-    GLuint image_shader;
-    GLuint framebuffer_shader;
-    GLuint vao;
-    GLuint vbo;
-    GLuint mvp_ubo;
-    GLuint main_shader_mvp_loc;
-    GLuint grid_shader_mvp_loc;
-    GLuint grid_shader_offset_loc;
-    GLuint grid_shader_spacing_loc;
-    GLuint grid_shader_resolution_loc;
-    GLuint image_shader_mvp_loc;
-    GLuint framebuffer_shader_mvp_loc;
-    Vec_2 window_dim;
-    Vec_2 framebuffer_dim;
-    float dpi_scale;
-    Render_Font font;
-    GLuint white_texture;
-    float buffer_view_line_num_col_width;
-    float buffer_view_name_height;
-    float buffer_view_padding;
-    float buffer_view_resize_handle_radius;
-    GLuint default_fbo;
-} Render_State;
 
 typedef enum {
     PROMPT_OPEN_FILE,
@@ -358,23 +293,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);
 
-Vert make_vert(float x, float y, float u, float v, const unsigned char color[4]);
-void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
-
-Render_Font load_font(const char *path, float dpi_scale);
-float get_font_line_height(Render_Font font);
-float get_char_width(char c, Render_Font font);
-Rect get_string_rect(const char *str, Render_Font font, float x, float y);
-Rect get_string_range_rect(const char *str, Render_Font font, int start_char, int end_char);
-Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
-int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
 Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state);
-
-void draw_quad(Rect q, const unsigned char color[4]);
-void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_State *render_state);
-void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state);
-
-void draw_grid(Viewport canvas_viewport, Render_State *render_state);
 
 void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
 void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
