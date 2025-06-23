@@ -63,12 +63,12 @@ static GLuint gl_create_shader_program(const char *vs_src, const char *fs_src)
 
 typedef float mat4[16]; // column-major
 
-void mat4_identity(mat4 m) {
+void _mat4_identity(mat4 m) {
     memset(m, 0, sizeof(mat4));
     m[0] = m[5] = m[10] = m[15] = 1.0f;
 }
 
-void mat4_perspective(mat4 m, float fov, float aspect, float znear, float zfar) {
+void _mat4_perspective(mat4 m, float fov, float aspect, float znear, float zfar) {
     float tan_half = tanf(fov / 2.0f);
     memset(m, 0, sizeof(mat4));
     m[0] = 1.0f / (aspect * tan_half);
@@ -78,15 +78,15 @@ void mat4_perspective(mat4 m, float fov, float aspect, float znear, float zfar) 
     m[14] = -(2.0f * zfar * znear) / (zfar - znear);
 }
 
-void mat4_translate(mat4 m, float x, float y, float z) {
-    mat4_identity(m);
+void _mat4_translate(mat4 m, float x, float y, float z) {
+    _mat4_identity(m);
     m[12] = x;
     m[13] = y;
     m[14] = z;
 }
 
-void mat4_rotate_y(mat4 m, float angle) {
-    mat4_identity(m);
+void _mat4_rotate_y(mat4 m, float angle) {
+    _mat4_identity(m);
     float c = cosf(angle);
     float s = sinf(angle);
     m[0] =  c;
@@ -95,8 +95,8 @@ void mat4_rotate_y(mat4 m, float angle) {
     m[10] = c;
 }
 
-void mat4_rotate_x(mat4 m, float angle) {
-    mat4_identity(m);
+void _mat4_rotate_x(mat4 m, float angle) {
+    _mat4_identity(m);
     float c = cosf(angle);
     float s = sinf(angle);
     m[5]  =  c;
@@ -105,7 +105,7 @@ void mat4_rotate_x(mat4 m, float angle) {
     m[10] =  c;
 }
 
-void mat4_mul(mat4 out, mat4 a, mat4 b)
+void _mat4_mul(mat4 out, mat4 a, mat4 b)
 {
     mat4 res;
     for (int col = 0; col < 4; col++)
@@ -206,17 +206,17 @@ void on_render(Live_Cube_State *state, const Platform_Timing *t)
 
     mat4 rot_roll, rot_yaw, model, view, proj, mv, mvp;
 
-    mat4_translate(model, state->position.x, state->position.y, 0.0f);
-    mat4_rotate_y(rot_yaw, state->angle_yaw);
-    mat4_rotate_x(rot_roll, state->angle_roll);
-    mat4_mul(model, model, rot_roll);
-    mat4_mul(model, model, rot_yaw);
+    _mat4_translate(model, state->position.x, state->position.y, 0.0f);
+    _mat4_rotate_y(rot_yaw, state->angle_yaw);
+    _mat4_rotate_x(rot_roll, state->angle_roll);
+    _mat4_mul(model, model, rot_roll);
+    _mat4_mul(model, model, rot_yaw);
 
-    mat4_translate(view, 0.0f, 0.0f, -5.0f); // simple "look at" from z = -5
-    mat4_perspective(proj, 3.14f / 3.0f, state->window_dim.x / state->window_dim.y, 0.1f, 100.0f);
+    _mat4_translate(view, 0.0f, 0.0f, -5.0f); // simple "look at" from z = -5
+    _mat4_perspective(proj, 3.14f / 3.0f, state->window_dim.x / state->window_dim.y, 0.1f, 100.0f);
 
-    mat4_mul(mv, view, model);
-    mat4_mul(mvp, proj, mv);
+    _mat4_mul(mv, view, model);
+    _mat4_mul(mvp, proj, mv);
 
     GLuint loc = glGetUniformLocation(state->prog, "u_mvp");
     glUniformMatrix4fv(loc, 1, GL_FALSE, mvp);
