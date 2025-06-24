@@ -133,6 +133,9 @@ struct Render_State {
     float buffer_view_padding;
     float buffer_view_resize_handle_radius;
     GLuint default_fbo;
+
+    Mat_Stack mat_stack_proj;
+    Mat_Stack mat_stack_model_view;
 };
 
 typedef enum {
@@ -288,7 +291,6 @@ void on_platform_event(Editor_State *state, const Platform_Event *event);
 void on_destroy(Editor_State *state);
 
 void editor_render(Editor_State *state, const Platform_Timing *t);
-void render_grid(Viewport canvas_viewport, Render_State *render_state);
 void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
 void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
@@ -303,7 +305,9 @@ void render_status_bar(Editor_State *state, Render_State *render_state, const Pl
 void draw_quad(Rect q, Color c);
 void draw_texture(GLuint texture, Rect q, Color c, Render_State *render_state);
 void draw_string(const char *str, Render_Font font, float x, float y, Color c, Render_State *render_state);
+void draw_grid(Vec_2 offset, float spacing, const Render_State *render_state);
 
+void mvp_update_from_stacks(Render_State *render_state);
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo);
 
 Buffer **buffer_create_new_slot(Editor_State *state);
@@ -374,13 +378,6 @@ Rect get_string_range_rect(const char *str, Render_Font font, int start_char, in
 Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
 Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state);
-
-Mat_4 viewport_get_transform(Viewport viewport);
-void transform_set_buffer_view_text_area(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
-void transform_set_buffer_view_line_num_col(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
-void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state);
-void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_state);
-void transform_set_screen_space(Render_State *render_state);
 
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 canvas_pos_to_screen_pos(Vec_2 canvas_pos, Viewport canvas_viewport);

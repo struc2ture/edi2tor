@@ -20,5 +20,17 @@ bool gl_check_compile_success(GLuint shader, const char *src);
 bool gl_check_link_success(GLuint prog);
 GLuint gl_create_shader_program(const char *vs_src, const char *fs_src);
 void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
+void gl_disable_scissor();
 Gl_Framebuffer gl_create_framebuffer(int width, int height);
 void gl_destroy_framebuffer(Gl_Framebuffer *framebuffer);
+
+typedef struct {
+    Mat_4 *mm;
+    int size;
+    int capacity;
+} Mat_Stack;
+
+void mat_stack_push(Mat_Stack *s);
+Mat_4 mat_stack_pop(Mat_Stack *s);
+Mat_4 mat_stack_peek(Mat_Stack *s);
+void mat_stack_mul_r(Mat_Stack *s, Mat_4 m);

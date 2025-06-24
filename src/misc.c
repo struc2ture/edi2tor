@@ -80,6 +80,11 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
     glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
 }
 
+void gl_disable_scissor()
+{
+    glDisable(GL_SCISSOR_TEST);
+}
+
 Gl_Framebuffer gl_create_framebuffer(int w, int h)
 {
     Gl_Framebuffer framebuffer;
@@ -120,3 +125,48 @@ void gl_destroy_framebuffer(Gl_Framebuffer *framebuffer)
     framebuffer->tex = 0;
     framebuffer->fbo = 0;
 }
+
+void mat_stack_push(Mat_Stack *s)
+{
+    if (s->capacity == 0)
+    {
+        s->capacity = 8;
+        s->mm = xrealloc(s->mm, s->capacity * sizeof(s->mm[0]));
+    }
+
+    if (s->size >= s->capacity)
+    {
+        s->capacity *= 2;
+        s->mm = xrealloc(s->mm, s->capacity * sizeof(s->mm[0]));
+    }
+
+    if (s->size > 0)
+    {
+        s->mm[s->size] = s->mm[s->size - 1];
+    }
+    else
+    {
+        s->mm[s->size] = mat4_identity();
+    }
+
+    s->size++;
+}
+
+Mat_4 mat_stack_pop(Mat_Stack *s)
+{
+    bassert(s->size > 0);
+    s->size--;
+    return s->mm[s->size];
+}
+
+Mat_4 mat_stack_peek(Mat_Stack *s)
+{
+    return s->mm[s->size - 1];
+}
+
+void mat_stack_mul_r(Mat_Stack *s, Mat_4 m)
+{
+    bassert(s->size > 0);
+    s->mm[s->size - 1] = mat4_mul(s->mm[s->size - 1], m);
+}
+

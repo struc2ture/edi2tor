@@ -102,6 +102,7 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
 
 void on_destroy(Editor_State *state)
 {
+    // TODO: When live scene pointers are stored in an array, use that
     for (int i = 0; i < state->view_count; i++)
     {
         if (state->views[i]->kind == VIEW_KIND_LIVE_SCENE)
@@ -123,43 +124,49 @@ void editor_render(Editor_State *state, const Platform_Timing *t)
     glBindVertexArray(state->render_state.vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
 
-    glUseProgram(state->render_state.grid_shader);
-    render_grid(state->canvas_viewport, &state->render_state);
-
-    glUseProgram(state->render_state.main_shader);
-
-    // Render views backwards for correct z ordering
-    for (int i = state->view_count - 1; i >= 0; i--)
+    mat_stack_push(&state->render_state.mat_stack_proj);
     {
-        View *view = state->views[i];
-        bool is_active = view == state->active_view;
-        render_view(view, is_active, state->canvas_viewport, &state->render_state, t);
+        mat_stack_mul_r(&state->render_state.mat_stack_proj,
+            mat4_proj_ortho(0, state->render_state.window_dim.x, state->render_state.window_dim.y, 0, -1, 1));
+
+        mvp_update_from_stacks(&state->render_state);
+
+        draw_grid((Vec_2){state->canvas_viewport.rect.x, state->canvas_viewport.rect.y}, 50, &state->render_state);
+
+        glUseProgram(state->render_state.main_shader);
+
+        mat_stack_push(&state->render_state.mat_stack_model_view);
+        {
+            mat_stack_mul_r(&state->render_state.mat_stack_model_view,
+                mat4_translate(-state->canvas_viewport.rect.x, -state->canvas_viewport.rect.y, 0));
+            mat_stack_mul_r(&state->render_state.mat_stack_model_view,
+                mat4_scale(state->canvas_viewport.zoom, state->canvas_viewport.zoom, 1));
+
+            mvp_update_from_stacks(&state->render_state);
+
+            // Render backwards for correct z ordering
+            for (int i = state->view_count - 1; i >= 0; i--)
+            {
+                View *view = state->views[i];
+                bool is_active = view == state->active_view;
+                render_view(view, is_active, state->canvas_viewport, &state->render_state, t);
+            }
+        }
+        mat_stack_pop(&state->render_state.mat_stack_model_view);
+        mvp_update_from_stacks(&state->render_state);
+
+        render_status_bar(state, &state->render_state, t);
     }
+    mat_stack_pop(&state->render_state.mat_stack_proj);
+    mvp_update_from_stacks(&state->render_state);
 
-    render_status_bar(state, &state->render_state, t);
-}
-
-void render_grid(Viewport canvas_viewport, Render_State *render_state)
-{
-    Mat_4 proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-
-    glUniformMatrix4fv(render_state->grid_shader_mvp_loc, 1, GL_FALSE, proj.m);
-
-    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
-
-    float scaled_offset_x = canvas_viewport.rect.x * render_state->dpi_scale;
-    float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
-    glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
-
-    const float grid_spacing = 50.0f;
-    glUniform1f(render_state->grid_shader_spacing_loc, grid_spacing * render_state->dpi_scale);
-
-    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (Color){0});
+    bassert(state->render_state.mat_stack_proj.size == 0);
+    bassert(state->render_state.mat_stack_model_view.size == 0);
+    // TODO: Can I query GL scissor state, for validation? and other glEnable things...
 }
 
 void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
 {
-    transform_set_canvas_space(canvas_viewport, render_state);
     if (is_active)
         draw_quad(view->outer_rect, (Color){40, 40, 40, 255});
     else
@@ -193,17 +200,71 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
     draw_quad(text_area_rect, (Color){10, 10, 10, 255});
 
-    transform_set_buffer_view_text_area(buffer_view, canvas_viewport, render_state);
-    render_view_buffer_text(*text_buffer, *buffer_viewport, render_state);
-    if (is_active)
+    mat_stack_push(&render_state->mat_stack_model_view);
     {
-        render_view_buffer_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
-    }
-    render_view_buffer_selection(buffer_view, render_state);
+        mat_stack_mul_r(&render_state->mat_stack_model_view,
+            mat4_translate(text_area_rect.x, text_area_rect.y, 0));
+        mat_stack_mul_r(&render_state->mat_stack_model_view,
+            mat4_scale(buffer_view->viewport.zoom, buffer_view->viewport.zoom, 1));
+        mat_stack_mul_r(&render_state->mat_stack_model_view,
+            mat4_translate(-buffer_view->viewport.rect.x, -buffer_view->viewport.rect.y, 0));
 
-    render_view_buffer_line_numbers(buffer_view, canvas_viewport, render_state);
+        mvp_update_from_stacks(render_state);
+
+        Rect text_area_screen_rect = canvas_rect_to_screen_rect(text_area_rect, canvas_viewport);
+        gl_enable_scissor(text_area_screen_rect, render_state);
+        {
+            render_view_buffer_text(*text_buffer, *buffer_viewport, render_state);
+            if (is_active)
+            {
+                render_view_buffer_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
+            }
+            render_view_buffer_selection(buffer_view, render_state);
+        }
+        gl_disable_scissor();
+    }
+    mat_stack_pop(&render_state->mat_stack_model_view);
+
+    mat_stack_push(&render_state->mat_stack_model_view);
+    {
+        Rect line_num_col_rect = buffer_view_get_line_num_col_rect(buffer_view, render_state);
+
+        mat_stack_mul_r(&render_state->mat_stack_model_view,
+            mat4_translate(line_num_col_rect.x, line_num_col_rect.y, 0));
+        mat_stack_mul_r(&render_state->mat_stack_model_view,
+            mat4_scale(buffer_view->viewport.zoom, buffer_view->viewport.zoom, 1));
+        mat_stack_mul_r(&render_state->mat_stack_model_view,
+            mat4_translate(0, -buffer_view->viewport.rect.y, 0));
+
+        mvp_update_from_stacks(render_state);
+
+        Rect line_num_col_screen_rect = canvas_rect_to_screen_rect(line_num_col_rect, canvas_viewport);
+        gl_enable_scissor(line_num_col_screen_rect, render_state);
+        {
+
+            render_view_buffer_line_numbers(buffer_view, canvas_viewport, render_state);
+        }
+        gl_disable_scissor();
+    }
+    mat_stack_pop(&render_state->mat_stack_model_view);
+
     if (buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL)
-        render_view_buffer_name(buffer_view, is_active, canvas_viewport, render_state);
+    {
+        mat_stack_push(&render_state->mat_stack_model_view);
+        {
+            Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
+
+            mat_stack_mul_r(&render_state->mat_stack_model_view,
+                mat4_translate(name_rect.x, name_rect.y, 0));
+
+            mvp_update_from_stacks(render_state);
+
+            render_view_buffer_name(buffer_view, is_active, canvas_viewport, render_state);
+        }
+        mat_stack_pop(&render_state->mat_stack_model_view);
+    }
+
+    mvp_update_from_stacks(render_state);
 }
 
 void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
@@ -271,8 +332,6 @@ void render_view_buffer_selection(Buffer_View *buffer_view, Render_State *render
 
 void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
 {
-    transform_set_buffer_view_line_num_col(buffer_view, canvas_viewport, render_state);
-
     const float font_line_height = get_font_line_height(render_state->font);
     const float viewport_min_y = buffer_view->viewport.rect.y;
     const float viewport_max_y = viewport_min_y + buffer_view->viewport.rect.h;
@@ -301,9 +360,7 @@ void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_v
 
 void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
 {
-    bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE);
-
-    Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
+    bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL);
 
     char view_name_buf[256];
     if (!buffer_view->buffer->file.info.has_been_modified)
@@ -311,7 +368,6 @@ void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport 
     else
         snprintf(view_name_buf, sizeof(view_name_buf), "%s[*]", buffer_view->buffer->file.info.path);
 
-    transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
         draw_string(view_name_buf, render_state->font, 0, 0, (Color){140, 140, 140, 255}, render_state);
     else
@@ -349,8 +405,6 @@ void render_view_live_scene(Live_Scene_View *ls_view, Render_State *render_state
 
 void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t)
 {
-    transform_set_screen_space(render_state);
-
     const float font_line_height = get_font_line_height(render_state->font);
     const float x_padding = 10;
     const float y_padding = 2;
@@ -449,7 +503,42 @@ void draw_string(const char *str, Render_Font font, float x, float y, Color c, R
     glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
 }
 
+void draw_grid(Vec_2 offset, float spacing, const Render_State *render_state)
+{
+    glUseProgram(render_state->grid_shader);
+
+    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
+
+    float scaled_offset_x = offset.x * render_state->dpi_scale;
+    float scaled_offset_y = offset.y * render_state->dpi_scale;
+    glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
+
+    glUniform1f(render_state->grid_shader_spacing_loc, spacing * render_state->dpi_scale);
+
+    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (Color){0});
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
+
+void mvp_update_from_stacks(Render_State *render_state)
+{
+    Mat_4 mvp;
+    if (render_state->mat_stack_proj.size > 0 && render_state->mat_stack_model_view.size > 0)
+    {
+        mvp = mat4_mul(mat_stack_peek(&render_state->mat_stack_proj), mat_stack_peek(&render_state->mat_stack_model_view));
+    }
+    else if (render_state->mat_stack_proj.size > 0)
+    {
+        mvp = mat_stack_peek(&render_state->mat_stack_proj);
+    }
+    else
+    {
+        mvp = mat4_identity();
+    }
+    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
 
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo)
 {
@@ -1296,78 +1385,6 @@ Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_Stat
     cursor_rect.x += x;
     cursor_rect.y += y;
     return cursor_rect;
-}
-
-Mat_4 viewport_get_transform(Viewport viewport)
-{
-    Mat_4 scale = mat4_scale(viewport.zoom, viewport.zoom, 1);
-    Mat_4 translate = mat4_translate(-viewport.rect.x, -viewport.rect.y, 0);
-    Mat_4 transform = mat4_mul(translate, scale);
-    return transform;
-}
-
-void transform_set_buffer_view_text_area(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
-{
-    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
-    Mat_4 from_text_buffer_to_viewport_rect = viewport_get_transform(buffer_view->viewport);
-    Mat_4 move_viewport_rect_on_canvas = mat4_translate(text_area_rect.x, text_area_rect.y, 0);
-    Mat_4 from_canvas_to_screen = viewport_get_transform(canvas_viewport);
-    Mat_4 ortho_proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-    Mat_4 mvp = mat4_mul(ortho_proj, mat4_mul(from_canvas_to_screen, mat4_mul(move_viewport_rect_on_canvas, from_text_buffer_to_viewport_rect)));
-    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    Rect text_area_screen_rect = canvas_rect_to_screen_rect(text_area_rect, canvas_viewport);
-    gl_enable_scissor(text_area_screen_rect, render_state);
-}
-
-void transform_set_buffer_view_line_num_col(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
-{
-    Rect line_num_col_rect = buffer_view_get_line_num_col_rect(buffer_view, render_state);
-    Mat_4 from_text_buffer_to_viewport_rect = mat4_mul(mat4_translate(0, -buffer_view->viewport.rect.y, 0), mat4_scale(buffer_view->viewport.zoom, buffer_view->viewport.zoom, 1));
-    Mat_4 move_viewport_rect_on_canvas = mat4_translate(line_num_col_rect.x, line_num_col_rect.y, 0);
-    Mat_4 from_canvas_to_screen = viewport_get_transform(canvas_viewport);
-    Mat_4 ortho_proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-    Mat_4 mvp = mat4_mul(ortho_proj, mat4_mul(from_canvas_to_screen, mat4_mul(move_viewport_rect_on_canvas, from_text_buffer_to_viewport_rect)));
-    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glUniformMatrix4fv(render_state->main_shader_mvp_loc, 1, GL_FALSE, mvp.m);
-    Rect line_num_col_screen_rect = canvas_rect_to_screen_rect(line_num_col_rect, canvas_viewport);
-    gl_enable_scissor(line_num_col_screen_rect, render_state);
-}
-
-void transform_set_rect(Rect rect, Viewport canvas_viewport, Render_State *render_state)
-{
-    Mat_4 translate = mat4_translate(rect.x, rect.y, 0);
-    Mat_4 from_canvas_to_screen = viewport_get_transform(canvas_viewport);
-    Mat_4 ortho_proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-    Mat_4 mvp = mat4_mul(ortho_proj, mat4_mul(from_canvas_to_screen, translate));
-    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    Rect screen_rect = canvas_rect_to_screen_rect(rect, canvas_viewport);
-    gl_enable_scissor(screen_rect, render_state);
-}
-
-void transform_set_canvas_space(Viewport canvas_viewport, Render_State *render_state)
-{
-    Mat_4 proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-    Mat_4 view = viewport_get_transform(canvas_viewport);
-    Mat_4 mvp = mat4_mul(proj, view);
-    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glDisable(GL_SCISSOR_TEST);
-}
-
-void transform_set_screen_space(Render_State *render_state)
-{
-    Mat_4 proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-    glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(proj), proj.m);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glDisable(GL_SCISSOR_TEST);
 }
 
 Rect_Bounds get_viewport_cursor_bounds(Viewport viewport, Render_Font font)
