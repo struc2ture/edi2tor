@@ -154,59 +154,59 @@ void render_grid(Viewport canvas_viewport, Render_State *render_state)
     const float grid_spacing = 50.0f;
     glUniform1f(render_state->grid_shader_spacing_loc, grid_spacing * render_state->dpi_scale);
 
-    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
+    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (Color){0});
 }
 
 void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
 {
     transform_set_canvas_space(canvas_viewport, render_state);
     if (is_active)
-        draw_quad(view->outer_rect, (unsigned char[4]){40, 40, 40, 255});
+        draw_quad(view->outer_rect, (Color){40, 40, 40, 255});
     else
-        draw_quad(view->outer_rect, (unsigned char[4]){20, 20, 20, 255});
+        draw_quad(view->outer_rect, (Color){20, 20, 20, 255});
 
     switch(view->kind)
     {
         case VIEW_KIND_BUFFER:
         {
-            render_buffer_view(&view->bv, is_active, canvas_viewport, render_state, t->prev_delta_time);
+            render_view_buffer(&view->bv, is_active, canvas_viewport, render_state, t->prev_delta_time);
         } break;
 
         case VIEW_KIND_IMAGE:
         {
-            render_image_view(&view->iv, render_state);
+            render_view_image(&view->iv, render_state);
         } break;
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            render_live_scene_view(&view->lsv, render_state, t);
+            render_view_live_scene(&view->lsv, render_state, t);
         } break;
     }
 }
 
-void render_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
+void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
 {
     Text_Buffer *text_buffer = &buffer_view->buffer->text_buffer;
     Display_Cursor *display_cursor = &buffer_view->cursor;
     Viewport *buffer_viewport = &buffer_view->viewport;
 
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
-    draw_quad(text_area_rect, (unsigned char[4]){10, 10, 10, 255});
+    draw_quad(text_area_rect, (Color){10, 10, 10, 255});
 
     transform_set_buffer_view_text_area(buffer_view, canvas_viewport, render_state);
-    render_text_buffer(*text_buffer, *buffer_viewport, render_state);
+    render_view_buffer_text(*text_buffer, *buffer_viewport, render_state);
     if (is_active)
     {
-        render_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
+        render_view_buffer_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
     }
-    render_buffer_view_selection(buffer_view, render_state);
+    render_view_buffer_selection(buffer_view, render_state);
 
-    render_buffer_view_line_numbers(buffer_view, canvas_viewport, render_state);
+    render_view_buffer_line_numbers(buffer_view, canvas_viewport, render_state);
     if (buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL)
-        render_buffer_view_name(buffer_view, is_active, canvas_viewport, render_state);
+        render_view_buffer_name(buffer_view, is_active, canvas_viewport, render_state);
 }
 
-void render_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
+void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
 {
     float x = 0, y = 0;
     float line_height = get_font_line_height(render_state->font);
@@ -216,12 +216,12 @@ void render_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State
         Rect string_rect = get_string_rect(text_buffer.lines[i].str, render_state->font, 0, y);
         bool is_seen = rect_intersect(string_rect, viewport.rect);
         if (is_seen)
-            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (unsigned char[4]){255, 255, 255, 255}, render_state);
+            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (Color){255, 255, 255, 255}, render_state);
         y += line_height;
     }
 }
 
-void render_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
+void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
 {
     cursor->blink_time += delta_time;
     if (cursor->blink_time < 0.5f)
@@ -229,14 +229,14 @@ void render_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport vie
         Rect cursor_rect = get_cursor_rect(text_buffer, cursor->pos, render_state);
         bool is_seen = rect_intersect(cursor_rect, viewport.rect);
         if (is_seen)
-            draw_quad(cursor_rect, (unsigned char[4]){0, 0, 255, 255});
+            draw_quad(cursor_rect, (Color){0, 0, 255, 255});
     } else if (cursor->blink_time > 1.0f)
     {
         cursor->blink_time -= 1.0f;
     }
 }
 
-void render_buffer_view_selection(Buffer_View *buffer_view, Render_State *render_state)
+void render_view_buffer_selection(Buffer_View *buffer_view, Render_State *render_state)
 {
     if (buffer_view->mark.active && !cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos)) {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
@@ -263,13 +263,13 @@ void render_buffer_view_selection(Buffer_View *buffer_view, Render_State *render
                 Rect selected_rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
                 selected_rect.y += i * get_font_line_height(render_state->font);
                 if (rect_intersect(selected_rect, buffer_view->viewport.rect))
-                    draw_quad(selected_rect, (unsigned char[4]){200, 200, 200, 130});
+                    draw_quad(selected_rect, (Color){200, 200, 200, 130});
             }
         }
     }
 }
 
-void render_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
+void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
 {
     transform_set_buffer_view_line_num_col(buffer_view, canvas_viewport, render_state);
 
@@ -285,21 +285,21 @@ void render_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_v
         if (min_y < viewport_max_y && max_y > viewport_min_y)
         {
             snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d", line_i + 1);
-            unsigned char color[4];
+            Color c;
             if (line_i != buffer_view->cursor.pos.line)
             {
-                color[0] = 150; color[1] = 150; color[2] = 150; color[3] = 255;
+                c = (Color){150, 150, 150, 255};
             }
             else
             {
-                color[0] = 230; color[1] = 230; color[2] = 230; color[3] = 255;
+                c = (Color){230, 230, 230, 255};
             }
-            draw_string(line_i_str_buf, render_state->font, 0, min_y, color, render_state);
+            draw_string(line_i_str_buf, render_state->font, 0, min_y, c, render_state);
         }
     }
 }
 
-void render_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
+void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
 {
     bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE);
 
@@ -313,9 +313,38 @@ void render_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport 
 
     transform_set_rect(name_rect, canvas_viewport, render_state);
     if (is_active)
-        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255}, render_state);
+        draw_string(view_name_buf, render_state->font, 0, 0, (Color){140, 140, 140, 255}, render_state);
     else
-        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
+        draw_string(view_name_buf, render_state->font, 0, 0, (Color){100, 100, 100, 255}, render_state);
+}
+
+void render_view_image(Image_View *image_view, Render_State *render_state)
+{
+    glUseProgram(render_state->image_shader);
+    draw_texture(image_view->image.texture, image_view->image_rect, (Color){255, 255, 255, 255}, render_state);
+    glUseProgram(render_state->main_shader);
+}
+
+void render_view_live_scene(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t)
+{
+    // TODO: Keep pointers to live scenes in an array and run live scene updates separately, before rendering
+    live_scene_check_hot_reload(ls_view->live_scene);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
+
+    ls_view->live_scene->dylib.on_frame(ls_view->live_scene->state, t);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
+    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
+    glClearColor(0, 0, 0, 1.0f);
+    glBindVertexArray(render_state->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, render_state->vbo);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
+    glUseProgram(render_state->framebuffer_shader);
+    draw_texture(ls_view->framebuffer.tex, ls_view->framebuffer_rect, (Color){255, 255, 255, 255}, render_state);
+    glUseProgram(render_state->main_shader);
 }
 
 void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t)
@@ -333,10 +362,10 @@ void render_status_bar(Editor_State *state, Render_State *render_state, const Pl
         .w = render_state->window_dim.x,
         .h = render_state->window_dim.y};
 
-    draw_quad(status_bar_rect, (unsigned char[4]){30, 30, 30, 255});
+    draw_quad(status_bar_rect, (Color){30, 30, 30, 255});
 
     char status_str_buf[256];
-    const unsigned char status_str_color[] = { 200, 200, 200, 255 };
+    const Color status_str_color = {200, 200, 200, 255};
 
     float status_str_x = status_bar_rect.x + x_padding;
     float status_str_y = status_bar_rect.y + y_padding;
@@ -361,33 +390,63 @@ void render_status_bar(Editor_State *state, Render_State *render_state, const Pl
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
 }
 
-void render_image_view(Image_View *image_view, Render_State *render_state)
+// ---------------------------------------------------------------------------------------------------------------------------
+
+// TODO: Move this out of this file?
+void draw_quad(Rect q, Color c)
 {
-    glUseProgram(render_state->image_shader);
-    draw_texture(image_view->image.texture, image_view->image_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
-    glUseProgram(render_state->main_shader);
+    Vert_Buffer vert_buf = {0};
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 0, 0, c));
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
-void render_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t)
+void draw_texture(GLuint texture, Rect q, Color c, Render_State *render_state)
 {
-    // TODO: Keep pointers to live scenes in an array and run live scene updates separately, before rendering
-    live_scene_check_hot_reload(ls_view->live_scene);
+    Vert_Buffer vert_buf = {0};
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, c));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
+}
 
-    glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
-
-    ls_view->live_scene->dylib.on_frame(ls_view->live_scene->state, t);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
-    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
-    glClearColor(0, 0, 0, 1.0f);
-    glBindVertexArray(render_state->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, render_state->vbo);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-
-    glUseProgram(render_state->framebuffer_shader);
-    draw_texture(ls_view->framebuffer.tex, ls_view->framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
-    glUseProgram(render_state->main_shader);
+void draw_string(const char *str, Render_Font font, float x, float y, Color c, Render_State *render_state)
+{
+    y += font.ascent * font.i_dpi_scale;
+    Vert_Buffer vert_buf = {0};
+    while (*str)
+    {
+        if (*str >= 32)
+        {
+            stbtt_aligned_quad q;
+            stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1, font.i_dpi_scale);
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, c));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, c));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, c));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, c));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, c));
+            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, c));
+        }
+        str++;
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, font.texture);
+    glBufferData(GL_ARRAY_BUFFER, VERT_MAX * sizeof(Vert), NULL, GL_DYNAMIC_DRAW); // Orphan existing buffer to stay on the fast path on mac
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
+    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -434,7 +493,7 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vert), (void *)offsetof(Vert, u));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, r));
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, c));
     glEnableVertexAttribArray(2);
 
     glGenTextures(1, &render_state->white_texture);
@@ -599,7 +658,7 @@ View *create_image_view(const char *file_path, Rect rect, Editor_State *state)
 
 View *create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state)
 {
-    Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
+    Gl_Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
     Live_Scene *live_scene = live_scene_create(state, dylib_path, rect.w, rect.h, framebuffer.fbo);
     Live_Scene_View *live_scene_view = live_scene_view_create(framebuffer, live_scene, rect, state);
     view_set_active(outer_view(live_scene_view), state);
@@ -664,7 +723,7 @@ void view_destroy(View *view, Editor_State *state)
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            framebuffer_destroy(view->lsv.framebuffer);
+            gl_destroy_framebuffer(&view->lsv.framebuffer);
             live_scene_destroy(view->lsv.live_scene);
             view_free_slot(view, state);
             free(view);
@@ -875,13 +934,6 @@ void image_destroy(Image image)
     glDeleteTextures(1, &image.texture);
 }
 
-void framebuffer_destroy(Framebuffer framebuffer)
-{
-    glDeleteRenderbuffers(1, &framebuffer.depth_rb);
-    glDeleteTextures(1, &framebuffer.tex);
-    glDeleteFramebuffers(1, &framebuffer.fbo);
-}
-
 Image_View *image_view_create(Image image, Rect rect, Editor_State *state)
 {
     View *view = view_create(state);
@@ -916,7 +968,7 @@ void live_scene_destroy(Live_Scene *live_scene)
     free(live_scene);
 }
 
-Live_Scene_View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state)
+Live_Scene_View *live_scene_view_create(Gl_Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state)
 {
     View *view = view_create(state);
     view->kind = VIEW_KIND_LIVE_SCENE;
@@ -1081,9 +1133,9 @@ void viewport_set_zoom(Viewport *viewport, float new_zoom)
     viewport->zoom = new_zoom;
 }
 
-Vert make_vert(float x, float y, float u, float v, const unsigned char color[4])
+Vert make_vert(float x, float y, float u, float v, Color c)
 {
-    Vert vert = {x, y, u, v, color[0], color[1], color[2], color[3]};
+    Vert vert = {x, y, u, v, c};
     return vert;
 }
 
@@ -1244,72 +1296,6 @@ Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_Stat
     cursor_rect.x += x;
     cursor_rect.y += y;
     return cursor_rect;
-}
-
-void draw_quad(Rect q, const unsigned char color[4])
-{
-    // TODO: Use vert_buffer_add_vert
-    Vert_Buffer vert_buf = {0};
-    vert_buf.vert_count = 6;
-    vert_buf.verts[0].x = 0;     vert_buf.verts[0].y = 0;
-    vert_buf.verts[1].x = 0;     vert_buf.verts[1].y = q.h;
-    vert_buf.verts[2].x = q.w; vert_buf.verts[2].y = 0;
-    vert_buf.verts[3].x = q.w; vert_buf.verts[3].y = 0;
-    vert_buf.verts[4].x = 0;     vert_buf.verts[4].y = q.h;
-    vert_buf.verts[5].x = q.w; vert_buf.verts[5].y = q.h;
-    for (int i = 0; i < 6; i++) {
-        vert_buf.verts[i].x += q.x;
-        vert_buf.verts[i].y += q.y;
-        vert_buf.verts[i].r = color[0];
-        vert_buf.verts[i].g = color[1];
-        vert_buf.verts[i].b = color[2];
-        vert_buf.verts[i].a = color[3];
-    }
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-}
-
-void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_State *render_state)
-{
-    Vert_Buffer vert_buf = {0};
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, color));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, color));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, color));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, color));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, color));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, color));
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
-}
-
-void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state)
-{
-    y += font.ascent * font.i_dpi_scale;
-    Vert_Buffer vert_buf = {0};
-    while (*str)
-    {
-        if (*str >= 32)
-        {
-            stbtt_aligned_quad q;
-            stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1, font.i_dpi_scale);
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, color));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, color));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, color));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, color));
-        }
-        str++;
-    }
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font.texture);
-    glBufferData(GL_ARRAY_BUFFER, VERT_MAX * sizeof(Vert), NULL, GL_DYNAMIC_DRAW); // Orphan existing buffer to stay on the fast path on mac
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
 }
 
 Mat_4 viewport_get_transform(Viewport viewport)

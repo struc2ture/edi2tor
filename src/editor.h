@@ -36,9 +36,13 @@
 #define LIVE_CUBE_PATH "bin/live_cube.dylib"
 
 typedef struct {
+    unsigned char r, g, b, a;
+} Color;
+
+typedef struct {
     float x, y;
     float u, v;
-    unsigned char r, g, b, a;
+    Color c;
 } Vert;
 
 typedef struct {
@@ -206,7 +210,7 @@ struct Live_Scene {
 
 typedef struct {
     Live_Scene *live_scene;
-    Framebuffer framebuffer;
+    Gl_Framebuffer framebuffer;
     Rect framebuffer_rect;
 } Live_Scene_View;
 
@@ -286,15 +290,19 @@ void on_destroy(Editor_State *state);
 void editor_render(Editor_State *state, const Platform_Timing *t);
 void render_grid(Viewport canvas_viewport, Render_State *render_state);
 void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
-void render_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
-void render_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
-void render_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
-void render_buffer_view_selection(Buffer_View *buffer_view, Render_State *render_state);
-void render_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
-void render_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
+void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
+void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
+void render_view_buffer_selection(Buffer_View *buffer_view, Render_State *render_state);
+void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
+void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
+void render_view_image(Image_View *image_view, Render_State *render_state);
+void render_view_live_scene(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t);
 void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t);
-void render_image_view(Image_View *image_view, Render_State *render_state);
-void render_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t);
+
+void draw_quad(Rect q, Color c);
+void draw_texture(GLuint texture, Rect q, Color c, Render_State *render_state);
+void draw_string(const char *str, Render_Font font, float x, float y, Color c, Render_State *render_state);
 
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo);
 
@@ -338,13 +346,11 @@ void image_destroy(Image image);
 
 Image_View *image_view_create(Image image, Rect rect, Editor_State *state);
 
-void framebuffer_destroy(Framebuffer framebuffer);
-
 Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo);
 void live_scene_check_hot_reload(Live_Scene *live_scene);
 void live_scene_destroy(Live_Scene *render_scene);
 
-Live_Scene_View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state);
+Live_Scene_View *live_scene_view_create(Gl_Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state);
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
@@ -357,7 +363,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
 void viewport_set_outer_rect(Viewport *viewport, Rect outer_rect);
 void viewport_set_zoom(Viewport *viewport, float new_zoom);
 
-Vert make_vert(float x, float y, float u, float v, const unsigned char color[4]);
+Vert make_vert(float x, float y, float u, float v, Color c);
 void vert_buffer_add_vert(Vert_Buffer *vert_buffer, Vert vert);
 
 Render_Font load_font(const char *path, float dpi_scale);
@@ -368,10 +374,6 @@ Rect get_string_range_rect(const char *str, Render_Font font, int start_char, in
 Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
 Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state);
-
-void draw_quad(Rect q, const unsigned char color[4]);
-void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_State *render_state);
-void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state);
 
 Mat_4 viewport_get_transform(Viewport viewport);
 void transform_set_buffer_view_text_area(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);

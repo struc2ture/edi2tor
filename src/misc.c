@@ -80,9 +80,9 @@ void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
     glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
 }
 
-Framebuffer gl_create_framebuffer(int w, int h)
+Gl_Framebuffer gl_create_framebuffer(int w, int h)
 {
-    Framebuffer framebuffer;
+    Gl_Framebuffer framebuffer;
     framebuffer.w = w;
     framebuffer.h = h;
 
@@ -109,4 +109,14 @@ Framebuffer gl_create_framebuffer(int w, int h)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     return framebuffer;
+}
+
+void gl_destroy_framebuffer(Gl_Framebuffer *framebuffer)
+{
+    glDeleteRenderbuffers(1, &framebuffer->depth_rb);
+    glDeleteTextures(1, &framebuffer->tex);
+    glDeleteFramebuffers(1, &framebuffer->fbo);
+    framebuffer->depth_rb = 0;
+    framebuffer->tex = 0;
+    framebuffer->fbo = 0;
 }
