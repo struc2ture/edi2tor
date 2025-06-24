@@ -18,6 +18,7 @@
 #include <stb_truetype.h>
 
 #include "input.h"
+#include "misc.h"
 #include "platform_types.h"
 #include "shaders.h"
 #include "util.h"
@@ -44,7 +45,7 @@ void on_reload(Editor_State *state)
     (void)state;
 }
 
-void on_render(Editor_State *state, const Platform_Timing *t)
+void on_frame(Editor_State *state, const Platform_Timing *t)
 {
     if (state->should_break)
     {
@@ -54,28 +55,7 @@ void on_render(Editor_State *state, const Platform_Timing *t)
 
     input_mouse_update(state, t->prev_delta_time);
 
-    glViewport(0, 0, (GLsizei)state->render_state.framebuffer_dim.x, (GLsizei)state->render_state.framebuffer_dim.y);
-
-    glClearColor(0.4f, 0.3f, 0.1f, 1.0f);
-    glDisable(GL_SCISSOR_TEST);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBindVertexArray(state->render_state.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
-
-    glUseProgram(state->render_state.grid_shader);
-    draw_grid(state->canvas_viewport, &state->render_state);
-
-    glUseProgram(state->render_state.main_shader);
-
-    // Render views backwards for correct z ordering
-    for (int i = state->view_count - 1; i >= 0; i--)
-    {
-        View *view = state->views[i];
-        bool is_active = view == state->active_view;
-        draw_view(view, is_active, state->canvas_viewport, &state->render_state, t);
-    }
-
-    draw_status_bar(state, &state->render_state, t);
+    editor_render(state, t);
 }
 
 void on_platform_event(Editor_State *state, const Platform_Event *e)
@@ -131,104 +111,286 @@ void on_destroy(Editor_State *state)
     }
 }
 
-bool gl_check_compile_success(GLuint shader, const char *src)
+// ------------------------------------------------------------------------------------------------------------------------
+
+void editor_render(Editor_State *state, const Platform_Timing *t)
 {
-    GLint success = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char log[512];
-        glGetShaderInfoLog(shader, sizeof(log), NULL, log);
-        fprintf(stderr, "Shader compile error:\n%s\nSource:\n", log);
-        fprintf(stderr, "%s\n", src);
-    }
-    return (bool)success;
-}
+    glViewport(0, 0, (GLsizei)state->render_state.framebuffer_dim.x, (GLsizei)state->render_state.framebuffer_dim.y);
 
-bool gl_check_link_success(GLuint prog)
-{
-    GLint success = 0;
-    glGetProgramiv(prog, GL_LINK_STATUS, &success);
-    if (!success) {
-        char log[512];
-        glGetProgramInfoLog(prog, sizeof(log), NULL, log);
-        fprintf(stderr, "Program link error:\n%s\n", log);
-    }
-    return (bool)success;
-}
+    glClearColor(0.4f, 0.3f, 0.1f, 1.0f);
+    glDisable(GL_SCISSOR_TEST);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindVertexArray(state->render_state.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
 
-GLuint gl_create_shader_program(const char *vs_src, const char *fs_src)
-{
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vs_src, 0);
-    glCompileShader(vs);
-    gl_check_compile_success(vs, vs_src);
+    glUseProgram(state->render_state.grid_shader);
+    render_grid(state->canvas_viewport, &state->render_state);
 
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fs_src, 0);
-    glCompileShader(fs);
-    gl_check_compile_success(fs, fs_src);
+    glUseProgram(state->render_state.main_shader);
 
-    GLuint prog = glCreateProgram();
-    glAttachShader(prog, vs);
-    glAttachShader(prog, fs);
-    glLinkProgram(prog);
-    gl_check_link_success(prog);
-
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    return prog;
-}
-
-void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
-{
-    glEnable(GL_SCISSOR_TEST);
-    Rect scaled_rect = {
-        .x = screen_rect.x * render_state->dpi_scale,
-        .y = screen_rect.y * render_state->dpi_scale,
-        .w = screen_rect.w * render_state->dpi_scale,
-        .h = screen_rect.h * render_state->dpi_scale
-    };
-    float scaled_window_h = render_state->window_dim.y * render_state->dpi_scale;
-    GLint scissor_x = (GLint)floor(scaled_rect.x);
-    float screen_rect_topdown_bottom_y = scaled_rect.y + scaled_rect.h;
-    float screen_rect_bottomup_bottom_y = scaled_window_h - screen_rect_topdown_bottom_y;
-    GLint scissor_y = (GLint)floor(screen_rect_bottomup_bottom_y);
-    GLsizei scissor_w = (GLsizei)(ceil(scaled_rect.x + scaled_rect.w) - scissor_x);
-    GLsizei scissor_h = (GLsizei)(ceil(screen_rect_bottomup_bottom_y + scaled_rect.h) - scissor_y);
-    glScissor(scissor_x, scissor_y, scissor_w, scissor_h);
-}
-
-Framebuffer gl_create_framebuffer(int w, int h)
-{
-    Framebuffer framebuffer;
-    framebuffer.w = w;
-    framebuffer.h = h;
-
-    glGenFramebuffers(1, &framebuffer.fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.fbo);
-
-    glGenTextures(1, &framebuffer.tex);
-    glBindTexture(GL_TEXTURE_2D, framebuffer.tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, framebuffer.w, framebuffer.h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.tex, 0);
-
-    glGenRenderbuffers(1, &framebuffer.depth_rb);
-    glBindRenderbuffer(GL_RENDERBUFFER, framebuffer.depth_rb);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, framebuffer.depth_rb);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    // Render views backwards for correct z ordering
+    for (int i = state->view_count - 1; i >= 0; i--)
     {
-        log_warning("gl_create_framebuffer: Failed to create framebuffer");
+        View *view = state->views[i];
+        bool is_active = view == state->active_view;
+        render_view(view, is_active, state->canvas_viewport, &state->render_state, t);
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    return framebuffer;
+    render_status_bar(state, &state->render_state, t);
 }
+
+void render_grid(Viewport canvas_viewport, Render_State *render_state)
+{
+    Mat_4 proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
+
+    glUniformMatrix4fv(render_state->grid_shader_mvp_loc, 1, GL_FALSE, proj.m);
+
+    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
+
+    float scaled_offset_x = canvas_viewport.rect.x * render_state->dpi_scale;
+    float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
+    glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
+
+    const float grid_spacing = 50.0f;
+    glUniform1f(render_state->grid_shader_spacing_loc, grid_spacing * render_state->dpi_scale);
+
+    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
+}
+
+void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
+{
+    transform_set_canvas_space(canvas_viewport, render_state);
+    if (is_active)
+        draw_quad(view->outer_rect, (unsigned char[4]){40, 40, 40, 255});
+    else
+        draw_quad(view->outer_rect, (unsigned char[4]){20, 20, 20, 255});
+
+    switch(view->kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            render_buffer_view(&view->bv, is_active, canvas_viewport, render_state, t->prev_delta_time);
+        } break;
+
+        case VIEW_KIND_IMAGE:
+        {
+            render_image_view(&view->iv, render_state);
+        } break;
+
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            render_live_scene_view(&view->lsv, render_state, t);
+        } break;
+    }
+}
+
+void render_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
+{
+    Text_Buffer *text_buffer = &buffer_view->buffer->text_buffer;
+    Display_Cursor *display_cursor = &buffer_view->cursor;
+    Viewport *buffer_viewport = &buffer_view->viewport;
+
+    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
+    draw_quad(text_area_rect, (unsigned char[4]){10, 10, 10, 255});
+
+    transform_set_buffer_view_text_area(buffer_view, canvas_viewport, render_state);
+    render_text_buffer(*text_buffer, *buffer_viewport, render_state);
+    if (is_active)
+    {
+        render_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
+    }
+    render_buffer_view_selection(buffer_view, render_state);
+
+    render_buffer_view_line_numbers(buffer_view, canvas_viewport, render_state);
+    if (buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL)
+        render_buffer_view_name(buffer_view, is_active, canvas_viewport, render_state);
+}
+
+void render_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
+{
+    float x = 0, y = 0;
+    float line_height = get_font_line_height(render_state->font);
+
+    for (int i = 0; i < text_buffer.line_count; i++)
+    {
+        Rect string_rect = get_string_rect(text_buffer.lines[i].str, render_state->font, 0, y);
+        bool is_seen = rect_intersect(string_rect, viewport.rect);
+        if (is_seen)
+            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (unsigned char[4]){255, 255, 255, 255}, render_state);
+        y += line_height;
+    }
+}
+
+void render_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
+{
+    cursor->blink_time += delta_time;
+    if (cursor->blink_time < 0.5f)
+    {
+        Rect cursor_rect = get_cursor_rect(text_buffer, cursor->pos, render_state);
+        bool is_seen = rect_intersect(cursor_rect, viewport.rect);
+        if (is_seen)
+            draw_quad(cursor_rect, (unsigned char[4]){0, 0, 255, 255});
+    } else if (cursor->blink_time > 1.0f)
+    {
+        cursor->blink_time -= 1.0f;
+    }
+}
+
+void render_buffer_view_selection(Buffer_View *buffer_view, Render_State *render_state)
+{
+    if (buffer_view->mark.active && !cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos)) {
+        Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
+        Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+        for (int i = start.line; i <= end.line; i++)
+        {
+            Text_Line *line = &buffer_view->buffer->text_buffer.lines[i];
+            int h_start, h_end;
+            if (i == start.line && i == end.line) {
+                h_start = start.col;
+                h_end = end.col;
+            } else if (i == start.line) {
+                h_start = start.col;
+                h_end = line->len;
+            } else if (i == end.line) {
+                h_start = 0;
+                h_end = end.col;
+            } else {
+                h_start = 0;
+                h_end = line->len;
+            }
+            if (h_end > h_start)
+            {
+                Rect selected_rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
+                selected_rect.y += i * get_font_line_height(render_state->font);
+                if (rect_intersect(selected_rect, buffer_view->viewport.rect))
+                    draw_quad(selected_rect, (unsigned char[4]){200, 200, 200, 130});
+            }
+        }
+    }
+}
+
+void render_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
+{
+    transform_set_buffer_view_line_num_col(buffer_view, canvas_viewport, render_state);
+
+    const float font_line_height = get_font_line_height(render_state->font);
+    const float viewport_min_y = buffer_view->viewport.rect.y;
+    const float viewport_max_y = viewport_min_y + buffer_view->viewport.rect.h;
+
+    char line_i_str_buf[256];
+    for (int line_i = 0; line_i < buffer_view->buffer->text_buffer.line_count; line_i++)
+    {
+        const float min_y = font_line_height * line_i;
+        const float max_y = min_y + font_line_height;
+        if (min_y < viewport_max_y && max_y > viewport_min_y)
+        {
+            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d", line_i + 1);
+            unsigned char color[4];
+            if (line_i != buffer_view->cursor.pos.line)
+            {
+                color[0] = 150; color[1] = 150; color[2] = 150; color[3] = 255;
+            }
+            else
+            {
+                color[0] = 230; color[1] = 230; color[2] = 230; color[3] = 255;
+            }
+            draw_string(line_i_str_buf, render_state->font, 0, min_y, color, render_state);
+        }
+    }
+}
+
+void render_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
+{
+    bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE);
+
+    Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
+
+    char view_name_buf[256];
+    if (!buffer_view->buffer->file.info.has_been_modified)
+        snprintf(view_name_buf, sizeof(view_name_buf), "%s", buffer_view->buffer->file.info.path);
+    else
+        snprintf(view_name_buf, sizeof(view_name_buf), "%s[*]", buffer_view->buffer->file.info.path);
+
+    transform_set_rect(name_rect, canvas_viewport, render_state);
+    if (is_active)
+        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255}, render_state);
+    else
+        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
+}
+
+void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t)
+{
+    transform_set_screen_space(render_state);
+
+    const float font_line_height = get_font_line_height(render_state->font);
+    const float x_padding = 10;
+    const float y_padding = 2;
+    const float status_bar_height = 2 * font_line_height + 2 * y_padding;
+
+    const Rect status_bar_rect = {
+        .x = 0,
+        .y = render_state->window_dim.y - status_bar_height,
+        .w = render_state->window_dim.x,
+        .h = render_state->window_dim.y};
+
+    draw_quad(status_bar_rect, (unsigned char[4]){30, 30, 30, 255});
+
+    char status_str_buf[256];
+    const unsigned char status_str_color[] = { 200, 200, 200, 255 };
+
+    float status_str_x = status_bar_rect.x + x_padding;
+    float status_str_y = status_bar_rect.y + y_padding;
+
+    View *active_view = state->active_view;
+    if (active_view && active_view->kind == VIEW_KIND_BUFFER)
+    {
+        Buffer_View *active_buffer_view = &active_view->bv;
+        snprintf(status_str_buf, sizeof(status_str_buf),
+            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d",
+            active_buffer_view->cursor.pos.line,
+            active_buffer_view->cursor.pos.col,
+            active_buffer_view->buffer->text_buffer.lines[active_buffer_view->cursor.pos.line].len,
+            active_buffer_view->buffer->text_buffer.line_count);
+        draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
+        status_str_y += font_line_height;
+    }
+
+    Vec_2 mouse_screen_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s; M: " VEC2_FMT, t->fps_avg, t->prev_delta_time, state->working_dir, VEC2_ARG(mouse_screen_pos));
+    draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
+}
+
+void render_image_view(Image_View *image_view, Render_State *render_state)
+{
+    glUseProgram(render_state->image_shader);
+    draw_texture(image_view->image.texture, image_view->image_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
+    glUseProgram(render_state->main_shader);
+}
+
+void render_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t)
+{
+    // TODO: Keep pointers to live scenes in an array and run live scene updates separately, before rendering
+    live_scene_check_hot_reload(ls_view->live_scene);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
+
+    ls_view->live_scene->dylib.on_frame(ls_view->live_scene->state, t);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
+    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
+    glClearColor(0, 0, 0, 1.0f);
+    glBindVertexArray(render_state->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, render_state->vbo);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
+    glUseProgram(render_state->framebuffer_shader);
+    draw_texture(ls_view->framebuffer.tex, ls_view->framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
+    glUseProgram(render_state->main_shader);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
 
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo)
 {
@@ -1148,256 +1310,6 @@ void draw_string(const char *str, Render_Font font, float x, float y, const unsi
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
     glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
-}
-
-void draw_grid(Viewport canvas_viewport, Render_State *render_state)
-{
-    Mat_4 proj = mat4_proj_ortho(0, render_state->window_dim.x, render_state->window_dim.y, 0, -1, 1);
-
-    glUniformMatrix4fv(render_state->grid_shader_mvp_loc, 1, GL_FALSE, proj.m);
-
-    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
-
-    float scaled_offset_x = canvas_viewport.rect.x * render_state->dpi_scale;
-    float scaled_offset_y = canvas_viewport.rect.y * render_state->dpi_scale;
-    glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
-
-    const float grid_spacing = 50.0f;
-    glUniform1f(render_state->grid_shader_spacing_loc, grid_spacing * render_state->dpi_scale);
-
-    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (unsigned char[4]){0});
-}
-
-void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
-{
-    transform_set_canvas_space(canvas_viewport, render_state);
-    if (is_active)
-        draw_quad(view->outer_rect, (unsigned char[4]){40, 40, 40, 255});
-    else
-        draw_quad(view->outer_rect, (unsigned char[4]){20, 20, 20, 255});
-
-    switch(view->kind)
-    {
-        case VIEW_KIND_BUFFER:
-        {
-            draw_buffer_view(&view->bv, is_active, canvas_viewport, render_state, t->prev_delta_time);
-        } break;
-
-        case VIEW_KIND_IMAGE:
-        {
-            draw_image_view(&view->iv, render_state);
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            draw_live_scene_view(&view->lsv, render_state, t);
-        } break;
-    }
-}
-
-void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time)
-{
-    Text_Buffer *text_buffer = &buffer_view->buffer->text_buffer;
-    Display_Cursor *display_cursor = &buffer_view->cursor;
-    Viewport *buffer_viewport = &buffer_view->viewport;
-
-    Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
-    draw_quad(text_area_rect, (unsigned char[4]){10, 10, 10, 255});
-
-    transform_set_buffer_view_text_area(buffer_view, canvas_viewport, render_state);
-    draw_text_buffer(*text_buffer, *buffer_viewport, render_state);
-    if (is_active)
-    {
-        draw_cursor(*text_buffer, display_cursor, *buffer_viewport, render_state, delta_time);
-    }
-    draw_buffer_view_selection(buffer_view, render_state);
-
-    draw_buffer_view_line_numbers(buffer_view, canvas_viewport, render_state);
-    if (buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL)
-        draw_buffer_view_name(buffer_view, is_active, canvas_viewport, render_state);
-}
-
-void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
-{
-    float x = 0, y = 0;
-    float line_height = get_font_line_height(render_state->font);
-
-    for (int i = 0; i < text_buffer.line_count; i++)
-    {
-        Rect string_rect = get_string_rect(text_buffer.lines[i].str, render_state->font, 0, y);
-        bool is_seen = rect_intersect(string_rect, viewport.rect);
-        if (is_seen)
-            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (unsigned char[4]){255, 255, 255, 255}, render_state);
-        y += line_height;
-    }
-}
-
-void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
-{
-    cursor->blink_time += delta_time;
-    if (cursor->blink_time < 0.5f)
-    {
-        Rect cursor_rect = get_cursor_rect(text_buffer, cursor->pos, render_state);
-        bool is_seen = rect_intersect(cursor_rect, viewport.rect);
-        if (is_seen)
-            draw_quad(cursor_rect, (unsigned char[4]){0, 0, 255, 255});
-    } else if (cursor->blink_time > 1.0f)
-    {
-        cursor->blink_time -= 1.0f;
-    }
-}
-
-void draw_buffer_view_selection(Buffer_View *buffer_view, Render_State *render_state)
-{
-    if (buffer_view->mark.active && !cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos)) {
-        Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
-        Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
-        for (int i = start.line; i <= end.line; i++)
-        {
-            Text_Line *line = &buffer_view->buffer->text_buffer.lines[i];
-            int h_start, h_end;
-            if (i == start.line && i == end.line) {
-                h_start = start.col;
-                h_end = end.col;
-            } else if (i == start.line) {
-                h_start = start.col;
-                h_end = line->len;
-            } else if (i == end.line) {
-                h_start = 0;
-                h_end = end.col;
-            } else {
-                h_start = 0;
-                h_end = line->len;
-            }
-            if (h_end > h_start)
-            {
-                Rect selected_rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
-                selected_rect.y += i * get_font_line_height(render_state->font);
-                if (rect_intersect(selected_rect, buffer_view->viewport.rect))
-                    draw_quad(selected_rect, (unsigned char[4]){200, 200, 200, 130});
-            }
-        }
-    }
-}
-
-void draw_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
-{
-    transform_set_buffer_view_line_num_col(buffer_view, canvas_viewport, render_state);
-
-    const float font_line_height = get_font_line_height(render_state->font);
-    const float viewport_min_y = buffer_view->viewport.rect.y;
-    const float viewport_max_y = viewport_min_y + buffer_view->viewport.rect.h;
-
-    char line_i_str_buf[256];
-    for (int line_i = 0; line_i < buffer_view->buffer->text_buffer.line_count; line_i++)
-    {
-        const float min_y = font_line_height * line_i;
-        const float max_y = min_y + font_line_height;
-        if (min_y < viewport_max_y && max_y > viewport_min_y)
-        {
-            snprintf(line_i_str_buf, sizeof(line_i_str_buf), "%3d", line_i + 1);
-            unsigned char color[4];
-            if (line_i != buffer_view->cursor.pos.line)
-            {
-                color[0] = 150; color[1] = 150; color[2] = 150; color[3] = 255;
-            }
-            else
-            {
-                color[0] = 230; color[1] = 230; color[2] = 230; color[3] = 255;
-            }
-            draw_string(line_i_str_buf, render_state->font, 0, min_y, color, render_state);
-        }
-    }
-}
-
-void draw_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
-{
-    bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE);
-
-    Rect name_rect = buffer_view_get_name_rect(buffer_view, render_state);
-
-    char view_name_buf[256];
-    if (!buffer_view->buffer->file.info.has_been_modified)
-        snprintf(view_name_buf, sizeof(view_name_buf), "%s", buffer_view->buffer->file.info.path);
-    else
-        snprintf(view_name_buf, sizeof(view_name_buf), "%s[*]", buffer_view->buffer->file.info.path);
-
-    transform_set_rect(name_rect, canvas_viewport, render_state);
-    if (is_active)
-        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){140, 140, 140, 255}, render_state);
-    else
-        draw_string(view_name_buf, render_state->font, 0, 0, (unsigned char[4]){100, 100, 100, 255}, render_state);
-}
-
-void draw_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t)
-{
-    transform_set_screen_space(render_state);
-
-    const float font_line_height = get_font_line_height(render_state->font);
-    const float x_padding = 10;
-    const float y_padding = 2;
-    const float status_bar_height = 2 * font_line_height + 2 * y_padding;
-
-    const Rect status_bar_rect = {
-        .x = 0,
-        .y = render_state->window_dim.y - status_bar_height,
-        .w = render_state->window_dim.x,
-        .h = render_state->window_dim.y};
-
-    draw_quad(status_bar_rect, (unsigned char[4]){30, 30, 30, 255});
-
-    char status_str_buf[256];
-    const unsigned char status_str_color[] = { 200, 200, 200, 255 };
-
-    float status_str_x = status_bar_rect.x + x_padding;
-    float status_str_y = status_bar_rect.y + y_padding;
-
-    View *active_view = state->active_view;
-    if (active_view && active_view->kind == VIEW_KIND_BUFFER)
-    {
-        Buffer_View *active_buffer_view = &active_view->bv;
-        snprintf(status_str_buf, sizeof(status_str_buf),
-            "STATUS: Cursor: %d, %d; Line Len: %d; Lines: %d",
-            active_buffer_view->cursor.pos.line,
-            active_buffer_view->cursor.pos.col,
-            active_buffer_view->buffer->text_buffer.lines[active_buffer_view->cursor.pos.line].len,
-            active_buffer_view->buffer->text_buffer.line_count);
-        draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
-        status_str_y += font_line_height;
-    }
-
-    Vec_2 mouse_screen_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
-
-    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s; M: " VEC2_FMT, t->fps_avg, t->prev_delta_time, state->working_dir, VEC2_ARG(mouse_screen_pos));
-    draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
-}
-
-void draw_image_view(Image_View *image_view, Render_State *render_state)
-{
-    glUseProgram(render_state->image_shader);
-    draw_texture(image_view->image.texture, image_view->image_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
-    glUseProgram(render_state->main_shader);
-}
-
-void draw_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t)
-{
-    live_scene_check_hot_reload(ls_view->live_scene);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
-
-    ls_view->live_scene->dylib.on_render(ls_view->live_scene->state, t);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
-    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
-    glClearColor(0, 0, 0, 1.0f);
-    glBindVertexArray(render_state->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, render_state->vbo);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-
-    glUseProgram(render_state->framebuffer_shader);
-    draw_texture(ls_view->framebuffer.tex, ls_view->framebuffer_rect, (unsigned char[4]){255, 255, 255, 255}, render_state);
-    glUseProgram(render_state->main_shader);
 }
 
 Mat_4 viewport_get_transform(Viewport viewport)
@@ -2499,5 +2411,6 @@ bool sys_file_exists(const char *path)
 
 #include "actions.c"
 #include "input.c"
+#include "misc.c"
 #include "scene_loader.c"
 #include "unit_tests.c"

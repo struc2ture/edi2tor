@@ -22,7 +22,7 @@ typedef struct {
     time_t timestamp;
     scene_on_init_t on_init;
     scene_on_reload_t on_reload;
-    scene_on_render_t on_render;
+    scene_on_render_t on_frame;
     scene_on_platform_event_t on_platform_event;
     scene_on_destroy_t on_destroy;
 } Scene_Dylib;

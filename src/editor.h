@@ -11,6 +11,7 @@
 #include <stb_image.h>
 #include <stb_truetype.h>
 
+#include "misc.h"
 #include "platform_types.h"
 #include "scene_loader.h"
 
@@ -51,16 +52,6 @@ typedef struct {
     float height;
     int channels;
 } Image;
-
-typedef struct {
-    int w;
-    int h;
-    GLuint fbo;
-    GLuint tex;
-    GLuint depth_rb;
-    GLuint prog;
-    GLuint vao;
-} Framebuffer;
 
 typedef struct {
     Rect rect;
@@ -113,7 +104,7 @@ typedef struct {
     float i_dpi_scale;
 } Render_Font;
 
-typedef struct {
+struct Render_State {
     GLuint main_shader;
     GLuint grid_shader;
     GLuint image_shader;
@@ -138,7 +129,7 @@ typedef struct {
     float buffer_view_padding;
     float buffer_view_resize_handle_radius;
     GLuint default_fbo;
-} Render_State;
+};
 
 typedef enum {
     PROMPT_OPEN_FILE,
@@ -288,15 +279,22 @@ typedef enum {
 
 void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo);
 void on_reload(Editor_State *state);
-void on_render(Editor_State *state, const Platform_Timing *t);
+void on_frame(Editor_State *state, const Platform_Timing *t);
 void on_platform_event(Editor_State *state, const Platform_Event *event);
 void on_destroy(Editor_State *state);
 
-bool gl_check_compile_success(GLuint shader, const char *src);
-bool gl_check_link_success(GLuint prog);
-GLuint gl_create_shader_program(const char *vs_src, const char *fs_src);
-void gl_enable_scissor(Rect screen_rect, Render_State *render_state);
-Framebuffer gl_create_framebuffer(int width, int height);
+void editor_render(Editor_State *state, const Platform_Timing *t);
+void render_grid(Viewport canvas_viewport, Render_State *render_state);
+void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
+void render_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
+void render_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
+void render_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
+void render_buffer_view_selection(Buffer_View *buffer_view, Render_State *render_state);
+void render_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
+void render_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
+void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t);
+void render_image_view(Image_View *image_view, Render_State *render_state);
+void render_live_scene_view(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t);
 
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo);
 
@@ -343,6 +341,7 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state);
 void framebuffer_destroy(Framebuffer framebuffer);
 
 Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo);
+void live_scene_check_hot_reload(Live_Scene *live_scene);
 void live_scene_destroy(Live_Scene *render_scene);
 
 Live_Scene_View *live_scene_view_create(Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state);
@@ -373,22 +372,6 @@ Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_Stat
 void draw_quad(Rect q, const unsigned char color[4]);
 void draw_texture(GLuint texture, Rect q, const unsigned char color[4], Render_State *render_state);
 void draw_string(const char *str, Render_Font font, float x, float y, const unsigned char color[4], Render_State *render_state);
-
-void draw_grid(Viewport canvas_viewport, Render_State *render_state);
-
-void draw_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
-void draw_buffer_view(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
-void draw_text_buffer(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
-void draw_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
-void draw_buffer_view_selection(Buffer_View *buffer_view, Render_State *render_state);
-void draw_buffer_view_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
-void draw_buffer_view_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
-
-void draw_image_view(Image_View *image_view, Render_State *render_state);
-
-void draw_live_scene_view(Live_Scene_View *live_scene_view, Render_State *render_state, const Platform_Timing *t);
-
-void draw_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t);
 
 Mat_4 viewport_get_transform(Viewport viewport);
 void transform_set_buffer_view_text_area(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);

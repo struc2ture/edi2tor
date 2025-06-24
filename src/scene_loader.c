@@ -95,7 +95,7 @@ Scene_Dylib scene_loader_dylib_open(const char *path)
 
     X(on_init);
     X(on_reload);
-    X(on_render);
+    X(on_frame);
     X(on_platform_event);
     X(on_destroy);
 

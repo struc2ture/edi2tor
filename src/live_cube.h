@@ -26,6 +26,6 @@ typedef struct {
 
 void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene);
 void on_reload(Live_Cube_State *state);
-void on_render(Live_Cube_State *state, const Platform_Timing *t);
+void on_frame(Live_Cube_State *state, const Platform_Timing *t);
 void on_platform_event(Live_Cube_State *state, const Platform_Event *e);
 void on_destroy(Live_Cube_State *state);

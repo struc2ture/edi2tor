@@ -190,7 +190,7 @@ void on_reload(Live_Cube_State *state)
     (void)state;
 }
 
-void on_render(Live_Cube_State *state, const Platform_Timing *t)
+void on_frame(Live_Cube_State *state, const Platform_Timing *t)
 {
     glViewport(0, 0, (GLsizei)state->framebuffer_dim.x, (GLsizei)state->framebuffer_dim.y);
 

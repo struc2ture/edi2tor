@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 
         perform_timing_calculations(&g_timing);
 
-        g_scene_dylib.on_render(g_scene_state, &g_timing);
+        g_scene_dylib.on_frame(g_scene_state, &g_timing);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
