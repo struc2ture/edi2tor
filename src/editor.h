@@ -109,10 +109,11 @@ typedef struct {
 } Render_Font;
 
 struct Render_State {
-    GLuint main_shader;
+    GLuint font_shader;
     GLuint grid_shader;
-    GLuint image_shader;
-    GLuint framebuffer_shader;
+    GLuint quad_shader;
+    GLuint tex_shader;
+    GLuint flipped_quad_shader;
     GLuint vao;
     GLuint vbo;
     GLuint mvp_ubo;
@@ -136,6 +137,10 @@ struct Render_State {
 
     Mat_Stack mat_stack_proj;
     Mat_Stack mat_stack_model_view;
+
+    int texture_slot_white;
+    int texture_slot_font;
+    int texture_slot_misc;
 };
 
 typedef enum {
@@ -293,18 +298,18 @@ void on_destroy(Editor_State *state);
 void editor_render(Editor_State *state, const Platform_Timing *t);
 void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
 void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
-void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state);
-void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time);
-void render_view_buffer_selection(Buffer_View *buffer_view, Render_State *render_state);
-void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state);
-void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state);
-void render_view_image(Image_View *image_view, Render_State *render_state);
-void render_view_live_scene(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t);
-void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t);
+void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, const Render_State *render_state);
+void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, const Render_State *render_state, float delta_time);
+void render_view_buffer_selection(Buffer_View *buffer_view, const Render_State *render_state);
+void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, const Render_State *render_state);
+void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, const Render_State *render_state);
+void render_view_image(Image_View *image_view, const Render_State *render_state);
+void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const Platform_Timing *t);
+void render_status_bar(Editor_State *state, const Render_State *render_state, const Platform_Timing *t);
 
-void draw_quad(Rect q, Color c);
-void draw_texture(GLuint texture, Rect q, Color c, Render_State *render_state);
-void draw_string(const char *str, Render_Font font, float x, float y, Color c, Render_State *render_state);
+void draw_quad(Rect q, Color c, const Render_State *render_state);
+void draw_texture(GLuint texture, Rect q, Color c, const Render_State *render_state);
+void draw_string(const char *str, Render_Font font, float x, float y, Color c, const Render_State *render_state);
 void draw_grid(Vec_2 offset, float spacing, const Render_State *render_state);
 
 void mvp_update_from_stacks(Render_State *render_state);
@@ -377,7 +382,7 @@ Rect get_string_rect(const char *str, Render_Font font, float x, float y);
 Rect get_string_range_rect(const char *str, Render_Font font, int start_char, int end_char);
 Rect get_string_char_rect(const char *str, Render_Font font, int char_i);
 int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
-Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state);
+Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, const Render_State *render_state);
 
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
 Vec_2 canvas_pos_to_screen_pos(Vec_2 canvas_pos, Viewport canvas_viewport);

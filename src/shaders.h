@@ -1,6 +1,6 @@
 #pragma once
 
-const char *shader_main_vert_src =
+const char *shader_vert_quad_src =
 "#version 330 core\n"
 "layout (location = 0) in vec2 aPos;\n"
 "layout (location = 1) in vec2 aTexCoord;\n"
@@ -16,27 +16,7 @@ const char *shader_main_vert_src =
 "    Color = aColor;\n"
 "}\n";
 
-const char *shader_main_frag_src =
-"#version 330 core\n"
-"out vec4 FragColor;\n"
-"in vec2 TexCoord;\n"
-"uniform sampler2D u_tex;\n"
-"in vec4 Color;\n"
-"void main() {\n"
-"    FragColor = vec4(vec3(Color), Color.a * texture(u_tex, TexCoord).r);\n"
-"}\n";
-
-const char *shader_image_frag_src =
-"#version 330 core\n"
-"out vec4 FragColor;\n"
-"in vec2 TexCoord;\n"
-"uniform sampler2D u_tex;\n"
-"in vec4 Color;\n"
-"void main() {\n"
-"    FragColor = Color * texture(u_tex, TexCoord);\n"
-"}\n";
-
-const char *shader_framebuffer_vert_src =
+const char *shader_vert_flipped_quad_src =
 "#version 330 core\n"
 "layout (location = 0) in vec2 aPos;\n"
 "layout (location = 1) in vec2 aTexCoord;\n"
@@ -52,7 +32,16 @@ const char *shader_framebuffer_vert_src =
 "    Color = aColor;\n"
 "}\n";
 
-const char *shader_framebuffer_frag_src =
+const char *shader_frag_quad_src =
+"#version 330 core\n"
+"out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"in vec4 Color;\n"
+"void main() {\n"
+"    FragColor = Color;\n"
+"}\n";
+
+const char *shader_frag_tex_src =
 "#version 330 core\n"
 "out vec4 FragColor;\n"
 "in vec2 TexCoord;\n"
@@ -62,7 +51,17 @@ const char *shader_framebuffer_frag_src =
 "    FragColor = Color * texture(u_tex, TexCoord);\n"
 "}\n";
 
-const char *shader_grid_frag_src =
+const char *shader_frag_font_src =
+"#version 330 core\n"
+"out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D u_tex;\n"
+"in vec4 Color;\n"
+"void main() {\n"
+"    FragColor = vec4(vec3(Color), Color.a * texture(u_tex, TexCoord).r);\n"
+"}\n";
+
+const char *shader_frag_grid_src =
 "#version 330 core\n"
 "out vec4 FragColor;\n"
 "uniform vec2 u_resolution;\n"

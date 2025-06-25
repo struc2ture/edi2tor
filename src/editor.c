@@ -133,8 +133,6 @@ void editor_render(Editor_State *state, const Platform_Timing *t)
 
         draw_grid((Vec_2){state->canvas_viewport.rect.x, state->canvas_viewport.rect.y}, 50, &state->render_state);
 
-        glUseProgram(state->render_state.main_shader);
-
         mat_stack_push(&state->render_state.mat_stack_model_view);
         {
             mat_stack_mul_r(&state->render_state.mat_stack_model_view,
@@ -168,9 +166,9 @@ void editor_render(Editor_State *state, const Platform_Timing *t)
 void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
 {
     if (is_active)
-        draw_quad(view->outer_rect, (Color){40, 40, 40, 255});
+        draw_quad(view->outer_rect, (Color){40, 40, 40, 255}, render_state);
     else
-        draw_quad(view->outer_rect, (Color){20, 20, 20, 255});
+        draw_quad(view->outer_rect, (Color){20, 20, 20, 255}, render_state);
 
     switch(view->kind)
     {
@@ -198,7 +196,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
     Viewport *buffer_viewport = &buffer_view->viewport;
 
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
-    draw_quad(text_area_rect, (Color){10, 10, 10, 255});
+    draw_quad(text_area_rect, (Color){10, 10, 10, 255}, render_state);
 
     mat_stack_push(&render_state->mat_stack_model_view);
     {
@@ -267,8 +265,10 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
     mvp_update_from_stacks(render_state);
 }
 
-void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_State *render_state)
+void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, const Render_State *render_state)
 {
+    glUseProgram(render_state->font_shader);
+
     float x = 0, y = 0;
     float line_height = get_font_line_height(render_state->font);
 
@@ -282,7 +282,7 @@ void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, Render_
     }
 }
 
-void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, Render_State *render_state, float delta_time)
+void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport,  const Render_State *render_state, float delta_time)
 {
     cursor->blink_time += delta_time;
     if (cursor->blink_time < 0.5f)
@@ -290,14 +290,14 @@ void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, 
         Rect cursor_rect = get_cursor_rect(text_buffer, cursor->pos, render_state);
         bool is_seen = rect_intersect(cursor_rect, viewport.rect);
         if (is_seen)
-            draw_quad(cursor_rect, (Color){0, 0, 255, 255});
+            draw_quad(cursor_rect, (Color){100, 100, 255, 180}, render_state);
     } else if (cursor->blink_time > 1.0f)
     {
         cursor->blink_time -= 1.0f;
     }
 }
 
-void render_view_buffer_selection(Buffer_View *buffer_view, Render_State *render_state)
+void render_view_buffer_selection(Buffer_View *buffer_view, const Render_State *render_state)
 {
     if (buffer_view->mark.active && !cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos)) {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
@@ -324,17 +324,19 @@ void render_view_buffer_selection(Buffer_View *buffer_view, Render_State *render
                 Rect selected_rect = get_string_range_rect(line->str, render_state->font, h_start, h_end);
                 selected_rect.y += i * get_font_line_height(render_state->font);
                 if (rect_intersect(selected_rect, buffer_view->viewport.rect))
-                    draw_quad(selected_rect, (Color){200, 200, 200, 130});
+                    draw_quad(selected_rect, (Color){200, 200, 200, 130}, render_state);
             }
         }
     }
 }
 
-void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, Render_State *render_state)
+void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, const Render_State *render_state)
 {
     const float font_line_height = get_font_line_height(render_state->font);
     const float viewport_min_y = buffer_view->viewport.rect.y;
     const float viewport_max_y = viewport_min_y + buffer_view->viewport.rect.h;
+
+    glUseProgram(render_state->font_shader);
 
     char line_i_str_buf[256];
     for (int line_i = 0; line_i < buffer_view->buffer->text_buffer.line_count; line_i++)
@@ -358,9 +360,11 @@ void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_v
     }
 }
 
-void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state)
+void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, const Render_State *render_state)
 {
     bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL);
+
+    glUseProgram(render_state->font_shader);
 
     char view_name_buf[256];
     if (!buffer_view->buffer->file.info.has_been_modified)
@@ -374,14 +378,13 @@ void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport 
         draw_string(view_name_buf, render_state->font, 0, 0, (Color){100, 100, 100, 255}, render_state);
 }
 
-void render_view_image(Image_View *image_view, Render_State *render_state)
+void render_view_image(Image_View *image_view, const Render_State *render_state)
 {
-    glUseProgram(render_state->image_shader);
+    glUseProgram(render_state->tex_shader);
     draw_texture(image_view->image.texture, image_view->image_rect, (Color){255, 255, 255, 255}, render_state);
-    glUseProgram(render_state->main_shader);
 }
 
-void render_view_live_scene(Live_Scene_View *ls_view, Render_State *render_state, const Platform_Timing *t)
+void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const Platform_Timing *t)
 {
     // TODO: Keep pointers to live scenes in an array and run live scene updates separately, before rendering
     live_scene_check_hot_reload(ls_view->live_scene);
@@ -398,12 +401,23 @@ void render_view_live_scene(Live_Scene_View *ls_view, Render_State *render_state
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
-    glUseProgram(render_state->framebuffer_shader);
-    draw_texture(ls_view->framebuffer.tex, ls_view->framebuffer_rect, (Color){255, 255, 255, 255}, render_state);
-    glUseProgram(render_state->main_shader);
+    Rect q = ls_view->framebuffer_rect;
+    Color c = {255, 255, 255, 255};
+    glUseProgram(render_state->flipped_quad_shader);
+    Vert_Buffer vert_buf = {0};
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, c));
+    glUseProgram(render_state->flipped_quad_shader);
+    glBindTexture(GL_TEXTURE_2D, ls_view->framebuffer.tex);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
-void render_status_bar(Editor_State *state, Render_State *render_state, const Platform_Timing *t)
+void render_status_bar(Editor_State *state, const Render_State *render_state, const Platform_Timing *t)
 {
     const float font_line_height = get_font_line_height(render_state->font);
     const float x_padding = 10;
@@ -416,13 +430,15 @@ void render_status_bar(Editor_State *state, Render_State *render_state, const Pl
         .w = render_state->window_dim.x,
         .h = render_state->window_dim.y};
 
-    draw_quad(status_bar_rect, (Color){30, 30, 30, 255});
+    draw_quad(status_bar_rect, (Color){30, 30, 30, 255}, render_state);
 
     char status_str_buf[256];
     const Color status_str_color = {200, 200, 200, 255};
 
     float status_str_x = status_bar_rect.x + x_padding;
     float status_str_y = status_bar_rect.y + y_padding;
+
+    glUseProgram(render_state->font_shader);
 
     View *active_view = state->active_view;
     if (active_view && active_view->kind == VIEW_KIND_BUFFER)
@@ -447,7 +463,7 @@ void render_status_bar(Editor_State *state, Render_State *render_state, const Pl
 // ---------------------------------------------------------------------------------------------------------------------------
 
 // TODO: Move this out of this file?
-void draw_quad(Rect q, Color c)
+void draw_quad(Rect q, Color c, const Render_State *render_state)
 {
     Vert_Buffer vert_buf = {0};
     vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
@@ -456,11 +472,12 @@ void draw_quad(Rect q, Color c)
     vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
     vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
     vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 0, 0, c));
+    glUseProgram(render_state->quad_shader);
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
-void draw_texture(GLuint texture, Rect q, Color c, Render_State *render_state)
+void draw_texture(GLuint texture, Rect q, Color c, const Render_State *render_state)
 {
     Vert_Buffer vert_buf = {0};
     vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
@@ -469,15 +486,15 @@ void draw_texture(GLuint texture, Rect q, Color c, Render_State *render_state)
     vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
     vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
     vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, c));
-    glActiveTexture(GL_TEXTURE0);
+    glUseProgram(render_state->tex_shader);
     glBindTexture(GL_TEXTURE_2D, texture);
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
 }
 
-void draw_string(const char *str, Render_Font font, float x, float y, Color c, Render_State *render_state)
+void draw_string(const char *str, Render_Font font, float x, float y, Color c, const Render_State *render_state)
 {
+    // NOTE: Assumes glUseProgram(font_shader) is called outside
     y += font.ascent * font.i_dpi_scale;
     Vert_Buffer vert_buf = {0};
     while (*str)
@@ -495,8 +512,6 @@ void draw_string(const char *str, Render_Font font, float x, float y, Color c, R
         }
         str++;
     }
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font.texture);
     glBufferData(GL_ARRAY_BUFFER, VERT_MAX * sizeof(Vert), NULL, GL_DYNAMIC_DRAW); // Orphan existing buffer to stay on the fast path on mac
     glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
@@ -506,16 +521,23 @@ void draw_string(const char *str, Render_Font font, float x, float y, Color c, R
 void draw_grid(Vec_2 offset, float spacing, const Render_State *render_state)
 {
     glUseProgram(render_state->grid_shader);
-
     glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
-
     float scaled_offset_x = offset.x * render_state->dpi_scale;
     float scaled_offset_y = offset.y * render_state->dpi_scale;
     glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
-
     glUniform1f(render_state->grid_shader_spacing_loc, spacing * render_state->dpi_scale);
 
-    draw_quad((Rect){0, 0, render_state->window_dim.x, render_state->window_dim.y}, (Color){0});
+    Rect q = {0, 0, render_state->window_dim.x, render_state->window_dim.y};
+    Color c = {0};
+    Vert_Buffer vert_buf = {0};
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
+    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 0, 0, c));
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
+    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -553,10 +575,11 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    render_state->main_shader = gl_create_shader_program(shader_main_vert_src, shader_main_frag_src);
-    render_state->grid_shader = gl_create_shader_program(shader_main_vert_src, shader_grid_frag_src);
-    render_state->image_shader = gl_create_shader_program(shader_main_vert_src, shader_image_frag_src);
-    render_state->framebuffer_shader = gl_create_shader_program(shader_framebuffer_vert_src, shader_framebuffer_frag_src);
+    render_state->font_shader = gl_create_shader_program(shader_vert_quad_src, shader_frag_font_src);
+    render_state->grid_shader = gl_create_shader_program(shader_vert_quad_src, shader_frag_grid_src);
+    render_state->quad_shader = gl_create_shader_program(shader_vert_quad_src, shader_frag_quad_src);
+    render_state->tex_shader = gl_create_shader_program(shader_vert_quad_src, shader_frag_tex_src);
+    render_state->flipped_quad_shader = gl_create_shader_program(shader_vert_flipped_quad_src, shader_frag_tex_src);
 
     render_state->grid_shader_offset_loc = glGetUniformLocation(render_state->grid_shader, "u_offset");
     render_state->grid_shader_spacing_loc = glGetUniformLocation(render_state->grid_shader, "u_spacing");
@@ -568,10 +591,11 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
     GLuint mvp_ubo_binding_point = 0;
     glBindBufferBase(GL_UNIFORM_BUFFER, mvp_ubo_binding_point, render_state->mvp_ubo);
-    glUniformBlockBinding(render_state->main_shader, glGetUniformBlockIndex(render_state->main_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->font_shader, glGetUniformBlockIndex(render_state->font_shader, "Matrices"), mvp_ubo_binding_point);
     glUniformBlockBinding(render_state->grid_shader, glGetUniformBlockIndex(render_state->grid_shader, "Matrices"), mvp_ubo_binding_point);
-    glUniformBlockBinding(render_state->image_shader, glGetUniformBlockIndex(render_state->image_shader, "Matrices"), mvp_ubo_binding_point);
-    glUniformBlockBinding(render_state->framebuffer_shader, glGetUniformBlockIndex(render_state->framebuffer_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->quad_shader, glGetUniformBlockIndex(render_state->quad_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->tex_shader, glGetUniformBlockIndex(render_state->tex_shader, "Matrices"), mvp_ubo_binding_point);
+    glUniformBlockBinding(render_state->flipped_quad_shader, glGetUniformBlockIndex(render_state->flipped_quad_shader, "Matrices"), mvp_ubo_binding_point);
 
     glGenVertexArrays(1, &render_state->vao);
     glGenBuffers(1, &render_state->vbo);
@@ -585,16 +609,21 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vert), (void *)offsetof(Vert, c));
     glEnableVertexAttribArray(2);
 
-    glGenTextures(1, &render_state->white_texture);
-    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
-    unsigned char white_texture_bytes[] = { 255 };
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, white_texture_bytes);
-
+    glActiveTexture(GL_TEXTURE0);
     render_state->font = load_font(FONT_PATH, render_state->dpi_scale);
+    glActiveTexture(GL_TEXTURE1); // Make sure any subsequent bind texture calls won't affect the font texture slot
+
+    glUseProgram(render_state->tex_shader);
+    glUniform1i(glGetUniformLocation(render_state->tex_shader, "u_tex"), 1);
+    glUseProgram(render_state->flipped_quad_shader);
+    glUniform1i(glGetUniformLocation(render_state->flipped_quad_shader, "u_tex"), 1);
+
     render_state->buffer_view_line_num_col_width = get_string_rect("000", render_state->font, 0, 0).w;
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
     render_state->buffer_view_resize_handle_radius = 5.0f;
+
+    glUseProgram(0);
 }
 
 Buffer **buffer_create_new_slot(Editor_State *state)
@@ -1376,7 +1405,7 @@ int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x)
     return char_i;
 }
 
-Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Render_State *render_state)
+Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, const Render_State *render_state)
 {
     Rect cursor_rect = get_string_char_rect(text_buffer.lines[cursor_pos.line].str, render_state->font, cursor_pos.col);
     float line_height = get_font_line_height(render_state->font);
