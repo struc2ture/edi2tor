@@ -34,3 +34,8 @@ void mat_stack_push(Mat_Stack *s);
 Mat_4 mat_stack_pop(Mat_Stack *s);
 Mat_4 mat_stack_peek(Mat_Stack *s);
 void mat_stack_mul_r(Mat_Stack *s, Mat_4 m);
+
+typedef struct {
+    int line;
+    int col;
+} Cursor_Pos;

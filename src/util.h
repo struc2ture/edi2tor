@@ -10,8 +10,6 @@
 #include <sys/stat.h>
 #include <time.h>
 
-#include "editor.h"
-
 inline static void bassert(bool condition)
 {
     if (!condition) __builtin_debugtrap();
@@ -108,44 +106,6 @@ static void flip_bitmap(void *bitmap_bytes, int pitch, int height)
     free(temp_row);
 }
 
-inline static Rect_Bounds rect_get_bounds(Rect r)
-{
-    Rect_Bounds b;
-    b.min_x = r.x;
-    b.min_y = r.y;
-    b.max_x = r.x + r.w;
-    b.max_y = r.y + r.h;
-    return b;
-}
-
-inline static bool rect_intersect(Rect a, Rect b)
-{
-    float a_min_x = a.x;
-    float a_min_y = a.y;
-    float a_max_x = a.x + a.w;
-    float a_max_y = a.y + a.h;
-    float b_min_x = b.x;
-    float b_min_y = b.y;
-    float b_max_x = b.x + b.w;
-    float b_max_y = b.y + b.h;
-    bool intersect =
-        a_min_x < b_max_x && a_max_x > b_min_x &&
-        a_min_y < b_max_y && a_max_y > b_min_y;
-    return intersect;
-}
-
-inline static bool rect_p_intersect(Vec_2 p, Rect rect)
-{
-    float min_x = rect.x;
-    float min_y = rect.y;
-    float max_x = rect.x + rect.w;
-    float max_y = rect.y + rect.h;
-    bool intersect =
-        p.x > min_x && p.x < max_x &&
-        p.y > min_y && p.y < max_y;
-    return intersect;
-}
-
 static int str_get_line_segment_count(const char *str)
 {
     int newline_count = 0;
@@ -184,24 +144,6 @@ static bool is_white_line(const char *str)
     return true;
 }
 
-inline static bool cursor_pos_eq(Cursor_Pos a, Cursor_Pos b)
-{
-    bool equal = a.line == b.line && a.col == b.col;
-    return equal;
-}
-
-inline static Cursor_Pos cursor_pos_min(Cursor_Pos a, Cursor_Pos b)
-{
-    if (a.line < b.line || (a.line == b.line && a.col <= b.col)) return a;
-    else return b;
-}
-
-inline static Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b)
-{
-    if (a.line > b.line || (a.line == b.line && a.col >= b.col)) return a;
-    else return b;
-}
-
 static time_t get_file_timestamp(const char *path) {
     struct stat attr;
     if (stat(path, &attr) == 0) {
@@ -230,5 +172,3 @@ static void * xdlsym(void *handle, const char *name)
     }
     return sym;
 }
-
-#define outer_view(child_view_ptr) ((View *)(child_view_ptr))

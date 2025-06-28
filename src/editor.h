@@ -11,6 +11,7 @@
 #include <stb_image.h>
 #include <stb_truetype.h>
 
+#include "history.h"
 #include "misc.h"
 #include "platform_types.h"
 #include "scene_loader.h"
@@ -77,11 +78,6 @@ typedef struct {
     Text_Line *lines;
     int line_count;
 } Text_Buffer;
-
-typedef struct {
-    int line;
-    int col;
-} Cursor_Pos;
 
 typedef struct {
     const Text_Buffer *buf;
@@ -204,6 +200,7 @@ struct Buffer_View {
     Text_Selection selection;
     Text_Mark mark;
     bool is_mouse_drag;
+    History history;
 };
 
 typedef struct {
@@ -343,6 +340,7 @@ void view_set_active(View *view, Editor_State *state);
 Rect view_get_resize_handle_rect(View *view, const Render_State *render_state);
 View *view_at_pos(Vec_2 pos, Editor_State *state);
 bool view_handle_scroll(View *view, float x_offset, float y_offset, const Render_State *render_state);
+#define outer_view(child_view_ptr) ((View *)(child_view_ptr))
 
 Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state);
 Rect buffer_view_get_text_area_rect(Buffer_View *buffer_view, const Render_State *render_state);
@@ -433,7 +431,7 @@ void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
 void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
 void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos);
 void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
-void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
+char text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
@@ -470,3 +468,12 @@ File_Kind file_detect_kind(const char *path);
 char *sys_get_working_dir();
 bool sys_change_working_dir(const char *dir, Editor_State *state);
 bool sys_file_exists(const char *path);
+
+// -------------------------------
+
+Rect_Bounds rect_get_bounds(Rect r);
+bool rect_intersect(Rect a, Rect b);
+bool rect_p_intersect(Vec_2 p, Rect rect);
+bool cursor_pos_eq(Cursor_Pos a, Cursor_Pos b);
+Cursor_Pos cursor_pos_min(Cursor_Pos a, Cursor_Pos b);
+Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b);

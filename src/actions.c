@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 
 #include "editor.h"
+#include "history.h"
 #include "unit_tests.h"
 #include "util.h"
 
@@ -227,9 +228,18 @@ bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer
     (void)state;
     bassert(buffer_view->mark.active);
     bassert(!cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos));
+
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Delete selected");
     Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
     Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+    history_add_delta(&buffer_view->history, &(Delta){
+        .kind = DELTA_REMOVE_RANGE,
+        .remove_range.start = start,
+        .remove_range.range = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end)
+    });
     text_buffer_remove_range(&buffer_view->buffer->text_buffer, start, end);
+    if (new_command) history_commit_command(&buffer_view->history);
+
     buffer_view->mark.active = false;
     buffer_view->cursor.pos = start;
     return true;
@@ -245,8 +255,15 @@ bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
     {
         if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
         {
+            bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Backspace");
             buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
-            text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            char c = text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+            history_add_delta(&buffer_view->history, &(Delta){
+                .kind = DELTA_REMOVE_CHAR,
+                .remove_char.pos = buffer_view->cursor.pos,
+                .remove_char.c = c
+            });
+            if (new_command) history_commit_command(&buffer_view->history);
             buffer_view->cursor.blink_time = 0.0f;
             viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
         }

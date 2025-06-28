@@ -2047,11 +2047,12 @@ void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos)
     text_line_insert_char(&text_buffer->lines[pos.line], c, pos.col);
 }
 
-void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos)
+char text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos)
 {
     bassert(pos.line < text_buffer->line_count);
     bassert(pos.col < text_buffer->lines[pos.line].len);
     bool deleting_line_break = pos.col == text_buffer->lines[pos.line].len - 1; // Valid text buffer will always have \n at len - 1
+    char removed_char = text_buffer->lines[pos.line].str[pos.col];
     Text_Line *this_line = &text_buffer->lines[pos.line];
     if (deleting_line_break)
     {
@@ -2067,6 +2068,7 @@ void text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos)
     {
         text_line_remove_char(this_line, pos.col);
     }
+    return removed_char;
 }
 
 Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos)
@@ -2439,6 +2441,64 @@ bool sys_file_exists(const char *path)
         return true;
     }
     return false;
+}
+
+// -------------------------------------------------
+
+Rect_Bounds rect_get_bounds(Rect r)
+{
+    Rect_Bounds b;
+    b.min_x = r.x;
+    b.min_y = r.y;
+    b.max_x = r.x + r.w;
+    b.max_y = r.y + r.h;
+    return b;
+}
+
+bool rect_intersect(Rect a, Rect b)
+{
+    float a_min_x = a.x;
+    float a_min_y = a.y;
+    float a_max_x = a.x + a.w;
+    float a_max_y = a.y + a.h;
+    float b_min_x = b.x;
+    float b_min_y = b.y;
+    float b_max_x = b.x + b.w;
+    float b_max_y = b.y + b.h;
+    bool intersect =
+        a_min_x < b_max_x && a_max_x > b_min_x &&
+        a_min_y < b_max_y && a_max_y > b_min_y;
+    return intersect;
+}
+
+bool rect_p_intersect(Vec_2 p, Rect rect)
+{
+    float min_x = rect.x;
+    float min_y = rect.y;
+    float max_x = rect.x + rect.w;
+    float max_y = rect.y + rect.h;
+    bool intersect =
+        p.x > min_x && p.x < max_x &&
+        p.y > min_y && p.y < max_y;
+    return intersect;
+}
+
+bool cursor_pos_eq(Cursor_Pos a, Cursor_Pos b)
+{
+    bool equal = a.line == b.line && a.col == b.col;
+    return equal;
+}
+
+Cursor_Pos cursor_pos_min(Cursor_Pos a, Cursor_Pos b)
+{
+    if (a.line < b.line || (a.line == b.line && a.col <= b.col)) return a;
+    else return b;
+}
+
+Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b)
+{
+    if (a.line > b.line || (a.line == b.line && a.col >= b.col)) return a;
+    else return b;
 }
 
 #include "actions.c"
