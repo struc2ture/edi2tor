@@ -188,7 +188,7 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
                 case GLFW_KEY_F3:
                 {
-                    action_view_history(state, buffer_view);
+                    action_buffer_view_view_history(state, buffer_view);
                 } break;
             }
         }
@@ -256,6 +256,10 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 case GLFW_KEY_SEMICOLON:
                 {
                     action_buffer_view_whitespace_cleanup(state, buffer_view);
+                } break;
+                case GLFW_KEY_Z:
+                {
+                    action_buffer_view_undo_command(state, buffer_view);
                 } break;
             }
         }

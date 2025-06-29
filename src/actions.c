@@ -269,7 +269,6 @@ bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer
 
 bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
 {
-
     if (buffer_view->mark.active)
     {
         history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
@@ -390,33 +389,45 @@ bool action_buffer_view_copy_selected(Editor_State *state, Buffer_View *buffer_v
 
 bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view)
 {
+    char *copy_buffer = NULL;
     if (ENABLE_OS_CLIPBOARD)
     {
         char buf[10*1024];
         read_clipboard_mac(buf, sizeof(buf));
         if (strlen(buf) > 0)
         {
-            if (buffer_view->mark.active)
-            {
-                action_buffer_view_delete_selected(state, buffer_view);
-            }
-            Cursor_Pos new_cursor = text_buffer_insert_range(&buffer_view->buffer->text_buffer, buf, buffer_view->cursor.pos);
-            buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, new_cursor);
+            copy_buffer = buf;
         }
     }
     else
     {
-        if (state->copy_buffer)
-        {
-            if (buffer_view->mark.active)
-            {
-                action_buffer_view_delete_selected(state, buffer_view);
-            }
-            Cursor_Pos new_cursor = text_buffer_insert_range(&buffer_view->buffer->text_buffer, state->copy_buffer, buffer_view->cursor.pos);
-            buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, new_cursor);
-        }
+        copy_buffer = state->copy_buffer;
     }
-    return true;
+
+    if (copy_buffer)
+    {
+        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Paste");
+
+        if (buffer_view->mark.active)
+        {
+            action_buffer_view_delete_selected(state, buffer_view);
+        }
+        Cursor_Pos start = buffer_view->cursor.pos;
+        Cursor_Pos end = text_buffer_insert_range(&buffer_view->buffer->text_buffer, copy_buffer, buffer_view->cursor.pos);
+        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, end);
+
+        history_add_delta(&buffer_view->history, &(Delta){
+            .kind = DELTA_INSERT_RANGE,
+            .insert_range.start = start,
+            .insert_range.end = end,
+            .insert_range.range = xstrdup(copy_buffer)
+        });
+
+        if (new_command) history_commit_command(&buffer_view->history);
+        return true;
+    }
+
+    return false;
 }
 
 bool action_buffer_view_delete_current_line(Editor_State *state, Buffer_View *buffer_view)
@@ -519,7 +530,7 @@ bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buf
     return true;
 }
 
-bool action_view_history(Editor_State *state, Buffer_View *buffer_view)
+bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_view)
 {
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
     Text_Buffer buffer = {0};
@@ -573,4 +584,90 @@ bool action_view_history(Editor_State *state, Buffer_View *buffer_view)
     }
     View *view = create_buffer_view_generic(buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
     return true;
+}
+
+bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_view)
+{
+    Command *command = history_get_command_to_undo(&buffer_view->history);
+    if (command)
+    {
+        bassert(command->delta_count > 0);
+
+        history_begin_command_non_reset(&buffer_view->history, buffer_view->cursor.pos, "Undo action");
+        command = history_get_command_to_undo(&buffer_view->history); // begin_command could realloc
+
+        for (int i = command->delta_count  - 1; i>= 0; i--)
+        {
+            Delta *delta = &command->deltas[i];
+            switch (delta->kind)
+            {
+                case DELTA_INSERT_CHAR:
+                {
+                    char inserted_char = delta->insert_char.c;
+                    Cursor_Pos inserted_pos = delta->insert_char.pos;
+
+                    text_buffer_remove_char(&buffer_view->buffer->text_buffer, inserted_pos);
+
+                    history_add_delta(&buffer_view->history, &(Delta){
+                        .kind = DELTA_REMOVE_CHAR,
+                        .remove_char.pos = inserted_pos,
+                        .remove_char.c = inserted_char
+                    });
+                } break;
+
+                case DELTA_REMOVE_CHAR:
+                {
+                    char removed_char = delta->remove_char.c;
+                    Cursor_Pos removed_pos = delta->remove_char.pos;
+
+                    text_buffer_insert_char(&buffer_view->buffer->text_buffer, removed_char, removed_pos);
+
+                    history_add_delta(&buffer_view->history, &(Delta){
+                        .kind = DELTA_INSERT_CHAR,
+                        .insert_char.pos = removed_pos,
+                        .insert_char.c = removed_char
+                    });
+                } break;
+
+                case DELTA_INSERT_RANGE:
+                {
+                    Cursor_Pos inserted_start = delta->insert_range.start;
+                    Cursor_Pos inserted_end = delta->insert_range.end;
+                    char *inserted_range = delta->insert_range.range;
+
+                    text_buffer_remove_range(&buffer_view->buffer->text_buffer, inserted_start, inserted_end);
+
+                    history_add_delta(&buffer_view->history, &(Delta){
+                        .kind = DELTA_REMOVE_RANGE,
+                        .remove_range.start = inserted_start,
+                        .remove_range.end = inserted_end,
+                        .remove_range.range = inserted_range
+                    });
+                } break;
+
+                case DELTA_REMOVE_RANGE:
+                {
+                    Cursor_Pos removed_start = delta->remove_range.start;
+                    Cursor_Pos removed_end = delta->remove_range.end;
+                    char *removed_range = delta->remove_range.range;
+
+                    text_buffer_insert_range(&buffer_view->buffer->text_buffer, removed_range, removed_start);
+
+                    history_add_delta(&buffer_view->history, &(Delta){
+                        .kind = DELTA_INSERT_RANGE,
+                        .insert_range.start = removed_start,
+                        .insert_range.end = removed_end,
+                        .insert_range.range = removed_range
+                    });
+                } break;
+            }
+        }
+
+        history_commit_command(&buffer_view->history);
+        buffer_view->history.history_pos--;
+
+        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, command->pos);
+        return true;
+    }
+    return false;
 }

@@ -36,4 +36,5 @@ bool action_buffer_view_prompt_go_to_line(Editor_State *state, Buffer_View *buff
 bool action_buffer_view_prompt_search_next(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_repeat_search(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buffer_view);
-bool action_view_history(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_view);

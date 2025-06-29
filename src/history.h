@@ -60,11 +60,12 @@ typedef struct {
     Command *commands;
     int command_count;
     int command_cap;
+    int history_pos;
 } History;
 
 void history_commit_command(History *history);
 
-bool history_begin_command_0(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_command_kind, bool can_interrupt)
+bool history_begin_command_0(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_command_kind, bool can_interrupt, bool reset_history)
 {
     if (history->command_count > 0)
     {
@@ -88,6 +89,10 @@ bool history_begin_command_0(History *history, Cursor_Pos pos, const char *comma
     }
 
     history->command_count++;
+    if (reset_history)
+    {
+        history->history_pos = history->command_count;
+    }
 
     bool need_realloc = false;
     if (history->command_cap == 0)
@@ -115,17 +120,22 @@ bool history_begin_command_0(History *history, Cursor_Pos pos, const char *comma
 
 bool history_begin_command_running(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_kind)
 {
-    return history_begin_command_0(history, pos, command_name, running_kind, true);
+    return history_begin_command_0(history, pos, command_name, running_kind, true, true);
 }
 
 bool history_begin_command_non_interrupt(History *history, Cursor_Pos pos, const char *command_name)
 {
-    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, false);
+    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, false, true);
 }
 
 bool history_begin_command(History *history, Cursor_Pos pos, const char *command_name)
 {
-    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, true);
+    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, true, true);
+}
+
+bool history_begin_command_non_reset(History *history, Cursor_Pos pos, const char *command_name)
+{
+    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, true, false);
 }
 
 void history_add_delta(History *history, const Delta *delta)
@@ -174,6 +184,20 @@ Command *history_get_last_uncommitted_command(History *history)
         {
             return c;
         }
+    }
+    return NULL;
+}
+
+Command *history_get_command_to_undo(History *history)
+{
+    if (history_get_last_uncommitted_command(history))
+    {
+        history_commit_command(history);
+    }
+
+    if (history->command_count > 0 && history->history_pos > 0)
+    {
+        return &history->commands[history->history_pos - 1];
     }
     return NULL;
 }
