@@ -224,7 +224,7 @@ bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view
     text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->history, c, buffer_view->cursor.pos);
     if (c == '\n')
     {
-        int indent_level = text_buffer_match_indent(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos.line + 1);
+        int indent_level = text_buffer_history_line_match_indent(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos.line + 1);
         buffer_view->cursor.pos = cursor_pos_clamp(
             buffer_view->buffer->text_buffer,
             (Cursor_Pos){buffer_view->cursor.pos.line + 1, indent_level});
@@ -297,59 +297,72 @@ bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_v
     }
     else
     {
+        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Insert indent");
         int spaces_to_insert = INDENT_SPACES - buffer_view->cursor.pos.col % INDENT_SPACES;
         for (int i = 0; i < spaces_to_insert; i++)
         {
-            text_buffer_insert_char(&buffer_view->buffer->text_buffer, ' ', buffer_view->cursor.pos);
+            text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->history, ' ', buffer_view->cursor.pos);
         }
         buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, spaces_to_insert, +1, false);
         buffer_view->cursor.blink_time = 0.0f;
         viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
+
+        if (new_command) history_commit_command(&buffer_view->history);
     }
     return true;
 }
 
 bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *buffer_view)
 {
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Decrease indent");
+
     if (buffer_view->mark.active)
     {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
         for (int i = start.line; i <= end.line; i++)
         {
-            int chars_removed = text_line_indent_level_decrease(&buffer_view->buffer->text_buffer.lines[i]);
+            int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->history, i);
             if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_removed, -1, false);
             if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
         }
     }
     else
     {
-        int chars_removed = text_line_indent_level_decrease(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+        int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos.line);
         buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
         viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     }
+
+    if (new_command) history_commit_command(&buffer_view->history);
+
     return true;
 }
 
 bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *buffer_view)
 {
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Increase indent");
+
     if (buffer_view->mark.active)
     {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
         for (int i = start.line; i <= end.line; i++)
         {
-            int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[i]);
+            int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->history, i);
             if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_added, +1, false);
             if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
         }
     }
     else
     {
-        int chars_added = text_line_indent_level_increase(&buffer_view->buffer->text_buffer.lines[buffer_view->cursor.pos.line]);
+        int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos.line);
         buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
         viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     }
+
+    if (new_command) history_commit_command(&buffer_view->history);
+
     return true;
 }
 

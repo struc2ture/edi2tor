@@ -2303,6 +2303,63 @@ void text_buffer_history_remove_range(Text_Buffer *text_buffer, History *history
     text_buffer_remove_range(text_buffer, start, end);
 }
 
+int text_buffer_line_indent_get_level(Text_Buffer *text_buffer, int line)
+{
+    int spaces = 0;
+    char *str = text_buffer->lines[line].str;
+        while (*str)
+    {
+        if (*str == ' ') spaces++;
+        else return spaces;
+        str++;
+    }
+    return 0;
+}
+
+int text_buffer_history_line_indent_increase_level(Text_Buffer *text_buffer, History *history, int line)
+{
+    int indent_level = text_buffer_line_indent_get_level(text_buffer, line);
+    int chars_to_add = INDENT_SPACES - (indent_level % INDENT_SPACES);
+    for (int i = 0; i < chars_to_add; i++)
+    {
+        text_buffer_history_insert_char(text_buffer, history, ' ', (Cursor_Pos){line, 0});
+    }
+    return chars_to_add;
+}
+
+int text_buffer_history_line_indent_decrease_level(Text_Buffer *text_buffer, History *history, int line)
+{
+    int indent_level = text_buffer_line_indent_get_level(text_buffer, line);
+    int chars_to_remove = indent_level % INDENT_SPACES;
+    if (indent_level >= INDENT_SPACES && chars_to_remove == 0)
+    {
+        chars_to_remove = 4;
+    }
+    text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line, 0}, (Cursor_Pos){line, chars_to_remove});
+    return chars_to_remove;
+}
+
+int text_buffer_history_line_indent_set_level(Text_Buffer *text_buffer, History *history, int line, int indent_level)
+{
+    int current_indent_level = text_buffer_line_indent_get_level(text_buffer, line);
+    int chars_delta = indent_level - current_indent_level;
+    text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line, 0}, (Cursor_Pos){line, current_indent_level});
+    for (int i = 0; i < indent_level; i++)
+    {
+        text_buffer_history_insert_char(text_buffer, history, ' ', (Cursor_Pos){line, 0});
+    }
+    return chars_delta;
+}
+
+int text_buffer_history_line_match_indent(Text_Buffer *text_buffer, History *history, int line)
+{
+    int prev_indent_level;
+    if (line > 0) prev_indent_level = text_buffer_line_indent_get_level(text_buffer, line - 1);
+    else prev_indent_level = 0;
+    text_buffer_history_line_indent_set_level(text_buffer, history, line, prev_indent_level);
+    return prev_indent_level;
+}
+
 // -------------------------------------------------------------------------------
 
 void buffer_view_set_mark(Buffer_View *buffer_view, Cursor_Pos pos)

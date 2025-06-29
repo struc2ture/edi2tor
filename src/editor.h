@@ -444,6 +444,11 @@ void text_buffer_history_insert_char(Text_Buffer *text_buffer, History *history,
 void text_buffer_history_remove_char(Text_Buffer *text_buffer, History *history, Cursor_Pos pos);
 Cursor_Pos text_buffer_history_insert_range(Text_Buffer *text_buffer, History *history, const char *range, Cursor_Pos pos);
 void text_buffer_history_remove_range(Text_Buffer *text_buffer, History *history, Cursor_Pos start, Cursor_Pos end);
+int text_buffer_line_indent_get_level(Text_Buffer *text_buffer, int line);
+int text_buffer_history_line_indent_increase_level(Text_Buffer *text_buffer, History *history, int line);
+int text_buffer_history_line_indent_decrease_level(Text_Buffer *text_buffer, History *history, int line);
+int text_buffer_history_line_indent_set_level(Text_Buffer *text_buffer, History *history, int line, int indent_level);
+int text_buffer_history_line_match_indent(Text_Buffer *text_buffer, History *history, int line);
 
 // ------------------------------
 
