@@ -2142,6 +2142,14 @@ void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor
     }
 }
 
+char text_buffer_get_char(Text_Buffer *text_buffer, Cursor_Pos pos)
+{
+    bassert(pos.line < text_buffer->line_count);
+    Text_Line *line = &text_buffer->lines[pos.line];
+    bassert(pos.col < line->len);
+    return line->str[pos.col];
+}
+
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end)
 {
     bassert(start.line < text_buffer->line_count);
@@ -2226,6 +2234,76 @@ bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor
     }
     return false;
 }
+
+void text_buffer_history_insert_char(Text_Buffer *text_buffer, History *history, char c, Cursor_Pos pos)
+{
+    bool will_add_history = history_get_last_uncommitted_command(history) != NULL;
+
+    text_buffer_insert_char(text_buffer, c, pos);
+
+    if (will_add_history)
+    {
+        history_add_delta(history, &(Delta){
+            .kind = DELTA_INSERT_CHAR,
+            .insert_char.pos = pos,
+            .insert_char.c = c
+        });
+    }
+}
+
+void text_buffer_history_remove_char(Text_Buffer *text_buffer, History *history, Cursor_Pos pos)
+{
+    bool will_add_history = history_get_last_uncommitted_command(history) != NULL;
+
+    char removed_char = text_buffer_remove_char(text_buffer, pos);
+
+    if (will_add_history)
+    {
+        history_add_delta(history, &(Delta){
+            .kind = DELTA_REMOVE_CHAR,
+            .insert_char.pos = pos,
+            .insert_char.c = removed_char
+        });
+    }
+}
+
+Cursor_Pos text_buffer_history_insert_range(Text_Buffer *text_buffer, History *history, const char *range, Cursor_Pos pos)
+{
+    bool will_add_history = history_get_last_uncommitted_command(history) != NULL;
+
+    Cursor_Pos end = text_buffer_insert_range(text_buffer, range, pos);
+
+    if (will_add_history)
+    {
+        history_add_delta(history, &(Delta){
+            .kind = DELTA_INSERT_RANGE,
+            .insert_range.start = pos,
+            .insert_range.end = end,
+            .insert_range.range = xstrdup(range)
+        });
+    }
+
+    return end;
+}
+
+void text_buffer_history_remove_range(Text_Buffer *text_buffer, History *history, Cursor_Pos start, Cursor_Pos end)
+{
+    bool will_add_history = history_get_last_uncommitted_command(history) != NULL;
+
+    if (will_add_history)
+    {
+        history_add_delta(history, &(Delta){
+            .kind = DELTA_REMOVE_RANGE,
+            .remove_range.start = start,
+            .remove_range.end = end,
+            .remove_range.range = text_buffer_extract_range(text_buffer, start, end)
+        });
+    }
+
+    text_buffer_remove_range(text_buffer, start, end);
+}
+
+// -------------------------------------------------------------------------------
 
 void buffer_view_set_mark(Buffer_View *buffer_view, Cursor_Pos pos)
 {

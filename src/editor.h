@@ -434,10 +434,16 @@ void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
 char text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
+char text_buffer_get_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 int text_buffer_match_indent(Text_Buffer *text_buffer, int line);
 int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer);
 bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos);
+
+void text_buffer_history_insert_char(Text_Buffer *text_buffer, History *history, char c, Cursor_Pos pos);
+void text_buffer_history_remove_char(Text_Buffer *text_buffer, History *history, Cursor_Pos pos);
+Cursor_Pos text_buffer_history_insert_range(Text_Buffer *text_buffer, History *history, const char *range, Cursor_Pos pos);
+void text_buffer_history_remove_range(Text_Buffer *text_buffer, History *history, Cursor_Pos start, Cursor_Pos end);
 
 // ------------------------------
 

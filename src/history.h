@@ -190,11 +190,6 @@ Command *history_get_last_uncommitted_command(History *history)
 
 Command *history_get_command_to_undo(History *history)
 {
-    if (history_get_last_uncommitted_command(history))
-    {
-        history_commit_command(history);
-    }
-
     if (history->command_count > 0 && history->history_pos > 0)
     {
         return &history->commands[history->history_pos - 1];
