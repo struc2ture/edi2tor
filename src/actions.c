@@ -516,10 +516,14 @@ bool action_buffer_view_repeat_search(Editor_State *state, Buffer_View *buffer_v
 
 bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buffer_view)
 {
-    (void)state;
-    int cleaned_lines = text_buffer_whitespace_cleanup(&buffer_view->buffer->text_buffer);
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Whitespace cleanup");
+
+    int cleaned_lines = text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
     trace_log("buffer_view_whitespace_cleanup: Cleaned up %d lines", cleaned_lines);
+
+    if (new_command) history_commit_command(&buffer_view->history);
+
     return true;
 }
 

@@ -432,7 +432,6 @@ Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range,
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 char text_buffer_get_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
-int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer);
 bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos);
 
 void text_buffer_history_insert_char(Text_Buffer *text_buffer, History *history, char c, Cursor_Pos pos);
@@ -444,6 +443,7 @@ int text_buffer_history_line_indent_increase_level(Text_Buffer *text_buffer, His
 int text_buffer_history_line_indent_decrease_level(Text_Buffer *text_buffer, History *history, int line);
 int text_buffer_history_line_indent_set_level(Text_Buffer *text_buffer, History *history, int line, int indent_level);
 int text_buffer_history_line_match_indent(Text_Buffer *text_buffer, History *history, int line);
+int text_buffer_history_whitespace_cleanup(Text_Buffer *text_buffer, History *history);
 
 // ------------------------------
 

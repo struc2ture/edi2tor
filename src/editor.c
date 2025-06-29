@@ -2139,27 +2139,6 @@ char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Curs
     return extracted_range;
 }
 
-int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer)
-{
-    int cleaned_lines = 0;
-    for (int line_i = 0; line_i < text_buffer->line_count; line_i++)
-    {
-        Text_Line *text_line = &text_buffer->lines[line_i];
-        int trailing_spaces = 0;
-        for (int i = text_line->len - 2; i >= 0; i--) // len - 2 because \n will always be at the end of a line
-        {
-            if (text_line->str[i] == ' ') trailing_spaces++;
-            else break;
-        }
-        if (trailing_spaces > 0)
-        {
-            text_line_remove_range(text_line, text_line->len - 1 - trailing_spaces, trailing_spaces);
-            cleaned_lines++;
-        }
-    }
-    return cleaned_lines;
-}
-
 bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos)
 {
     int col_offset = from.col + 1;
@@ -2307,6 +2286,27 @@ int text_buffer_history_line_match_indent(Text_Buffer *text_buffer, History *his
     else prev_indent_level = 0;
     text_buffer_history_line_indent_set_level(text_buffer, history, line, prev_indent_level);
     return prev_indent_level;
+}
+
+int text_buffer_history_whitespace_cleanup(Text_Buffer *text_buffer, History *history)
+{
+    int cleaned_lines = 0;
+    for (int line_i = 0; line_i < text_buffer->line_count; line_i++)
+    {
+        Text_Line *text_line = &text_buffer->lines[line_i];
+        int trailing_spaces = 0;
+        for (int i = text_line->len - 2; i >= 0; i--) // len - 2 because \n will always be at the end of a line
+        {
+            if (text_line->str[i] == ' ') trailing_spaces++;
+            else break;
+        }
+        if (trailing_spaces > 0)
+        {
+            text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line_i, text_line->len - 1 - trailing_spaces}, (Cursor_Pos){line_i, text_line->len - 1});
+            cleaned_lines++;
+        }
+    }
+    return cleaned_lines;
 }
 
 // -------------------------------------------------------------------------------
