@@ -250,12 +250,13 @@ bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer
     bassert(buffer_view->mark.active);
     bassert(!cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos));
 
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Delete selected");
+    bool new_command = history_begin_command_non_interrupt(&buffer_view->history, buffer_view->cursor.pos, "Delete selected");
     Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
     Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
     history_add_delta(&buffer_view->history, &(Delta){
         .kind = DELTA_REMOVE_RANGE,
         .remove_range.start = start,
+        .remove_range.end = end,
         .remove_range.range = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end)
     });
     text_buffer_remove_range(&buffer_view->buffer->text_buffer, start, end);
@@ -268,23 +269,33 @@ bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer
 
 bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
 {
+
     if (buffer_view->mark.active)
     {
+        history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
         action_buffer_view_delete_selected(state, buffer_view);
     }
     else
     {
         if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
         {
-            bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Backspace");
+            Cursor_Pos prev_cursor_pos = buffer_view->cursor.pos;
             buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, -1, true);
             char c = text_buffer_remove_char(&buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
+
+            if (c == '\n')
+            {
+                // Deleted line break, commit current command, before starting new one
+                history_commit_command(&buffer_view->history);
+            }
+
+            history_begin_command_running(&buffer_view->history, prev_cursor_pos, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
             history_add_delta(&buffer_view->history, &(Delta){
                 .kind = DELTA_REMOVE_CHAR,
                 .remove_char.pos = buffer_view->cursor.pos,
                 .remove_char.c = c
             });
-            if (new_command) history_commit_command(&buffer_view->history);
+
             buffer_view->cursor.blink_time = 0.0f;
             viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
         }

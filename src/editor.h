@@ -16,7 +16,7 @@
 #include "platform_types.h"
 #include "scene_loader.h"
 
-#define VERT_MAX 4096
+#define VERT_MAX 8192
 #define SCROLL_SENS 10.0f
 #define SCROLL_TIMEOUT 0.1f
 #define VIEWPORT_CURSOR_BOUNDARY_LINES 5
@@ -30,7 +30,7 @@
 #define FONT_SIZE 18.0f
 #define ENABLE_OS_CLIPBOARD true
 
-#define FILE_PATH1 "res/mock6.txt"
+#define FILE_PATH1 "res/mock7.txt"
 // #define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "src/editor.c"
 #define IMAGE_PATH "res/DUCKS.png"
