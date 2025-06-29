@@ -417,10 +417,6 @@ void text_line_insert_char(Text_Line *text_line, char c, int insert_index);
 void text_line_remove_char(Text_Line *text_line, int remove_index);
 void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index, int insert_count);
 void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
-int text_line_indent_get_level(Text_Line text_line);
-int text_line_indent_set_level(Text_Line *text_line, int indent_level);
-int text_line_indent_level_increase(Text_Line *text_line);
-int text_line_indent_level_decrease(Text_Line *text_line);
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...);
 void text_buffer_destroy(Text_Buffer *text_buffer);
@@ -436,7 +432,6 @@ Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range,
 void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
 char text_buffer_get_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
-int text_buffer_match_indent(Text_Buffer *text_buffer, int line);
 int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer);
 bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos);
 

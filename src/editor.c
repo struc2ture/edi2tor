@@ -1693,7 +1693,7 @@ Cursor_Pos cursor_pos_to_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
 
 Cursor_Pos cursor_pos_to_indent_or_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos)
 {
-    int col = text_line_indent_get_level(text_buffer.lines[pos.line]);
+    int col = text_buffer_line_indent_get_level(&text_buffer, pos.line);
     if (col >= pos.col) col = 0;
     Cursor_Pos new_pos;
     new_pos.line = pos.line;
@@ -1894,54 +1894,6 @@ void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_c
         text_line->str[i] = text_line->str[i + remove_count];
     }
     text_line___resize(text_line, text_line->len - remove_count);
-}
-
-int text_line_indent_get_level(Text_Line text_line)
-{
-    int spaces = 0;
-    char *str = text_line.str;
-    while (*str)
-    {
-        if (*str == ' ') spaces++;
-        else return spaces;
-        str++;
-    }
-    return 0;
-}
-
-int text_line_indent_set_level(Text_Line *text_line, int indent_level)
-{
-    int current_indent_level = text_line_indent_get_level(*text_line);
-    int chars_delta = indent_level - current_indent_level;
-    text_line_remove_range(text_line, 0, current_indent_level);
-    for (int i = 0; i < indent_level; i++)
-    {
-        text_line_insert_char(text_line, ' ', 0);
-    }
-    return chars_delta;
-}
-
-int text_line_indent_level_increase(Text_Line *text_line)
-{
-    int indent_level = text_line_indent_get_level(*text_line);
-    int chars_to_add = INDENT_SPACES - (indent_level % INDENT_SPACES);
-    for (int i = 0; i < chars_to_add; i++)
-    {
-        text_line_insert_char(text_line, ' ', 0);
-    }
-    return chars_to_add;
-}
-
-int text_line_indent_level_decrease(Text_Line *text_line)
-{
-    int indent_level = text_line_indent_get_level(*text_line);
-    int chars_to_remove = indent_level % INDENT_SPACES;
-    if (indent_level >= INDENT_SPACES && chars_to_remove == 0)
-    {
-        chars_to_remove = 4;
-    }
-    text_line_remove_range(text_line, 0, chars_to_remove);
-    return chars_to_remove;
 }
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...)
@@ -2187,15 +2139,6 @@ char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Curs
     return extracted_range;
 }
 
-int text_buffer_match_indent(Text_Buffer *text_buffer, int line)
-{
-    int prev_indent_level;
-    if (line > 0) prev_indent_level = text_line_indent_get_level(text_buffer->lines[line - 1]);
-    else prev_indent_level = 0;
-    text_line_indent_set_level(&text_buffer->lines[line], prev_indent_level);
-    return prev_indent_level;
-}
-
 int text_buffer_whitespace_cleanup(Text_Buffer *text_buffer)
 {
     int cleaned_lines = 0;
@@ -2335,19 +2278,25 @@ int text_buffer_history_line_indent_decrease_level(Text_Buffer *text_buffer, His
     {
         chars_to_remove = 4;
     }
-    text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line, 0}, (Cursor_Pos){line, chars_to_remove});
+    if (chars_to_remove > 0)
+    {
+        text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line, 0}, (Cursor_Pos){line, chars_to_remove});
+    }
     return chars_to_remove;
 }
 
 int text_buffer_history_line_indent_set_level(Text_Buffer *text_buffer, History *history, int line, int indent_level)
 {
     int current_indent_level = text_buffer_line_indent_get_level(text_buffer, line);
-    int chars_delta = indent_level - current_indent_level;
-    text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line, 0}, (Cursor_Pos){line, current_indent_level});
+    if (current_indent_level > 0)
+    {
+        text_buffer_history_remove_range(text_buffer, history, (Cursor_Pos){line, 0}, (Cursor_Pos){line, current_indent_level});
+    }
     for (int i = 0; i < indent_level; i++)
     {
         text_buffer_history_insert_char(text_buffer, history, ' ', (Cursor_Pos){line, 0});
     }
+    int chars_delta = indent_level - current_indent_level;
     return chars_delta;
 }
 
