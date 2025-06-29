@@ -8,7 +8,6 @@
 #include "editor.h"
 #include "glfw_helpers.h"
 #include "platform_types.h"
-#include "util.h"
 
 void input_char_global(Editor_State *state, const Platform_Event *e)
 {
@@ -186,6 +185,10 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 case GLFW_KEY_TAB:
                 {
                     action_buffer_view_insert_indent(state, buffer_view);
+                } break;
+                case GLFW_KEY_F3:
+                {
+                    action_view_history(state, buffer_view);
                 } break;
             }
         }

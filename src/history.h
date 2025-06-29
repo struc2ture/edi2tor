@@ -10,10 +10,13 @@ typedef enum {
     DELTA_REMOVE_RANGE
 } DeltaKind;
 
+const char *DeltaKind_Str[] = { "Insert char", "Remove char", "Insert range", "Remove range" };
+
 typedef struct {
     union {
         struct {
             Cursor_Pos pos;
+            char c;
         } insert_char;
 
         struct {
@@ -22,12 +25,14 @@ typedef struct {
         } remove_char;
 
         struct {
-            Cursor_Pos pos;
+            Cursor_Pos start;
             Cursor_Pos end;
+            char *range;
         } insert_range;
 
         struct {
             Cursor_Pos start;
+            Cursor_Pos end;
             char *range;
         } remove_range;
     };
@@ -35,12 +40,19 @@ typedef struct {
     DeltaKind kind;
 } Delta;
 
+typedef enum {
+    RUNNING_COMMAND_NONE,
+    RUNNING_COMMAND_TEXT_INSERT,
+    RUNNING_COMMAND_TEXT_DELETION,
+} Running_Command_Kind;
+
 typedef struct {
     const char *name;
     Delta *deltas;
     int delta_count;
     int delta_cap;
     Cursor_Pos pos;
+    Running_Command_Kind running_command_kind;
     bool committed;
 } Command;
 
@@ -50,11 +62,29 @@ typedef struct {
     int command_cap;
 } History;
 
-bool history_begin_command(History *history, Cursor_Pos pos, const char *command_name)
+void history_commit_command(History *history);
+
+bool history_begin_command_0(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_command_kind, bool can_interrupt)
 {
-    if (history->command_count > 0 && !history->commands[history->command_count - 1].committed)
+    if (history->command_count > 0)
     {
-        return false;
+        Command *c = &history->commands[history->command_count - 1];
+        if (!c->committed)
+        {
+            if (c->running_command_kind != RUNNING_COMMAND_NONE &&
+                c->running_command_kind != running_command_kind &&
+                can_interrupt)
+            {
+                // There's a running command already, and a command that is non-running or of a different kind is getting started
+                // Commit the previous running command, and begin a new one
+                history_commit_command(history);
+            }
+            else
+            {
+                // If a previous command has not been committed, do not begin a new one (with the exception of above)
+                return false;
+            }
+        }
     }
 
     history->command_count++;
@@ -80,6 +110,21 @@ bool history_begin_command(History *history, Cursor_Pos pos, const char *command
     history->commands[history->command_count - 1].pos = pos;
 
     return true;
+}
+
+bool history_begin_command_running(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_kind)
+{
+    return history_begin_command_0(history, pos, command_name, running_kind, false);
+}
+
+bool history_begin_command_non_interrupt(History *history, Cursor_Pos pos, const char *command_name)
+{
+    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, false);
+}
+
+bool history_begin_command(History *history, Cursor_Pos pos, const char *command_name)
+{
+    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, true);
 }
 
 void history_add_delta(History *history, const Delta *delta)
@@ -108,6 +153,28 @@ void history_add_delta(History *history, const Delta *delta)
 void history_commit_command(History *history)
 {
     history->commands[history->command_count - 1].committed = true;
+}
+
+Delta *history_get_last_delta(History *history)
+{
+    if (history->command_count < 1) return NULL;
+    Command *command = &history->commands[history->command_count - 1];
+    if (command->committed || command->delta_count < 1) return NULL;
+    Delta *delta = &command->deltas[command->delta_count - 1];
+    return delta;
+}
+
+Command *history_get_last_uncommitted_command(History *history)
+{
+    if (history->command_count > 0)
+    {
+        Command *c = &history->commands[history->command_count - 1];
+        if (!c->committed)
+        {
+            return c;
+        }
+    }
+    return NULL;
 }
 
 #if 0

@@ -202,10 +202,30 @@ bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_v
 
 bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view, char c)
 {
+    Command *last_uncommitted_command = history_get_last_uncommitted_command(&buffer_view->history);
+    if (last_uncommitted_command && last_uncommitted_command->delta_count > 0)
+    {
+        Delta *prev_delta = &last_uncommitted_command->deltas[last_uncommitted_command->delta_count - 1];
+        if (prev_delta->kind == DELTA_INSERT_CHAR && 
+            (!isalnum(prev_delta->insert_char.c) && isalnum(c)))
+        {
+            // If a word edge has been encountered, commit command
+            history_commit_command(&buffer_view->history);
+        }
+    }
+
+    history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, "Text insert", RUNNING_COMMAND_TEXT_INSERT);
+
     if (buffer_view->mark.active)
     {
         action_buffer_view_delete_selected(state, buffer_view);
     }
+
+    history_add_delta(&buffer_view->history, &(Delta){
+        .kind = DELTA_INSERT_CHAR,
+        .insert_char.pos = buffer_view->cursor.pos,
+        .insert_char.c = c
+    });
     text_buffer_insert_char(&buffer_view->buffer->text_buffer, c, buffer_view->cursor.pos);
     if (c == '\n')
     {
@@ -218,6 +238,7 @@ bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view
     {
         buffer_view->cursor.pos = cursor_pos_advance_char(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, +1, true);
     }
+
     buffer_view->cursor.blink_time = 0.0f;
     viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     return true;
@@ -484,5 +505,61 @@ bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buf
     int cleaned_lines = text_buffer_whitespace_cleanup(&buffer_view->buffer->text_buffer);
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
     trace_log("buffer_view_whitespace_cleanup: Cleaned up %d lines", cleaned_lines);
+    return true;
+}
+
+bool action_view_history(Editor_State *state, Buffer_View *buffer_view)
+{
+    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
+    Text_Buffer buffer = {0};
+    for (int command_i = 0; command_i < buffer_view->history.command_count; command_i++)
+    {
+        Command *c = &buffer_view->history.commands[command_i];
+        text_buffer_append_f(&buffer, "Command: '%s' (committed: %s; initial pos: %d, %d)",
+            c->name,
+            c->committed ? "true" : "false",
+            c->pos.line, c->pos.col);
+        for (int delta_i = 0; delta_i < c->delta_count; delta_i++)
+        {
+            Delta *d = &c->deltas[delta_i];
+            switch (d->kind)
+            {
+                case DELTA_INSERT_CHAR:
+                {
+                    text_buffer_append_f(&buffer, "  %s: %c (%d, %d)",
+                        DeltaKind_Str[d->kind],
+                        d->insert_char.c,
+                        d->insert_char.pos.line, d->insert_char.pos.col);
+                } break;
+
+                case DELTA_REMOVE_CHAR:
+                {
+                    text_buffer_append_f(&buffer, "  %s: %c (%d, %d)",
+                        DeltaKind_Str[d->kind],
+                        d->remove_char.c,
+                        d->remove_char.pos.line, d->remove_char.pos.col);
+                } break;
+
+                case DELTA_INSERT_RANGE:
+                {
+                    text_buffer_append_f(&buffer, "  %s: '%s' (%d, %d -> %d, %d)",
+                        DeltaKind_Str[d->kind],
+                        d->insert_range.range,
+                        d->insert_range.start.line, d->insert_range.start.col,
+                        d->insert_range.end.line, d->insert_range.end.col);
+                } break;
+
+                case DELTA_REMOVE_RANGE:
+                {
+                    text_buffer_append_f(&buffer, "  %s: '%s' (%d, %d -> %d, %d)",
+                        DeltaKind_Str[d->kind],
+                        d->remove_range.range,
+                        d->remove_range.start.line, d->remove_range.start.col,
+                        d->remove_range.end.line, d->remove_range.end.col);
+                } break;
+            }
+        }
+    }
+    View *view = create_buffer_view_generic(buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
     return true;
 }
