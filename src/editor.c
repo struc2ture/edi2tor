@@ -18,6 +18,7 @@
 #include <stb_truetype.h>
 
 #include "input.h"
+#include "history.h"
 #include "misc.h"
 #include "platform_types.h"
 #include "shaders.h"
@@ -2587,6 +2588,7 @@ Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b)
 
 #include "actions.c"
 #include "input.c"
+#include "history.c"
 #include "misc.c"
 #include "scene_loader.c"
 #include "unit_tests.c"

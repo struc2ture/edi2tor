@@ -7,7 +7,7 @@ editor: bin/platform bin/editor.dylib
 bin/platform: src/platform.c src/scene_loader.c src/scene_loader.h | bin
 	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@
 
-bin/editor.dylib: src/editor.c src/editor.h src/util.h src/shaders.h src/unit_tests.h src/unit_tests.c src/actions.h src/actions.c src/input.h src/input.c src/scene_loader.c src/scene_loader.h src/misc.h src/misc.c src/history.h bin/live_cube.dylib | bin
+bin/editor.dylib: src/editor.c src/editor.h src/util.h src/shaders.h src/unit_tests.h src/unit_tests.c src/actions.h src/actions.c src/input.h src/input.c src/scene_loader.c src/scene_loader.h src/misc.h src/misc.c src/history.h src/history.c bin/live_cube.dylib | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@
 
 bin/live_cube.dylib: src/live_cube.c src/live_cube.h | bin
