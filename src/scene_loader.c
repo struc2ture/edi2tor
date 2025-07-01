@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 time_t scene_loader__get_file_timestamp(const char *path)
 {

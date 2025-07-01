@@ -39,3 +39,6 @@ typedef struct {
     int line;
     int col;
 } Cursor_Pos;
+
+char *strf(const char *fmt, ...);
+char *path_get_file_name(const char *path);

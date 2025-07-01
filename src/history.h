@@ -9,7 +9,7 @@ typedef enum {
     DELTA_REMOVE_RANGE
 } DeltaKind;
 
-const char *DeltaKind_Str[] = { "Insert char", "Remove char", "Insert range", "Remove range" };
+static const char *DeltaKind_Str[] = { "Insert char", "Remove char", "Insert range", "Remove range" };
 
 typedef struct {
     union {

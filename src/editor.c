@@ -1,7 +1,6 @@
 #include "editor.h"
 
 #include "common.h"
-#include "scene_loader.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -21,6 +20,7 @@
 #include "history.h"
 #include "misc.h"
 #include "platform_types.h"
+#include "scene_loader.h"
 #include "shaders.h"
 #include "util.h"
 
@@ -278,7 +278,7 @@ void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, const R
         Rect string_rect = get_string_rect(text_buffer.lines[i].str, render_state->font, 0, y);
         bool is_seen = rect_intersect(string_rect, viewport.rect);
         if (is_seen)
-            draw_string(text_buffer.lines[i].str, render_state->font, x, y, (Color){255, 255, 255, 255}, render_state);
+            draw_string(text_buffer.lines[i].str, render_state->font, x, y, render_state->text_color, render_state);
         y += line_height;
     }
 }
@@ -623,6 +623,7 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
     render_state->buffer_view_name_height = get_font_line_height(render_state->font);
     render_state->buffer_view_padding = 6.0f;
     render_state->buffer_view_resize_handle_radius = 5.0f;
+    render_state->text_color = (Color){255, 255, 255, 255};
 
     glUseProgram(0);
 }
@@ -1989,6 +1990,12 @@ void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos)
     text_buffer_insert_line(text_buffer, new_line, pos.line + 1);
 }
 
+void text_buffer_clear(Text_Buffer *text_buffer)
+{
+    text_buffer_destroy(text_buffer);
+    text_buffer_append_f(text_buffer, "");
+}
+
 void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos)
 {
     bassert(pos.line < text_buffer->line_count);
@@ -2591,4 +2598,5 @@ Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b)
 #include "history.c"
 #include "misc.c"
 #include "scene_loader.c"
+#include "scratch_runner.c"
 #include "unit_tests.c"

@@ -15,6 +15,7 @@
 #include "misc.h"
 #include "platform_types.h"
 #include "scene_loader.h"
+#include "text_buffer.h"
 
 #define VERT_MAX 8192
 #define SCROLL_SENS 10.0f
@@ -67,17 +68,6 @@ typedef struct {
     char *path;
     bool has_been_modified;
 } File_Info;
-
-typedef struct {
-    char *str;
-    int len;
-    int buf_len;
-} Text_Line;
-
-typedef struct {
-    Text_Line *lines;
-    int line_count;
-} Text_Buffer;
 
 typedef struct {
     const Text_Buffer *buf;
@@ -137,6 +127,8 @@ struct Render_State {
     int texture_slot_white;
     int texture_slot_font;
     int texture_slot_misc;
+
+    Color text_color;
 };
 
 typedef enum {
@@ -173,7 +165,8 @@ typedef enum {
 
 typedef struct Live_Scene Live_Scene;
 
-typedef struct {
+typedef struct Buffer Buffer;
+struct Buffer {
     Buffer_Kind kind;
     Text_Buffer text_buffer;
     union {
@@ -181,12 +174,13 @@ typedef struct {
     struct {
         File_Info info;
         Live_Scene *linked_live_scene;
+        Buffer *linked_buffer;
     } file;
     struct {
         Prompt_Context context;
     } prompt;
     };
-} Buffer;
+};
 
 typedef struct {
     bool active;
@@ -426,6 +420,7 @@ void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int i
 void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
 void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
 void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos);
+void text_buffer_clear(Text_Buffer *text_buffer);
 void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
 char text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
 Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);

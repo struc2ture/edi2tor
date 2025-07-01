@@ -170,3 +170,27 @@ void mat_stack_mul_r(Mat_Stack *s, Mat_4 m)
     s->mm[s->size - 1] = mat4_mul(s->mm[s->size - 1], m);
 }
 
+char *strf(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    size_t size = vsnprintf(NULL, 0, fmt, args) + 1;
+    va_end(args);
+    char *str = xmalloc(size);
+    va_start(args, fmt);
+    vsnprintf(str, size, fmt, args);
+    va_end(args);
+    return str;
+}
+
+char *path_get_file_name(const char *path)
+{
+    const char *name = path;
+    const char *slash = strrchr(name, '/');
+    if (slash != NULL) name = slash + 1;
+    const char *dot = strrchr(name, '.');
+    size_t name_len = dot - name;
+    char *result = malloc(name_len + 1);
+    snprintf(result, name_len + 1, "%.*s", (int)name_len, name);
+    return result;
+}

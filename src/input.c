@@ -190,6 +190,10 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 {
                     action_buffer_view_view_history(state, buffer_view);
                 } break;
+                case GLFW_KEY_F4:
+                {
+                    action_buffer_view_run_scratch(state, buffer_view);
+                } break;
             }
         }
         else if (e->key.mods == GLFW_MOD_SUPER)

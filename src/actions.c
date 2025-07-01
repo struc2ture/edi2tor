@@ -6,6 +6,7 @@
 
 #include "editor.h"
 #include "history.h"
+#include "scratch_runner.h"
 #include "unit_tests.h"
 #include "util.h"
 
@@ -633,5 +634,64 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
         buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, command->pos);
         return true;
     }
+    return false;
+}
+
+bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_view)
+{
+    char *src_name = strf("scratch_%ld", time(NULL));
+    char *src_path = strf("scratch/%s.c", src_name);
+    char *dylib_path = strf("scratch/%s.dylib", src_name);
+
+    file_write(buffer_view->buffer->text_buffer, src_path);
+
+    const char *cc = "clang";
+    const char *cflags = "-I/opt/homebrew/include -isystemthird_party -DGL_SILENCE_DEPRECATION";
+    const char *lflags = "-L/opt/homebrew/lib -lglfw -framework OpenGL";
+    char *compile_command = strf("%s -dynamiclib %s %s %s src/editor.c -o %s", cc, cflags, lflags, src_path, dylib_path);
+
+    int result = system(compile_command);
+
+    if (result == 0)
+    {
+        Scratch_Dylib dylib = scratch_runner_dylib_open(dylib_path);
+        if (dylib.handle)
+        {
+            if (!buffer_view->buffer->file.linked_buffer)
+            {
+                Text_Buffer empty_buffer = text_buffer_create_from_lines("", NULL);
+                Rect this_buffer_rect = outer_view(buffer_view)->outer_rect;
+                View *output_view = create_buffer_view_generic(empty_buffer, (Rect){this_buffer_rect.x + this_buffer_rect.w + 5, this_buffer_rect.y, 600, 400}, state);
+                buffer_view->buffer->file.linked_buffer = output_view->bv.buffer;
+            }
+
+            text_buffer_clear(&buffer_view->buffer->file.linked_buffer->text_buffer);
+
+            dylib.on_run(&buffer_view->buffer->file.linked_buffer->text_buffer, state);
+
+            scratch_runner_dylib_close(&dylib);
+
+            file_delete(dylib_path);
+            file_delete(src_path);
+
+            return true;
+        }
+        else
+        {
+            log_warning("Failed to open dylib at %s", dylib_path);
+            file_delete(dylib_path);
+            file_delete(src_path);
+        }
+    }
+    else
+    {
+        log_warning("Build failed with code %d for scratch dylib. Compile command:\n%s\n", result, compile_command);
+        file_delete(src_path);
+    }
+
+    free(dylib_path);
+    free(src_path);
+    free(src_name);
+    free(compile_command);
     return false;
 }

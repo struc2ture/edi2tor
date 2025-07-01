@@ -24,9 +24,9 @@ static void _trace_log(const char *fmt, ...)
     va_end(args);
     putchar('\n');
 }
-#define trace_log(FMT, ...) _trace_log("%s: " FMT, __func__, ##__VA_ARGS__)
+#define trace_log(FMT, ...) _trace_log("{%s:%d(%s)} " FMT, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
-static void log_warning(const char *fmt, ...)
+static void _log_warning(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -35,6 +35,8 @@ static void log_warning(const char *fmt, ...)
     va_end(args);
     putchar('\n');
 }
+
+#define log_warning(FMT, ...) _log_warning("{%s:%d(%s)} " FMT, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
 
 static void fatal(const char *fmt, ...)
 {
@@ -163,7 +165,7 @@ static void *xdlopen(const char *dl_path)
     return handle;
 }
 
-static void * xdlsym(void *handle, const char *name)
+static void *xdlsym(void *handle, const char *name)
 {
     void *sym = dlsym(handle, name);
     if (!sym) {
@@ -171,4 +173,18 @@ static void * xdlsym(void *handle, const char *name)
         exit(1);
     }
     return sym;
+}
+
+static bool file_delete(const char *path)
+{
+    if (remove(path) == 0)
+    {
+        trace_log("Deleted file at %s", path);
+        return true;
+    }
+    else
+    {
+        log_warning("Failed to deleted file at %s ", path);
+        return false;
+    }
 }
