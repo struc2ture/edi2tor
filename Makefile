@@ -13,7 +13,6 @@ bin/editor.dylib: src/editor.c src/editor.h src/util.h src/shaders.h src/unit_te
 bin/live_cube.dylib: src/live_cube.c src/live_cube.h | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@
 
-
 run: bin/platform bin/editor.dylib
 	./bin/platform bin/editor.dylib
 
