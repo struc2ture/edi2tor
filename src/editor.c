@@ -660,7 +660,7 @@ Buffer *buffer_create_read_file(const char *path, Editor_State *state)
 {
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_KIND_FILE;
-    bool opened = file_read_into_text_buffer(path, &buffer->text_buffer, &buffer->file.info);
+    bool opened = text_buffer_read_from_file(path, &buffer->text_buffer, &buffer->file.info);
     if (!opened)
     {
         free(buffer);
@@ -1224,7 +1224,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             Buffer_View *buffer_view = context.save_as.for_buffer_view;
             if (view_exists((View *)buffer_view, state))
             {
-                file_write(buffer_view->buffer->text_buffer, result.str);
+                text_buffer_write_to_file(buffer_view->buffer->text_buffer, result.str);
                 Buffer *new_buffer = buffer_create_read_file(result.str, state);
                 buffer_destroy(buffer_view->buffer, state);
                 buffer_view->buffer = new_buffer;
@@ -2390,7 +2390,7 @@ char *string_builder_compile_and_destroy(String_Builder *string_builder)
     return compiled_str;
 }
 
-bool file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer, File_Info *file_info)
+bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer, File_Info *file_info)
 {
     file_info->path = xstrdup(path);
     FILE *f = fopen(file_info->path, "r");
@@ -2412,7 +2412,7 @@ bool file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer, File
     return true;
 }
 
-void file_write(Text_Buffer text_buffer, const char *path)
+void text_buffer_write_to_file(Text_Buffer text_buffer, const char *path)
 {
     FILE *f = fopen(path, "w");
     if (!f) fatal("Failed to open file for writing at %s", path);

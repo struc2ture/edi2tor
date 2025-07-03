@@ -152,6 +152,427 @@ bool action_prompt_new_file(Editor_State *state)
     return true;
 }
 
+const char *_action_save_workspace_get_view_kind_str(View_Kind kind)
+{
+    switch (kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            return "BUFFER";
+        } break;
+
+        case VIEW_KIND_IMAGE:
+        {
+            return "IMAGE";
+        } break;
+
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            return "LIVE_SCENE";
+        } break;
+    }
+}
+
+const char *_action_save_workspace_get_buffer_kind_str(Buffer_Kind kind)
+{
+    switch (kind)
+    {
+        case BUFFER_KIND_GENERIC:
+        {
+            return "GENERIC";
+        } break;
+
+        case BUFFER_KIND_FILE:
+        {
+            return "FILE";
+        } break;
+
+        case BUFFER_KIND_PROMPT:
+        {
+            return "PROMPT";
+        } break;
+    }
+}
+
+void _action_save_workspace_save_text_buffer_to_temp_loc(Text_Buffer tb, String_Builder *sb)
+{
+    time_t now = time(NULL);
+    int r = rand() % 100000;
+    char *temp_path = strf("scratch/.e2/temp_files/%ld_%d.tmp", now, r);
+    text_buffer_write_to_file(tb, temp_path);
+    string_builder_append_f(sb, "  TEMP_PATH='%s'\n", temp_path);
+    free(temp_path);
+}
+
+bool action_save_workspace(Editor_State *state)
+{
+    clear_dir("scratch/.e2/temp_files");
+
+    String_Builder sb = {0};
+
+    string_builder_append_f(&sb, "WORK_DIR='%s'\n", state->working_dir);
+    string_builder_append_f(&sb, "CANVAS_POS=(%.3f,%.3f)\n", state->canvas_viewport.rect.x, state->canvas_viewport.rect.y);
+
+    for (int i = 0; i < state->view_count; i++)
+    {
+        View *view = state->views[i];
+        string_builder_append_f(&sb, "VIEW={\n");
+        {
+            string_builder_append_f(&sb, "  KIND=%s\n", _action_save_workspace_get_view_kind_str(view->kind));
+            string_builder_append_f(&sb, "  RECT=(%.3f,%.3f,%.3f,%.3f)\n", view->outer_rect.x, view->outer_rect.y, view->outer_rect.w, view->outer_rect.h);
+
+            switch (view->kind)
+            {
+                case VIEW_KIND_BUFFER:
+                {
+                    Buffer_View *bv = &view->bv;
+                    string_builder_append_f(&sb, "  BUF_VIEWPORT=(%.3f,%.3f,%.3f)\n", bv->viewport.rect.x, bv->viewport.rect.y, bv->viewport.zoom);
+                    string_builder_append_f(&sb, "  CURSOR=(%d,%d)\n", bv->cursor.pos.line, bv->cursor.pos.col);
+                    if (bv->mark.active)
+                    {
+                        string_builder_append_f(&sb, "  MARK=(%d,%d)\n", bv->mark.pos.line, bv->mark.pos.col);
+                    }
+
+                    Buffer *b = bv->buffer;
+                    string_builder_append_f(&sb, "  BUF_KIND=%s\n", _action_save_workspace_get_buffer_kind_str(b->kind));
+                    switch (b->kind)
+                    {
+                        case BUFFER_KIND_GENERIC:
+                        {
+                            _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
+                        } break;
+
+                        case BUFFER_KIND_FILE:
+                        {
+                            if (b->file.info.has_been_modified || b->file.info.path == NULL)
+                            {
+                                _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
+                            }
+
+                            if (b->file.info.path)
+                            {
+                                string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->file.info.path);
+                            }
+
+                            // TODO: Live_Scene link ID
+                        } break;
+
+                        case BUFFER_KIND_PROMPT:
+                        {
+                            // TODO: Need better buffer ID system to recreate prompt context (link to buffer for example)
+                            // Skip for now
+                        } break;
+                    }
+                } break;
+
+                case VIEW_KIND_LIVE_SCENE:
+                {
+                    Live_Scene *ls = view->lsv.live_scene;
+                    string_builder_append_f(&sb, "  DL_PATH='%s'\n", ls->dylib.original_path);
+                    // TODO: Save live scene state?!!
+                } break;
+
+                case VIEW_KIND_IMAGE:
+                {
+                    log_warning("Image view saving not implemented");
+                } break;
+            }
+        }
+        string_builder_append_f(&sb, "}\n");
+    }
+
+    char *content = string_builder_compile_and_destroy(&sb);
+    file_write("scratch/.e2/workspace", content);
+    free(content);
+
+    return true;
+}
+
+#include "ws_parser.h"
+
+#define LOG_AND_RET(log) do { log_warning(log); return false; } while(0)
+
+bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state)
+{
+    View_Kind view_kind = 0;
+    bool has_view_kind = false;
+    Rect rect = {0};
+    bool has_rect = false;
+    float buf_viewport_x = 0;
+    float buf_viewport_y = 0;
+    float buf_viewport_zoom = 0;
+    bool has_buf_viewport = false;
+    Cursor_Pos cursor = {0};
+    bool has_cursor = false;
+    Cursor_Pos mark = {0};
+    bool has_mark = false;
+    Buffer_Kind buffer_kind = 0;
+    bool has_buffer_kind = false;
+    char *file_path = NULL;
+    bool has_file_path = false;
+    char *temp_path = NULL;
+    bool has_temp_path = false;
+    char *dl_path = NULL;
+    bool has_dl_path = false;
+
+    while (1)
+    {
+        Token key = ws_parser_next_token(ps);
+        if (key.kind == TOKEN_RBRACE) break;
+        if (key.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+
+        if (ws_parser_next_token(ps).kind != TOKEN_EQUALS) LOG_AND_RET("Expected EQUALS.");
+
+        if (key.length == 4 && strncmp(key.start, "KIND", 4) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+
+            if (val.length == 6 && strncmp(val.start, "BUFFER", 6) == 0) view_kind = VIEW_KIND_BUFFER;
+            else if (val.length == 5 && strncmp(val.start, "IMAGE", 5) == 0) view_kind = VIEW_KIND_IMAGE;
+            else if (val.length == 10 && strncmp(val.start, "LIVE_SCENE", 10) == 0) view_kind = VIEW_KIND_LIVE_SCENE;
+            else LOG_AND_RET("Invalid KIND");
+
+            has_view_kind = true;
+        }
+        else if (key.length == 4 && strncmp(key.start, "RECT", 4) == 0)
+        {
+            if (ws_parser_next_token(ps).kind != TOKEN_LPAREN) LOG_AND_RET("Expected LPAREN.");
+
+            Token t_v;
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            rect.x = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            rect.y = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            rect.w = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            rect.h = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
+
+            has_rect = true;
+        }
+        else if (key.length == 12 && strncmp(key.start, "BUF_VIEWPORT", 12) == 0)
+        {
+            if (ws_parser_next_token(ps).kind != TOKEN_LPAREN) LOG_AND_RET("Expected LPAREN.");
+
+            Token t_v;
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            buf_viewport_x = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            buf_viewport_y = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            buf_viewport_zoom = atof(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
+
+            has_buf_viewport = true;
+        }
+        else if (key.length == 6 && strncmp(key.start, "CURSOR", 6) == 0)
+        {
+            if (ws_parser_next_token(ps).kind != TOKEN_LPAREN) LOG_AND_RET("Expected LPAREN.");
+
+            Token t_v;
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            cursor.line = atoi(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            cursor.col = atoi(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
+
+            has_cursor = true;
+        }
+        else if (key.length == 4 && strncmp(key.start, "MARK", 4) == 0)
+        {
+            if (ws_parser_next_token(ps).kind != TOKEN_LPAREN) LOG_AND_RET("Expected LPAREN.");
+
+            Token t_v;
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            mark.line = atoi(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_COMMA) LOG_AND_RET("Expected COMMA.");
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            mark.col = atoi(t_v.start);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
+
+            has_mark = true;
+        }
+        else if (key.length == 8 && strncmp(key.start, "BUF_KIND", 8) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+
+            if (val.length == 4 && strncmp(val.start, "FILE", 4) == 0) buffer_kind = BUFFER_KIND_FILE;
+            else if (val.length == 6 && strncmp(val.start, "PROMPT", 6) == 0) buffer_kind = BUFFER_KIND_PROMPT;
+            else if (val.length == 7 && strncmp(val.start, "GENERIC", 7) == 0) buffer_kind = BUFFER_KIND_GENERIC;
+            else LOG_AND_RET("Invalid BUF_KIND");
+
+            has_buffer_kind = true;
+        }
+        else if (key.length == 9 && strncmp(key.start, "FILE_PATH", 9) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_STRING) LOG_AND_RET("Expected STRING.");
+
+            file_path = strndup(val.start, val.length);
+            has_file_path = true;
+        }
+        else if (key.length == 9 && strncmp(key.start, "TEMP_PATH", 9) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_STRING) LOG_AND_RET("Expected STRING.");
+
+            temp_path = strndup(val.start, val.length);
+            has_temp_path = true;
+        }
+        else if (key.length == 7 && strncmp(key.start, "DL_PATH", 7) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_STRING) LOG_AND_RET("Expected STRING.");
+
+            dl_path = strndup(val.start, val.length);
+            has_dl_path = true;
+        }
+    }
+
+    if (has_view_kind) trace_log("View kind: %d", view_kind);
+    if (has_rect) trace_log("Rect: %.3f, %.3f, %.3f, %.3f", rect.x, rect.y, rect.w, rect.h);
+    if (has_buf_viewport) trace_log("Buf viewport: %.3f, %.3f, %.3f", buf_viewport_x, buf_viewport_y, buf_viewport_zoom);
+    if (has_cursor) trace_log("Cursor: %d, %d", cursor.line, cursor.col);
+    if (has_mark) trace_log("Mark: %d, %d", mark.line, mark.col);
+    if (has_buffer_kind) trace_log("Buffer kind: %d", buffer_kind);
+    if (has_file_path) trace_log("File path: %s", file_path);
+    if (has_temp_path) trace_log("Temp path: %s", temp_path);
+    if (has_dl_path) trace_log("DL path: %s", dl_path);
+
+    // if (!has_view_kind) LOG_AND_RET("No view kind.");
+    // if (!has_rect) rect = (Rect){0, 0, 100, 100};
+
+    // switch (view_kind)
+    // {
+    //     case VIEW_KIND_BUFFER:
+    //     {
+    //         create_buffer_view_generic();
+    //         if (!has_buf_viewport)
+    //         {
+    //             buf_viewport_x = 0.0f;
+    //             buf_viewport_y = 0.0f;
+    //             buf_viewport_zoom = 1.0f;
+    //         }
+    //     } break;
+    // }
+
+    return true;
+}
+
+bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
+{
+    while (1)
+    {
+        Token key = ws_parser_next_token(ps);
+        if (key.kind == TOKEN_EOF) break;
+        if (key.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+
+        if (ws_parser_next_token(ps).kind != TOKEN_EQUALS) LOG_AND_RET("Expected EQUALS.");
+
+        if (key.length == 8 && strncmp(key.start, "WORK_DIR", 8) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_STRING) LOG_AND_RET("Expected STRING.");
+
+            state->working_dir = strndup(val.start, val.length);
+            trace_log("Will change working dir to %s", state->working_dir);
+
+            free(state->working_dir);
+        }
+        else if (key.length == 10 && strncmp(key.start, "CANVAS_POS", 10) == 0)
+        {
+            if (ws_parser_next_token(ps).kind != TOKEN_LPAREN) LOG_AND_RET("Expected LPAREN.");
+
+            Token t_v;
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            float x = atof(t_v.start);
+
+            ws_parser_next_token(ps); // comma
+
+            t_v = ws_parser_next_token(ps);
+            if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            float y = atof(t_v.start);
+
+            trace_log("Will set canvas pos to %.3f, %.3f", x, y);
+
+            if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
+        }
+        else if (key.length == 4 && strncmp(key.start, "VIEW", 4) == 0)
+        {
+            if (ws_parser_next_token(ps).kind != TOKEN_LBRACE) LOG_AND_RET("Expected LBRACE.");
+
+            trace_log("Will create view:");
+
+            if (!_action_load_workspace_parse_view_kvs(ps, state)) LOG_AND_RET("Failed to parse View.");
+        }
+    }
+
+    return true;
+}
+
+bool action_load_workspace(Editor_State *state)
+{
+    char *workspace = read_file("scratch/.e2/workspace", NULL);
+
+    Parser_State parser_state = { .src = workspace };
+    trace_log("");
+
+    // ws_parser_print_tokens(&parser_state);
+
+    _action_load_workspace_parse_kvs(&parser_state, state);
+    // ws_parser_print_kvs(&parser_state);
+
+    trace_log("");
+
+    return true;
+}
+
+// ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_shift, bool with_alt, bool with_super)
 {
     if (with_shift && !buffer_view->mark.active) buffer_view_set_mark(buffer_view, buffer_view->cursor.pos);
@@ -207,7 +628,7 @@ bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view
     if (last_uncommitted_command && last_uncommitted_command->delta_count > 0)
     {
         Delta *prev_delta = &last_uncommitted_command->deltas[last_uncommitted_command->delta_count - 1];
-        if (prev_delta->kind == DELTA_INSERT_CHAR && 
+        if (prev_delta->kind == DELTA_INSERT_CHAR &&
             (!isalnum(prev_delta->insert_char.c) && isalnum(c)))
         {
             // If a word edge has been encountered, commit command
@@ -459,7 +880,7 @@ bool action_buffer_view_save_file(Editor_State *state, Buffer_View *buffer_view)
 {
     (void)state;
     bassert(buffer_view->buffer->file.info.path);
-    file_write(buffer_view->buffer->text_buffer, buffer_view->buffer->file.info.path);
+    text_buffer_write_to_file(buffer_view->buffer->text_buffer, buffer_view->buffer->file.info.path);
     buffer_view->buffer->file.info.has_been_modified = false;
     return true;
 }
@@ -643,7 +1064,7 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     char *src_path = strf("scratch/%s.c", src_name);
     char *dylib_path = strf("scratch/%s.dylib", src_name);
 
-    file_write(buffer_view->buffer->text_buffer, src_path);
+    text_buffer_write_to_file(buffer_view->buffer->text_buffer, src_path);
 
     const char *cc = "clang";
     const char *cflags = "-I/opt/homebrew/include -isystemthird_party -DGL_SILENCE_DEPRECATION";

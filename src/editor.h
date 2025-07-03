@@ -191,6 +191,7 @@ struct Buffer_View {
     Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
+    // TODO: Remove selection
     Text_Selection selection;
     Text_Mark mark;
     bool is_mouse_drag;
@@ -452,8 +453,8 @@ void string_builder_append_f(String_Builder *string_builder, const char *fmt, ..
 void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
 char *string_builder_compile_and_destroy(String_Builder *string_builder);
 
-bool file_read_into_text_buffer(const char *path, Text_Buffer *text_buffer, File_Info *file_info);
-void file_write(Text_Buffer text_buffer, const char *path);
+bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer, File_Info *file_info);
+void text_buffer_write_to_file(Text_Buffer text_buffer, const char *path);
 
 Image file_open_image(const char *path);
 

@@ -111,6 +111,21 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 } break;
             }
         }
+        else if (e->key.mods == (GLFW_MOD_SHIFT | GLFW_MOD_SUPER))
+        {
+            switch (e->key.key)
+            {
+                case GLFW_KEY_D:
+                {
+                    action_save_workspace(state);
+                } break;
+
+                case GLFW_KEY_E:
+                {
+                    action_load_workspace(state);
+                } break;
+            }
+        }
     }
 
     if (will_propagate_to_view && prev_active_view)

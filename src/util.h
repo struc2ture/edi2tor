@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ctype.h>
+#include <dirent.h>
 #include <dlfcn.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -9,6 +10,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 inline static void bassert(bool condition)
 {
@@ -187,4 +189,58 @@ static bool file_delete(const char *path)
         log_warning("Failed to deleted file at %s ", path);
         return false;
     }
+}
+
+static void file_write(const char *path, const char *content)
+{
+    FILE *f = fopen(path, "w");
+    if (!f)
+    {
+        log_warning("Failed to open file at %s", path);
+        return;
+    }
+
+    fputs(content, f);
+    fclose(f);
+}
+
+static void clear_dir(const char *path)
+{
+    DIR *d = opendir(path);
+    if (!d)
+    {
+        log_warning("Failed to open dir at %s", path);
+        return;
+    }
+
+    struct dirent *entry;
+    char filepath[1024];
+
+    while ((entry = readdir(d)))
+    {
+        if (entry->d_type != DT_REG) continue; // only delete regular files
+        snprintf(filepath, sizeof(filepath), "%s/%s", path, entry->d_name);
+        unlink(filepath);
+    }
+
+    closedir(d);
+}
+
+static char *read_file(const char *path, size_t *out_size)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+    {
+        log_warning("Failed to open file for reading at %s", path);
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+    char *buf = xmalloc(size + 1);
+    fread(buf, 1, size, f);
+    buf[size] = '\0';
+    if (out_size) *out_size = size;
+    fclose(f);
+    return buf;
 }
