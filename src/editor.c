@@ -1,6 +1,7 @@
 #include "editor.h"
 
 #include "common.h"
+#include "text_buffer.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -247,7 +248,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
     }
     mat_stack_pop(&render_state->mat_stack_model_view);
 
-    if (buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL)
+    if (buffer_view->buffer->kind == BUFFER_KIND_GENERIC && buffer_view->buffer->generic.file_path)
     {
         mat_stack_push(&render_state->mat_stack_model_view);
         {
@@ -363,20 +364,14 @@ void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_v
 
 void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, const Render_State *render_state)
 {
-    bassert(buffer_view->buffer->kind == BUFFER_KIND_FILE && buffer_view->buffer->file.info.path != NULL);
+    bassert(buffer_view->buffer->kind == BUFFER_KIND_GENERIC && buffer_view->buffer->generic.file_path);
 
     glUseProgram(render_state->font_shader);
 
-    char view_name_buf[256];
-    if (!buffer_view->buffer->file.info.has_been_modified)
-        snprintf(view_name_buf, sizeof(view_name_buf), "%s", buffer_view->buffer->file.info.path);
-    else
-        snprintf(view_name_buf, sizeof(view_name_buf), "%s[*]", buffer_view->buffer->file.info.path);
-
     if (is_active)
-        draw_string(view_name_buf, render_state->font, 0, 0, (Color){140, 140, 140, 255}, render_state);
+        draw_string(buffer_view->buffer->generic.file_path, render_state->font, 0, 0, (Color){140, 140, 140, 255}, render_state);
     else
-        draw_string(view_name_buf, render_state->font, 0, 0, (Color){100, 100, 100, 255}, render_state);
+        draw_string(buffer_view->buffer->generic.file_path, render_state->font, 0, 0, (Color){100, 100, 100, 255}, render_state);
 }
 
 void render_view_image(Image_View *image_view, const Render_State *render_state)
@@ -646,42 +641,27 @@ void buffer_free_slot(Buffer *buffer, Editor_State *state)
     state->buffers = xrealloc(state->buffers, state->buffer_count * sizeof(state->buffers[0]));
 }
 
-Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state)
+Buffer *buffer_create_empty(Editor_State *state)
 {
     Buffer **new_slot = buffer_create_new_slot(state);
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_KIND_GENERIC;
+    buffer->text_buffer = text_buffer_create_empty();
+    *new_slot = buffer;
+    return *new_slot;
+}
+
+void buffer_replace_text_buffer(Buffer *buffer, Text_Buffer text_buffer)
+{
+    text_buffer_destroy(&buffer->text_buffer);
     buffer->text_buffer = text_buffer;
-    *new_slot = buffer;
-    return *new_slot;
 }
 
-Buffer *buffer_create_read_file(const char *path, Editor_State *state)
+void buffer_replace_file(Buffer *buffer, const char *path)
 {
-    Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_KIND_FILE;
-    bool opened = text_buffer_read_from_file(path, &buffer->text_buffer, &buffer->file.info);
-    if (!opened)
-    {
-        free(buffer);
-        return NULL;
-    }
-    Buffer **new_slot = buffer_create_new_slot(state);
-    *new_slot = buffer;
-    return *new_slot;
-}
-
-Buffer *buffer_create_empty_file(Editor_State *state)
-{
-    Buffer **new_slot = buffer_create_new_slot(state);
-
-    Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_KIND_FILE;
-    buffer->file.info.path = NULL;
-    buffer->text_buffer = text_buffer_create_from_lines("", NULL);
-
-    *new_slot = buffer;
-    return *new_slot;
+    bassert(buffer->kind == BUFFER_KIND_GENERIC);
+    if (buffer->generic.file_path) free(buffer->generic.file_path);
+    buffer->generic.file_path = xstrdup(path);
 }
 
 Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state)
@@ -721,7 +701,6 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
     switch (buffer->kind)
     {
         case BUFFER_KIND_GENERIC:
-        case BUFFER_KIND_FILE:
         case BUFFER_KIND_PROMPT:
         {
             text_buffer_destroy(&buffer->text_buffer);
@@ -731,29 +710,31 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
     }
 }
 
-View *create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state)
+View *create_buffer_view_generic(Rect rect, Editor_State *state)
 {
-    Buffer *buffer = buffer_create_generic(text_buffer, state);
+    Buffer *buffer = buffer_create_empty(state);
     Buffer_View *buffer_view = buffer_view_create(buffer, rect, state);
     view_set_active(outer_view(buffer_view), state);
     return outer_view(buffer_view);
 }
 
-View *create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state)
+View *create_buffer_view_open_file(const char *path, Rect rect, Editor_State *state)
 {
-    Buffer *buffer = buffer_create_read_file(file_path, state);
-    if (buffer != NULL)
-    {
-        Buffer_View *buffer_view = buffer_view_create(buffer, rect, state);
-        view_set_active(outer_view(buffer_view), state);
-        return outer_view(buffer_view);
-    }
-    return NULL;
-}
+    Buffer *buffer = buffer_create_empty(state);
 
-View *create_buffer_view_empty_file(Rect rect, Editor_State *state)
-{
-    Buffer *buffer = buffer_create_empty_file(state);
+    Text_Buffer tb;
+    bool read_success = text_buffer_read_from_file(path, &tb);
+    if (read_success)
+    {
+        buffer_replace_text_buffer(buffer, tb);
+        buffer->generic.file_path = xstrdup(path);
+    }
+    else
+    {
+        buffer_destroy(buffer, state);
+        return NULL;
+    }
+
     Buffer_View *buffer_view = buffer_view_create(buffer, rect, state);
     view_set_active(outer_view(buffer_view), state);
     return outer_view(buffer_view);
@@ -1167,15 +1148,18 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             {
                 case FILE_KIND_IMAGE:
                 {
+                    // TODO: Handle if it can't be opened
                     create_image_view(result.str, new_view_rect, state);
                 } break;
                 case FILE_KIND_DYLIB:
                 {
+                    // TODO: Handle if it can't be opened
                     create_live_scene_view(result.str, new_view_rect, state);
                 } break;
                 case FILE_KIND_TEXT:
                 {
-                    create_buffer_view_open_file(result.str, new_view_rect, state);
+                    if (!create_buffer_view_open_file(result.str, new_view_rect, state))
+                        return false;
                 } break;
                 default: return false;
             }
@@ -1225,9 +1209,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             if (view_exists((View *)buffer_view, state))
             {
                 text_buffer_write_to_file(buffer_view->buffer->text_buffer, result.str);
-                Buffer *new_buffer = buffer_create_read_file(result.str, state);
-                buffer_destroy(buffer_view->buffer, state);
-                buffer_view->buffer = new_buffer;
+                buffer_replace_file(buffer_view->buffer, result.str);
             }
             else log_warning("prompt_submit: PROMPT_SAVE_AS: Buffer_View %p does not exist", context.save_as.for_buffer_view);
         } break;
@@ -1913,6 +1895,13 @@ Text_Buffer text_buffer_create_from_lines(const char *first, ...)
     return text_buffer;
 }
 
+Text_Buffer text_buffer_create_empty()
+{
+    Text_Buffer text_buffer = {0};
+    text_buffer_append_f(&text_buffer, "");
+    return text_buffer;
+}
+
 void text_buffer_destroy(Text_Buffer *text_buffer)
 {
     for (int i = 0; i < text_buffer->line_count; i++)
@@ -2390,10 +2379,9 @@ char *string_builder_compile_and_destroy(String_Builder *string_builder)
     return compiled_str;
 }
 
-bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer, File_Info *file_info)
+bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer)
 {
-    file_info->path = xstrdup(path);
-    FILE *f = fopen(file_info->path, "r");
+    FILE *f = fopen(path, "r");
     if (!f)
     {
         trace_log("Could not open file at %s", path);

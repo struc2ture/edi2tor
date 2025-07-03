@@ -15,7 +15,8 @@ bool action_run_unit_tests(Editor_State *state)
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
     Text_Buffer log_buffer = {0};
     unit_tests_run(&log_buffer, true);
-    View *view = create_buffer_view_generic(log_buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+    View *view = create_buffer_view_generic((Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+    buffer_replace_text_buffer(view->bv.buffer, log_buffer);
     view->bv.cursor.pos = cursor_pos_to_end_of_buffer(log_buffer, view->bv.cursor.pos);
     viewport_snap_to_cursor(log_buffer, view->bv.cursor.pos, &view->bv.viewport, &state->render_state);
     return true;
@@ -44,10 +45,10 @@ bool action_rebuild_live_scene(Editor_State *state)
         live_scene_rebuild(view->lsv.live_scene);
     }
     else if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_KIND_FILE &&
-        view->bv.buffer->file.linked_live_scene)
+        view->bv.buffer->kind == BUFFER_KIND_GENERIC &&
+        view->bv.buffer->generic.linked_live_scene)
     {
-        live_scene_rebuild(view->bv.buffer->file.linked_live_scene);
+        live_scene_rebuild(view->bv.buffer->generic.linked_live_scene);
     }
     return true;
 }
@@ -61,8 +62,8 @@ bool action_reset_live_scene(Editor_State *state)
         live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h, view->lsv.framebuffer.fbo);
     }
     else if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_KIND_FILE &&
-        view->bv.buffer->file.linked_live_scene)
+        view->bv.buffer->kind == BUFFER_KIND_GENERIC &&
+        view->bv.buffer->generic.linked_live_scene)
     {
         live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h, view->lsv.framebuffer.fbo);
     }
@@ -73,12 +74,12 @@ bool action_link_live_scene(Editor_State *state)
 {
     View *view = state->active_view;
     if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_KIND_FILE &&
+        view->bv.buffer->kind == BUFFER_KIND_GENERIC &&
         state->view_count > 1 &&
         state->views[1]->kind == VIEW_KIND_LIVE_SCENE)
     {
-        view->bv.buffer->file.linked_live_scene = state->views[1]->lsv.live_scene;
-        trace_log("Linked live scene to buffer %s", view->bv.buffer->file.info.path);
+        view->bv.buffer->generic.linked_live_scene = state->views[1]->lsv.live_scene;
+        trace_log("Linked live scene to buffer %s", view->bv.buffer->generic.file_path);
     }
     return true;
 }
@@ -146,7 +147,7 @@ bool action_prompt_open_file(Editor_State *state)
 bool action_prompt_new_file(Editor_State *state)
 {
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
-    create_buffer_view_empty_file(
+    create_buffer_view_generic(
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
     return true;
@@ -180,11 +181,6 @@ const char *_action_save_workspace_get_buffer_kind_str(Buffer_Kind kind)
         case BUFFER_KIND_GENERIC:
         {
             return "GENERIC";
-        } break;
-
-        case BUFFER_KIND_FILE:
-        {
-            return "FILE";
         } break;
 
         case BUFFER_KIND_PROMPT:
@@ -239,21 +235,14 @@ bool action_save_workspace(Editor_State *state)
                     {
                         case BUFFER_KIND_GENERIC:
                         {
-                            _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
-                        } break;
-
-                        case BUFFER_KIND_FILE:
-                        {
-                            if (b->file.info.has_been_modified || b->file.info.path == NULL)
+                            if (b->generic.file_path)
+                            {
+                                string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->generic.file_path);
+                            }
+                            else
                             {
                                 _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
                             }
-
-                            if (b->file.info.path)
-                            {
-                                string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->file.info.path);
-                            }
-
                             // TODO: Live_Scene link ID
                         } break;
 
@@ -306,8 +295,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
     bool has_cursor = false;
     Cursor_Pos mark = {0};
     bool has_mark = false;
-    Buffer_Kind buffer_kind = 0;
-    bool has_buffer_kind = false;
     char *file_path = NULL;
     bool has_file_path = false;
     char *temp_path = NULL;
@@ -433,18 +420,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
 
             has_mark = true;
         }
-        else if (key.length == 8 && strncmp(key.start, "BUF_KIND", 8) == 0)
-        {
-            Token val = ws_parser_next_token(ps);
-            if (val.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
-
-            if (val.length == 4 && strncmp(val.start, "FILE", 4) == 0) buffer_kind = BUFFER_KIND_FILE;
-            else if (val.length == 6 && strncmp(val.start, "PROMPT", 6) == 0) buffer_kind = BUFFER_KIND_PROMPT;
-            else if (val.length == 7 && strncmp(val.start, "GENERIC", 7) == 0) buffer_kind = BUFFER_KIND_GENERIC;
-            else LOG_AND_RET("Invalid BUF_KIND");
-
-            has_buffer_kind = true;
-        }
         else if (key.length == 9 && strncmp(key.start, "FILE_PATH", 9) == 0)
         {
             Token val = ws_parser_next_token(ps);
@@ -476,7 +451,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
     if (has_buf_viewport) trace_log("Buf viewport: %.3f, %.3f, %.3f", buf_viewport_x, buf_viewport_y, buf_viewport_zoom);
     if (has_cursor) trace_log("Cursor: %d, %d", cursor.line, cursor.col);
     if (has_mark) trace_log("Mark: %d, %d", mark.line, mark.col);
-    if (has_buffer_kind) trace_log("Buffer kind: %d", buffer_kind);
     if (has_file_path) trace_log("File path: %s", file_path);
     if (has_temp_path) trace_log("Temp path: %s", temp_path);
     if (has_dl_path) trace_log("DL path: %s", dl_path);
@@ -856,11 +830,11 @@ bool action_buffer_view_delete_current_line(Editor_State *state, Buffer_View *bu
 
 bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_view)
 {
-    if (buffer_view->buffer->file.info.path != NULL)
+    if (buffer_view->buffer->generic.file_path)
     {
-        Buffer *new_buffer = buffer_create_read_file(buffer_view->buffer->file.info.path, state);
-        buffer_destroy(buffer_view->buffer, state);
-        buffer_view->buffer = new_buffer;
+        Text_Buffer tb;
+        text_buffer_read_from_file(buffer_view->buffer->generic.file_path, &tb);
+        buffer_replace_text_buffer(buffer_view->buffer, tb);
     }
     return true;
 }
@@ -878,10 +852,14 @@ bool action_buffer_view_prompt_save_file_as(Editor_State *state, Buffer_View *bu
 
 bool action_buffer_view_save_file(Editor_State *state, Buffer_View *buffer_view)
 {
-    (void)state;
-    bassert(buffer_view->buffer->file.info.path);
-    text_buffer_write_to_file(buffer_view->buffer->text_buffer, buffer_view->buffer->file.info.path);
-    buffer_view->buffer->file.info.has_been_modified = false;
+    if (buffer_view->buffer->generic.file_path)
+    {
+        text_buffer_write_to_file(buffer_view->buffer->text_buffer, buffer_view->buffer->generic.file_path);
+    }
+    else
+    {
+        action_buffer_view_prompt_save_file_as(state, buffer_view);
+    }
     return true;
 }
 
@@ -952,12 +930,12 @@ bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buf
 bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_view)
 {
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
-    Text_Buffer buffer = {0};
-    text_buffer_append_f(&buffer, "History. Pos: %d. Count: %d", buffer_view->history.history_pos, buffer_view->history.command_count);
+    Text_Buffer history_tb = {0};
+    text_buffer_append_f(&history_tb, "History. Pos: %d. Count: %d", buffer_view->history.history_pos, buffer_view->history.command_count);
     for (int command_i = 0; command_i < buffer_view->history.command_count; command_i++)
     {
         Command *c = &buffer_view->history.commands[command_i];
-        text_buffer_append_f(&buffer, "%03d: '%s' (committed: %s; initial pos: %d, %d)",
+        text_buffer_append_f(&history_tb, "%03d: '%s' (committed: %s; initial pos: %d, %d)",
             command_i,
             c->name,
             c->committed ? "true" : "false",
@@ -969,7 +947,7 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
             {
                 case DELTA_INSERT_CHAR:
                 {
-                    text_buffer_append_f(&buffer, "  %s: %c (%d, %d)",
+                    text_buffer_append_f(&history_tb, "  %s: %c (%d, %d)",
                         DeltaKind_Str[d->kind],
                         d->insert_char.c,
                         d->insert_char.pos.line, d->insert_char.pos.col);
@@ -977,7 +955,7 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
 
                 case DELTA_REMOVE_CHAR:
                 {
-                    text_buffer_append_f(&buffer, "  %s: %c (%d, %d)",
+                    text_buffer_append_f(&history_tb, "  %s: %c (%d, %d)",
                         DeltaKind_Str[d->kind],
                         d->remove_char.c,
                         d->remove_char.pos.line, d->remove_char.pos.col);
@@ -985,7 +963,7 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
 
                 case DELTA_INSERT_RANGE:
                 {
-                    text_buffer_append_f(&buffer, "  %s: '%s' (%d, %d -> %d, %d)",
+                    text_buffer_append_f(&history_tb, "  %s: '%s' (%d, %d -> %d, %d)",
                         DeltaKind_Str[d->kind],
                         d->insert_range.range,
                         d->insert_range.start.line, d->insert_range.start.col,
@@ -994,7 +972,7 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
 
                 case DELTA_REMOVE_RANGE:
                 {
-                    text_buffer_append_f(&buffer, "  %s: '%s' (%d, %d -> %d, %d)",
+                    text_buffer_append_f(&history_tb, "  %s: '%s' (%d, %d -> %d, %d)",
                         DeltaKind_Str[d->kind],
                         d->remove_range.range,
                         d->remove_range.start.line, d->remove_range.start.col,
@@ -1003,7 +981,8 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
             }
         }
     }
-    View *view = create_buffer_view_generic(buffer, (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+    View *view = create_buffer_view_generic((Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 800, 400}, state);
+    buffer_replace_text_buffer(view->bv.buffer, history_tb);
     return true;
 }
 
@@ -1078,17 +1057,16 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
         Scratch_Dylib dylib = scratch_runner_dylib_open(dylib_path);
         if (dylib.handle)
         {
-            if (!buffer_view->buffer->file.linked_buffer)
+            if (!buffer_view->buffer->generic.linked_buffer)
             {
-                Text_Buffer empty_buffer = text_buffer_create_from_lines("", NULL);
                 Rect this_buffer_rect = outer_view(buffer_view)->outer_rect;
-                View *output_view = create_buffer_view_generic(empty_buffer, (Rect){this_buffer_rect.x + this_buffer_rect.w + 5, this_buffer_rect.y, 600, 400}, state);
-                buffer_view->buffer->file.linked_buffer = output_view->bv.buffer;
+                View *output_view = create_buffer_view_generic((Rect){this_buffer_rect.x + this_buffer_rect.w + 5, this_buffer_rect.y, 600, 400}, state);
+                buffer_view->buffer->generic.linked_buffer = output_view->bv.buffer;
             }
 
-            text_buffer_clear(&buffer_view->buffer->file.linked_buffer->text_buffer);
+            text_buffer_clear(&buffer_view->buffer->generic.linked_buffer->text_buffer);
 
-            dylib.on_run(&buffer_view->buffer->file.linked_buffer->text_buffer, state);
+            dylib.on_run(&buffer_view->buffer->generic.linked_buffer->text_buffer, state);
 
             scratch_runner_dylib_close(&dylib);
 

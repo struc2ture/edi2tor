@@ -159,7 +159,6 @@ typedef struct {
 
 typedef enum {
     BUFFER_KIND_GENERIC,
-    BUFFER_KIND_FILE,
     BUFFER_KIND_PROMPT
 } Buffer_Kind;
 
@@ -170,12 +169,11 @@ struct Buffer {
     Buffer_Kind kind;
     Text_Buffer text_buffer;
     union {
-    struct { /* nothing for generic */ } generic;
     struct {
-        File_Info info;
+        char *file_path;
         Live_Scene *linked_live_scene;
         Buffer *linked_buffer;
-    } file;
+    } generic;
     struct {
         Prompt_Context context;
     } prompt;
@@ -309,16 +307,15 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
 
 Buffer **buffer_create_new_slot(Editor_State *state);
 void buffer_free_slot(Buffer *buffer, Editor_State *state);
-Buffer *buffer_create_generic(Text_Buffer text_buffer, Editor_State *state);
-Buffer *buffer_create_read_file(const char *path, Editor_State *state);
-Buffer *buffer_create_empty_file(Editor_State *state);
+Buffer *buffer_create_empty(Editor_State *state);
+void buffer_replace_text_buffer(Buffer *buffer, Text_Buffer text_buffer);
+void buffer_replace_file(Buffer *buffer, const char *path);
 Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state);
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
 
-View *create_buffer_view_generic(Text_Buffer text_buffer, Rect rect, Editor_State *state);
-View *create_buffer_view_open_file(const char *file_path, Rect rect, Editor_State *state);
-View *create_buffer_view_empty_file(Rect rect, Editor_State *state);
+View *create_buffer_view_generic(Rect rect, Editor_State *state);
+View *create_buffer_view_open_file(const char *path, Rect rect, Editor_State *state);
 View *create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 View *create_image_view(const char *file_path, Rect rect, Editor_State *state);
 View *create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state);
@@ -414,6 +411,7 @@ void text_line_insert_range(Text_Line *text_line, const char *range, int insert_
 void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
 
 Text_Buffer text_buffer_create_from_lines(const char *first, ...);
+Text_Buffer text_buffer_create_empty();
 void text_buffer_destroy(Text_Buffer *text_buffer);
 void text_buffer_validate(Text_Buffer *text_buffer);
 void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
@@ -453,7 +451,7 @@ void string_builder_append_f(String_Builder *string_builder, const char *fmt, ..
 void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
 char *string_builder_compile_and_destroy(String_Builder *string_builder);
 
-bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer, File_Info *file_info);
+bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer);
 void text_buffer_write_to_file(Text_Buffer text_buffer, const char *path);
 
 Image file_open_image(const char *path);

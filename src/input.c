@@ -233,27 +233,21 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
                 case GLFW_KEY_X:
                 {
-                    action_buffer_view_delete_current_line(state, buffer_view);
+                    // TODO: Make this work with history
+                    // action_buffer_view_delete_current_line(state, buffer_view);
                 } break;
                 case GLFW_KEY_R:
                 {
-                    if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
+                    if (buffer_view->buffer->kind == BUFFER_KIND_GENERIC)
                     {
                         action_buffer_view_reload_file(state, buffer_view);
                     }
                 } break;
                 case GLFW_KEY_S:
                 {
-                    if (buffer_view->buffer->kind == BUFFER_KIND_FILE)
+                    if (buffer_view->buffer->kind == BUFFER_KIND_GENERIC)
                     {
-                        if (buffer_view->buffer->file.info.path == NULL)
-                        {
-                            action_buffer_view_prompt_save_file_as(state, buffer_view);
-                        }
-                        else
-                        {
-                            action_buffer_view_save_file(state, buffer_view);
-                        }
+                        action_buffer_view_save_file(state, buffer_view);
                     }
                 } break;
                 case GLFW_KEY_EQUAL:
