@@ -9,7 +9,7 @@
 
 #include "platform_types.h"
 
-typedef void (*scene_on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo);
+typedef void (*scene_on_init_t)(void *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv);
 typedef void (*scene_on_reload_t)(void *state);
 typedef void (*scene_on_render_t)(void *state, const Platform_Timing *t);
 typedef void (*scene_on_platform_event_t)(void *state, const Platform_Event *e);

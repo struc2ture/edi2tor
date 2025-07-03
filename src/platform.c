@@ -155,7 +155,9 @@ int main(int argc, char **argv)
         (float)window_px_w,
         (float)window_px_h,
         false,
-        0);
+        0,
+        argc,
+        argv);
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetCharCallback(window, char_callback);

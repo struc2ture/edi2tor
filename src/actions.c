@@ -45,7 +45,7 @@ bool action_rebuild_live_scene(Editor_State *state)
         live_scene_rebuild(view->lsv.live_scene);
     }
     else if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_KIND_GENERIC &&
+        view->bv.buffer->kind == BUFFER_GENERIC &&
         view->bv.buffer->generic.linked_live_scene)
     {
         live_scene_rebuild(view->bv.buffer->generic.linked_live_scene);
@@ -62,7 +62,7 @@ bool action_reset_live_scene(Editor_State *state)
         live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h, view->lsv.framebuffer.fbo);
     }
     else if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_KIND_GENERIC &&
+        view->bv.buffer->kind == BUFFER_GENERIC &&
         view->bv.buffer->generic.linked_live_scene)
     {
         live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h, view->lsv.framebuffer.fbo);
@@ -74,7 +74,7 @@ bool action_link_live_scene(Editor_State *state)
 {
     View *view = state->active_view;
     if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_KIND_GENERIC &&
+        view->bv.buffer->kind == BUFFER_GENERIC &&
         state->view_count > 1 &&
         state->views[1]->kind == VIEW_KIND_LIVE_SCENE)
     {
@@ -174,27 +174,11 @@ const char *_action_save_workspace_get_view_kind_str(View_Kind kind)
     }
 }
 
-const char *_action_save_workspace_get_buffer_kind_str(Buffer_Kind kind)
-{
-    switch (kind)
-    {
-        case BUFFER_KIND_GENERIC:
-        {
-            return "GENERIC";
-        } break;
-
-        case BUFFER_KIND_PROMPT:
-        {
-            return "PROMPT";
-        } break;
-    }
-}
-
 void _action_save_workspace_save_text_buffer_to_temp_loc(Text_Buffer tb, String_Builder *sb)
 {
     time_t now = time(NULL);
     int r = rand() % 100000;
-    char *temp_path = strf("scratch/.e2/temp_files/%ld_%d.tmp", now, r);
+    char *temp_path = strf(E2_TEMP_FILES "/%ld_%d.tmp", now, r);
     text_buffer_write_to_file(tb, temp_path);
     string_builder_append_f(sb, "  TEMP_PATH='%s'\n", temp_path);
     free(temp_path);
@@ -202,14 +186,15 @@ void _action_save_workspace_save_text_buffer_to_temp_loc(Text_Buffer tb, String_
 
 bool action_save_workspace(Editor_State *state)
 {
-    clear_dir("scratch/.e2/temp_files");
+    clear_dir(E2_TEMP_FILES);
 
     String_Builder sb = {0};
 
     string_builder_append_f(&sb, "WORK_DIR='%s'\n", state->working_dir);
     string_builder_append_f(&sb, "CANVAS_POS=(%.3f,%.3f)\n", state->canvas_viewport.rect.x, state->canvas_viewport.rect.y);
 
-    for (int i = 0; i < state->view_count; i++)
+    // Save views in reverse order, so it's easier to load (last loaded view is in the front of the queue)
+    for (int i = state->view_count - 1; i >= 0; i--)
     {
         View *view = state->views[i];
         string_builder_append_f(&sb, "VIEW={\n");
@@ -230,27 +215,20 @@ bool action_save_workspace(Editor_State *state)
                     }
 
                     Buffer *b = bv->buffer;
-                    string_builder_append_f(&sb, "  BUF_KIND=%s\n", _action_save_workspace_get_buffer_kind_str(b->kind));
-                    switch (b->kind)
+                    if (b->kind ==  BUFFER_GENERIC)
                     {
-                        case BUFFER_KIND_GENERIC:
+                        _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
+                        if (b->generic.file_path)
                         {
-                            if (b->generic.file_path)
-                            {
-                                string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->generic.file_path);
-                            }
-                            else
-                            {
-                                _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
-                            }
-                            // TODO: Live_Scene link ID
-                        } break;
-
-                        case BUFFER_KIND_PROMPT:
-                        {
-                            // TODO: Need better buffer ID system to recreate prompt context (link to buffer for example)
-                            // Skip for now
-                        } break;
+                            string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->generic.file_path);
+                        }
+                        // TODO: Live_Scene link ID
+                    }
+                    else
+                    {
+                        // TODO: Prompts
+                        // Need better buffer ID system to recreate prompt context
+                        // Skip for now
                     }
                 } break;
 
@@ -271,7 +249,7 @@ bool action_save_workspace(Editor_State *state)
     }
 
     char *content = string_builder_compile_and_destroy(&sb);
-    file_write("scratch/.e2/workspace", content);
+    file_write(E2_WORKSPACE, content);
     free(content);
 
     return true;
@@ -446,31 +424,92 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
         }
     }
 
-    if (has_view_kind) trace_log("View kind: %d", view_kind);
-    if (has_rect) trace_log("Rect: %.3f, %.3f, %.3f, %.3f", rect.x, rect.y, rect.w, rect.h);
-    if (has_buf_viewport) trace_log("Buf viewport: %.3f, %.3f, %.3f", buf_viewport_x, buf_viewport_y, buf_viewport_zoom);
-    if (has_cursor) trace_log("Cursor: %d, %d", cursor.line, cursor.col);
-    if (has_mark) trace_log("Mark: %d, %d", mark.line, mark.col);
-    if (has_file_path) trace_log("File path: %s", file_path);
-    if (has_temp_path) trace_log("Temp path: %s", temp_path);
-    if (has_dl_path) trace_log("DL path: %s", dl_path);
+    // if (has_view_kind) trace_log("View kind: %d", view_kind);
+    // if (has_rect) trace_log("Rect: %.3f, %.3f, %.3f, %.3f", rect.x, rect.y, rect.w, rect.h);
+    // if (has_buf_viewport) trace_log("Buf viewport: %.3f, %.3f, %.3f", buf_viewport_x, buf_viewport_y, buf_viewport_zoom);
+    // if (has_cursor) trace_log("Cursor: %d, %d", cursor.line, cursor.col);
+    // if (has_mark) trace_log("Mark: %d, %d", mark.line, mark.col);
+    // if (has_file_path) trace_log("File path: %s", file_path);
+    // if (has_temp_path) trace_log("Temp path: %s", temp_path);
+    // if (has_dl_path) trace_log("DL path: %s", dl_path);
 
-    // if (!has_view_kind) LOG_AND_RET("No view kind.");
-    // if (!has_rect) rect = (Rect){0, 0, 100, 100};
+    if (!has_view_kind) LOG_AND_RET("No view kind.");
+    if (!has_rect) rect = (Rect){0, 0, 100, 100};
 
-    // switch (view_kind)
-    // {
-    //     case VIEW_KIND_BUFFER:
-    //     {
-    //         create_buffer_view_generic();
-    //         if (!has_buf_viewport)
-    //         {
-    //             buf_viewport_x = 0.0f;
-    //             buf_viewport_y = 0.0f;
-    //             buf_viewport_zoom = 1.0f;
-    //         }
-    //     } break;
-    // }
+    switch (view_kind)
+    {
+        case VIEW_KIND_BUFFER:
+        {
+            View *view = create_buffer_view_generic(rect, state);
+            if (has_buf_viewport)
+            {
+                view->bv.viewport.rect.x = buf_viewport_x;
+                view->bv.viewport.rect.y = buf_viewport_y;
+                viewport_set_zoom(&view->bv.viewport, buf_viewport_zoom);
+            }
+
+            if (has_temp_path)
+            {
+                Text_Buffer content;
+                bool read_success = text_buffer_read_from_file(temp_path, &content);
+                if (read_success)
+                {
+                    buffer_replace_text_buffer(view->bv.buffer, content);
+                }
+                else
+                {
+                    log_warning("Failed to read from temp file at %s", temp_path);
+                    return false;
+                }
+
+                free(temp_path);
+            }
+
+            if (has_file_path)
+            {
+                if (!has_temp_path)
+                {
+                    Text_Buffer content;
+                    bool read_success = text_buffer_read_from_file(file_path, &content);
+                    if (read_success)
+                    {
+                        buffer_replace_text_buffer(view->bv.buffer, content);
+                    }
+                    else
+                    {
+                        log_warning("Failed to read from file at %s", file_path);
+                        return false;
+                    }
+                }
+
+                view->bv.buffer->generic.file_path = xstrdup(file_path);
+                free(file_path);
+            }
+
+            if (has_cursor)
+            {
+                view->bv.cursor.pos = cursor_pos_clamp(view->bv.buffer->text_buffer, cursor);
+            }
+
+            if (has_mark)
+            {
+                view->bv.mark.pos = cursor_pos_clamp(view->bv.buffer->text_buffer, mark);
+                view->bv.mark.active = true;
+            }
+        } break;
+
+        case VIEW_KIND_LIVE_SCENE:
+        {
+            if (!has_dl_path) LOG_AND_RET("No DL path for live scene.");
+            View *view = create_live_scene_view(dl_path, rect, state);
+            free(dl_path);
+        } break;
+
+        case VIEW_KIND_IMAGE:
+        {
+            LOG_AND_RET("Image view loading not implemented");
+        } break;
+    }
 
     return true;
 }
@@ -490,10 +529,10 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
             Token val = ws_parser_next_token(ps);
             if (val.kind != TOKEN_STRING) LOG_AND_RET("Expected STRING.");
 
-            state->working_dir = strndup(val.start, val.length);
-            trace_log("Will change working dir to %s", state->working_dir);
-
-            free(state->working_dir);
+            char *working_dir = strndup(val.start, val.length);
+            // trace_log("Will change working dir to %s", state->working_dir);
+            sys_change_working_dir(working_dir, state);
+            free(working_dir);
         }
         else if (key.length == 10 && strncmp(key.start, "CANVAS_POS", 10) == 0)
         {
@@ -511,7 +550,9 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
             if (t_v.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
             float y = atof(t_v.start);
 
-            trace_log("Will set canvas pos to %.3f, %.3f", x, y);
+            // trace_log("Will set canvas pos to %.3f, %.3f", x, y);
+            state->canvas_viewport.rect.x = x;
+            state->canvas_viewport.rect.y = y;
 
             if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
         }
@@ -519,8 +560,7 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
         {
             if (ws_parser_next_token(ps).kind != TOKEN_LBRACE) LOG_AND_RET("Expected LBRACE.");
 
-            trace_log("Will create view:");
-
+            // trace_log("Will create view:");
             if (!_action_load_workspace_parse_view_kvs(ps, state)) LOG_AND_RET("Failed to parse View.");
         }
     }
@@ -530,19 +570,23 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
 
 bool action_load_workspace(Editor_State *state)
 {
-    char *workspace = read_file("scratch/.e2/workspace", NULL);
+    if (!sys_file_exists(E2_WORKSPACE)) return false;
+
+    char *workspace = read_file(E2_WORKSPACE, NULL);
+    if (!workspace) return false;
 
     Parser_State parser_state = { .src = workspace };
-    trace_log("");
+    return _action_load_workspace_parse_kvs(&parser_state, state);
+}
 
-    // ws_parser_print_tokens(&parser_state);
+bool action_reload_workspace(Editor_State *state)
+{
+    for (int i = 0; i < state->view_count; i++)
+    {
+        view_destroy(state->views[0], state);
+    }
 
-    _action_load_workspace_parse_kvs(&parser_state, state);
-    // ws_parser_print_kvs(&parser_state);
-
-    trace_log("");
-
-    return true;
+    return action_load_workspace(state);
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

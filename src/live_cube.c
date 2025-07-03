@@ -118,7 +118,7 @@ void _mat4_mul(mat4 out, mat4 a, mat4 b)
     memcpy(out, res, sizeof(mat4));
 }
 
-void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene)
+void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv)
 {
     if (!is_live_scene) glfwSetWindowTitle(window, "live_cube");
 

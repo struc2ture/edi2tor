@@ -115,14 +115,14 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
         {
             switch (e->key.key)
             {
-                case GLFW_KEY_D:
+                case GLFW_KEY_F5:
                 {
                     action_save_workspace(state);
                 } break;
 
-                case GLFW_KEY_E:
+                case GLFW_KEY_F9:
                 {
-                    action_load_workspace(state);
+                    action_reload_workspace(state);
                 } break;
             }
         }
@@ -182,7 +182,7 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 {
                     switch (buffer_view->buffer->kind)
                     {
-                        case BUFFER_KIND_PROMPT:
+                        case BUFFER_PROMPT:
                         {
                             action_buffer_view_prompt_submit(state, buffer_view);
                         } break;
@@ -238,14 +238,14 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
                 case GLFW_KEY_R:
                 {
-                    if (buffer_view->buffer->kind == BUFFER_KIND_GENERIC)
+                    if (buffer_view->buffer->kind == BUFFER_GENERIC)
                     {
                         action_buffer_view_reload_file(state, buffer_view);
                     }
                 } break;
                 case GLFW_KEY_S:
                 {
-                    if (buffer_view->buffer->kind == BUFFER_KIND_GENERIC)
+                    if (buffer_view->buffer->kind == BUFFER_GENERIC)
                     {
                         action_buffer_view_save_file(state, buffer_view);
                     }

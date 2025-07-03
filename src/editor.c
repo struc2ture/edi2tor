@@ -1,5 +1,6 @@
 #include "editor.h"
 
+#include "actions.h"
 #include "common.h"
 #include "text_buffer.h"
 
@@ -25,7 +26,7 @@
 #include "shaders.h"
 #include "util.h"
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo)
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv)
 {
     bassert(sizeof(*state) < 4096);
 
@@ -39,7 +40,18 @@ void on_init(Editor_State *state, GLFWwindow *window, float window_w, float wind
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
 
-    state->working_dir = sys_get_working_dir();
+    // Working dir can be passed as the third arg to platform
+    // e.g. bin/platform bin/editor.dylib /Users/user/project
+    if (argc > 2)
+    {
+        sys_change_working_dir(argv[2], state);
+    }
+    else
+    {
+        state->working_dir = sys_get_working_dir();
+    }
+
+    action_load_workspace(state);
 }
 
 void on_reload(Editor_State *state)
@@ -248,7 +260,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
     }
     mat_stack_pop(&render_state->mat_stack_model_view);
 
-    if (buffer_view->buffer->kind == BUFFER_KIND_GENERIC && buffer_view->buffer->generic.file_path)
+    if (buffer_view->buffer->kind == BUFFER_GENERIC && buffer_view->buffer->generic.file_path)
     {
         mat_stack_push(&render_state->mat_stack_model_view);
         {
@@ -364,7 +376,7 @@ void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_v
 
 void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, const Render_State *render_state)
 {
-    bassert(buffer_view->buffer->kind == BUFFER_KIND_GENERIC && buffer_view->buffer->generic.file_path);
+    bassert(buffer_view->buffer->kind == BUFFER_GENERIC && buffer_view->buffer->generic.file_path);
 
     glUseProgram(render_state->font_shader);
 
@@ -645,7 +657,7 @@ Buffer *buffer_create_empty(Editor_State *state)
 {
     Buffer **new_slot = buffer_create_new_slot(state);
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_KIND_GENERIC;
+    buffer->kind = BUFFER_GENERIC;
     buffer->text_buffer = text_buffer_create_empty();
     *new_slot = buffer;
     return *new_slot;
@@ -659,7 +671,7 @@ void buffer_replace_text_buffer(Buffer *buffer, Text_Buffer text_buffer)
 
 void buffer_replace_file(Buffer *buffer, const char *path)
 {
-    bassert(buffer->kind == BUFFER_KIND_GENERIC);
+    bassert(buffer->kind == BUFFER_GENERIC);
     if (buffer->generic.file_path) free(buffer->generic.file_path);
     buffer->generic.file_path = xstrdup(path);
 }
@@ -669,7 +681,7 @@ Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Ed
     Buffer **new_slot = buffer_create_new_slot(state);
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_KIND_PROMPT;
+    buffer->kind = BUFFER_PROMPT;
 
     buffer->text_buffer.line_count = 2;
     buffer->text_buffer.lines = xmalloc(buffer->text_buffer.line_count * sizeof(buffer->text_buffer.lines[0]));
@@ -700,8 +712,8 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
 {
     switch (buffer->kind)
     {
-        case BUFFER_KIND_GENERIC:
-        case BUFFER_KIND_PROMPT:
+        case BUFFER_GENERIC:
+        case BUFFER_PROMPT:
         {
             text_buffer_destroy(&buffer->text_buffer);
             buffer_free_slot(buffer, state);
@@ -1049,7 +1061,7 @@ Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, fl
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
     live_scene->dylib = scene_loader_dylib_open(path);
-    live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo);
+    live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo, 0, NULL);
     return live_scene;
 }
 

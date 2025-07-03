@@ -36,6 +36,8 @@
 #define FILE_PATH2 "src/editor.c"
 #define IMAGE_PATH "res/DUCKS.png"
 #define LIVE_CUBE_PATH "bin/live_cube.dylib"
+#define E2_WORKSPACE ".e2/workspace"
+#define E2_TEMP_FILES ".e2/temp_files"
 
 typedef struct {
     unsigned char r, g, b, a;
@@ -158,8 +160,8 @@ typedef struct {
 } Prompt_Result;
 
 typedef enum {
-    BUFFER_KIND_GENERIC,
-    BUFFER_KIND_PROMPT
+    BUFFER_GENERIC,
+    BUFFER_PROMPT
 } Buffer_Kind;
 
 typedef struct Live_Scene Live_Scene;
@@ -279,7 +281,7 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo);
+void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv);
 void on_reload(Editor_State *state);
 void on_frame(Editor_State *state, const Platform_Timing *t);
 void on_platform_event(Editor_State *state, const Platform_Event *event);

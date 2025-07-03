@@ -24,7 +24,7 @@ typedef struct {
     Vec_2 velocity;
 } Live_Cube_State;
 
-void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene);
+void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv);
 void on_reload(Live_Cube_State *state);
 void on_frame(Live_Cube_State *state, const Platform_Timing *t);
 void on_platform_event(Live_Cube_State *state, const Platform_Event *e);
