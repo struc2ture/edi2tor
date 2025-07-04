@@ -82,11 +82,6 @@ typedef struct {
 } Display_Cursor;
 
 typedef struct {
-    Cursor_Pos start;
-    Cursor_Pos end;
-} Text_Selection;
-
-typedef struct {
     stbtt_bakedchar *char_data;
     int char_count;
     GLuint texture;
@@ -191,8 +186,6 @@ struct Buffer_View {
     Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
-    // TODO: Remove selection
-    Text_Selection selection;
     Text_Mark mark;
     bool is_mouse_drag;
     History history;
@@ -247,6 +240,9 @@ typedef struct {
     View **views;
     int view_count;
     View *active_view;
+
+    Live_Scene **live_scenes;
+    int live_scene_count;
 
     Viewport canvas_viewport;
 
@@ -349,7 +345,7 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state);
 
 Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo);
 void live_scene_check_hot_reload(Live_Scene *live_scene);
-void live_scene_destroy(Live_Scene *render_scene);
+void live_scene_destroy(Live_Scene *live_scene, Editor_State *state);
 
 Live_Scene_View *live_scene_view_create(Gl_Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state);
 

@@ -116,13 +116,10 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
 
 void on_destroy(Editor_State *state)
 {
-    // TODO: When live scene pointers are stored in an array, use that
-    for (int i = 0; i < state->view_count; i++)
+    // TODO: Save modified buffers to temp files
+    for (int i = 0; i < state->live_scene_count; i++)
     {
-        if (state->views[i]->kind == VIEW_KIND_LIVE_SCENE)
-        {
-            live_scene_destroy(state->views[i]->lsv.live_scene);
-        }
+        live_scene_destroy(state->live_scenes[i], state);
     }
 }
 
@@ -837,7 +834,7 @@ void view_destroy(View *view, Editor_State *state)
         case VIEW_KIND_LIVE_SCENE:
         {
             gl_destroy_framebuffer(&view->lsv.framebuffer);
-            live_scene_destroy(view->lsv.live_scene);
+            live_scene_destroy(view->lsv.live_scene, state);
             view_free_slot(view, state);
             free(view);
         } break;
@@ -1056,13 +1053,45 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state)
     return (Image_View *)view;
 }
 
+Live_Scene **live_scene_create_new_slot(Editor_State *state)
+{
+    state->live_scene_count++;
+    state->live_scenes = xrealloc(state->live_scenes, state->live_scene_count * sizeof(state->live_scenes[0]));
+    return &state->live_scenes[state->live_scene_count - 1];
+}
+
+int live_scene_get_index(Live_Scene *live_scene, Editor_State *state)
+{
+    int index = 0;
+    Live_Scene **live_scene_c = state->live_scenes;
+    while (*live_scene_c != live_scene)
+    {
+        index++;
+        live_scene_c++;
+    }
+    return index;
+}
+
+void live_scene_free_slot(Live_Scene *live_scene, Editor_State *state)
+{
+    int index_to_delete = live_scene_get_index(live_scene, state);
+    for (int i = index_to_delete; i < state->live_scene_count - 1; i++)
+    {
+        state->live_scenes[i] = state->live_scenes[i + 1];
+    }
+    state->live_scene_count--;
+    state->live_scenes = xrealloc(state->live_scenes, state->live_scene_count * sizeof(state->live_scenes[0]));
+}
+
 Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo)
 {
+    Live_Scene **new_slot = live_scene_create_new_slot(state);
     Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
     live_scene->state = xcalloc(4096);
     live_scene->dylib = scene_loader_dylib_open(path);
     live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo, 0, NULL);
-    return live_scene;
+    *new_slot = live_scene;
+    return *new_slot;
 }
 
 void live_scene_check_hot_reload(Live_Scene *live_scene)
@@ -1073,11 +1102,12 @@ void live_scene_check_hot_reload(Live_Scene *live_scene)
     }
 }
 
-void live_scene_destroy(Live_Scene *live_scene)
+void live_scene_destroy(Live_Scene *live_scene, Editor_State *state)
 {
     live_scene->dylib.on_destroy(live_scene->state);
-    free(live_scene->state);
     scene_loader_dylib_close(&live_scene->dylib);
+    free(live_scene->state);
+    live_scene_free_slot(live_scene, state);
     free(live_scene);
 }
 
@@ -2474,7 +2504,7 @@ void write_clipboard_mac(const char *text)
 void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo)
 {
     Live_Scene *new_live_scene = live_scene_create(state, (*live_scene)->dylib.original_path, w, h, fbo);
-    live_scene_destroy(*live_scene);
+    live_scene_destroy(*live_scene, state);
     *live_scene = new_live_scene;
 }
 
