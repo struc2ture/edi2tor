@@ -1134,7 +1134,15 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     char *src_path = strf("scratch/%s.c", src_name);
     char *dylib_path = strf("scratch/%s.dylib", src_name);
 
-    text_buffer_write_to_file(buffer_view->buffer->text_buffer, src_path);
+    Buffer *scratch_buffer = NULL;
+    if (buffer_view->buffer->generic.action_scratch_buffer_id > 0)
+    {
+        scratch_buffer = buffer_get_by_id(state, buffer_view->buffer->generic.action_scratch_buffer_id);
+        log_warning("Could not find buffer with ID %d", buffer_view->buffer->generic.action_scratch_buffer_id);
+    }
+    if (!scratch_buffer) scratch_buffer = buffer_view->buffer;
+
+    text_buffer_write_to_file(scratch_buffer->text_buffer, src_path);
 
     const char *cc = "clang";
     const char *cflags = "-I/opt/homebrew/include -isystemthird_party -DGL_SILENCE_DEPRECATION";
@@ -1148,16 +1156,16 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
         Scratch_Dylib dylib = scratch_runner_dylib_open(dylib_path);
         if (dylib.handle)
         {
-            if (!buffer_view->buffer->generic.linked_buffer)
+            if (!scratch_buffer->generic.linked_buffer)
             {
                 Rect this_buffer_rect = outer_view(buffer_view)->outer_rect;
                 View *output_view = create_buffer_view_generic((Rect){this_buffer_rect.x + this_buffer_rect.w + 5, this_buffer_rect.y, 600, 400}, state);
-                buffer_view->buffer->generic.linked_buffer = output_view->bv.buffer;
+                scratch_buffer->generic.linked_buffer = output_view->bv.buffer;
             }
 
-            text_buffer_clear(&buffer_view->buffer->generic.linked_buffer->text_buffer);
+            text_buffer_clear(&scratch_buffer->generic.linked_buffer->text_buffer);
 
-            dylib.on_run(&buffer_view->buffer->generic.linked_buffer->text_buffer, state);
+            dylib.on_run(&scratch_buffer->generic.linked_buffer->text_buffer, state);
 
             scratch_runner_dylib_close(&dylib);
 

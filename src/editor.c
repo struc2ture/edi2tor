@@ -726,6 +726,15 @@ void buffer_destroy(Buffer *buffer, Editor_State *state)
     }
 }
 
+Buffer *buffer_get_by_id(Editor_State *state, int id)
+{
+    for (int i = 0; i < state->buffer_count; i++)
+    {
+        if (state->buffers[i]->id == id) return state->buffers[i];
+    }
+    return NULL;
+}
+
 View *create_buffer_view_generic(Rect rect, Editor_State *state)
 {
     Buffer *buffer = buffer_create_empty(state);

@@ -319,6 +319,7 @@ void buffer_replace_file(Buffer *buffer, const char *path);
 Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state);
 int buffer_get_index(Buffer *buffer, Editor_State *state);
 void buffer_destroy(Buffer *buffer, Editor_State *state);
+Buffer *buffer_get_by_id(Editor_State *state, int id);
 
 View *create_buffer_view_generic(Rect rect, Editor_State *state);
 View *create_buffer_view_open_file(const char *path, Rect rect, Editor_State *state);
