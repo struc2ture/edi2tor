@@ -133,7 +133,8 @@ typedef enum {
     PROMPT_SAVE_AS,
     PROMPT_GO_TO_LINE,
     PROMPT_SEARCH_NEXT,
-    PROMPT_CHANGE_WORKING_DIR
+    PROMPT_CHANGE_WORKING_DIR,
+    PROMPT_SET_ACTION_SCRATCH_BUFFER_ID,
 } Prompt_Kind;
 
 typedef struct Buffer_View Buffer_View;
@@ -147,6 +148,9 @@ typedef struct {
     struct {
         Buffer_View *for_buffer_view;
     } save_as;
+    struct {
+        Buffer_View *for_buffer_view;
+    } set_action_scratch_buffer_id;
     };
 } Prompt_Context;
 
@@ -168,6 +172,7 @@ struct Buffer {
         char *file_path;
         Live_Scene *linked_live_scene;
         Buffer *linked_buffer;
+        int action_scratch_buffer_id;
     } generic;
     struct {
         Prompt_Context context;
@@ -357,6 +362,7 @@ Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_search_next(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_save_as(Buffer_View *for_buffer_view);
 Prompt_Context prompt_create_context_change_working_dir();
+Prompt_Context prompt_create_context_set_action_scratch_buffer_id(Buffer_View *for_buffer_view);
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer);
 bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rect, Editor_State *state);
 

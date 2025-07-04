@@ -224,7 +224,11 @@ bool action_save_workspace(Editor_State *state)
                         {
                             string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->generic.file_path);
                         }
-                        // TODO: Live_Scene link ID
+
+                        if (b->generic.action_scratch_buffer_id > 0)
+                        {
+                            string_builder_append_f(&sb, "  ACTION_SCRATCH_BUF_ID=%d\n", b->generic.action_scratch_buffer_id);
+                        }
                     }
                     else
                     {
@@ -281,6 +285,8 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
     bool has_file_path = false;
     char *temp_path = NULL;
     bool has_temp_path = false;
+    int action_scratch_buffer_id = 0;
+    bool has_action_scratch_buffer_id = false;
     char *dl_path = NULL;
     bool has_dl_path = false;
 
@@ -425,6 +431,14 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
             temp_path = strndup(val.start, val.length);
             has_temp_path = true;
         }
+        else if (key.length == 21 && strncmp(key.start, "ACTION_SCRATCH_BUF_ID", 21) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+
+            action_scratch_buffer_id = atoi(val.start);
+            has_action_scratch_buffer_id = true;
+        }
         else if (key.length == 7 && strncmp(key.start, "DL_PATH", 7) == 0)
         {
             Token val = ws_parser_next_token(ps);
@@ -509,6 +523,11 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
             {
                 view->bv.mark.pos = cursor_pos_clamp(view->bv.buffer->text_buffer, mark);
                 view->bv.mark.active = true;
+            }
+
+            if (has_action_scratch_buffer_id)
+            {
+                view->bv.buffer->generic.action_scratch_buffer_id = action_scratch_buffer_id;
             }
         } break;
 
@@ -1164,5 +1183,21 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     free(src_path);
     free(src_name);
     free(compile_command);
+    return false;
+}
+
+bool action_buffer_view_set_action_scratch_buffer_id(Editor_State *state, Buffer_View *buffer_view)
+{
+    if (buffer_view->buffer->kind == BUFFER_GENERIC)
+    {
+        trace_log("This buffer's ID: %d", buffer_view->buffer->id);
+        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
+        create_buffer_view_prompt(
+            "Set action scratch buffer id:",
+            prompt_create_context_set_action_scratch_buffer_id(buffer_view),
+            (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
+            state);
+        return true;
+    }
     return false;
 }

@@ -42,3 +42,4 @@ bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buf
 bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_set_action_scratch_buffer_id(Editor_State *state, Buffer_View *buffer_view);

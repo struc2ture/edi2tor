@@ -1166,6 +1166,14 @@ Prompt_Context prompt_create_context_change_working_dir()
     return context;
 }
 
+Prompt_Context prompt_create_context_set_action_scratch_buffer_id(Buffer_View *for_buffer_view)
+{
+    Prompt_Context context;
+    context.kind = PROMPT_SET_ACTION_SCRATCH_BUFFER_ID;
+    context.set_action_scratch_buffer_id.for_buffer_view = for_buffer_view;
+    return context;
+}
+
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
 {
     bassert(text_buffer.line_count >= 2);
@@ -1267,6 +1275,17 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
         {
             return sys_change_working_dir(result.str, state);
         } break;
+
+        case PROMPT_SET_ACTION_SCRATCH_BUFFER_ID:
+        {
+            Buffer_View *buffer_view = context.set_action_scratch_buffer_id.for_buffer_view;
+            if (view_exists((View *)buffer_view, state))
+            {
+                int action_scratch_buffer_id = xstrtoint(result.str);
+                buffer_view->buffer->generic.action_scratch_buffer_id = action_scratch_buffer_id;
+            }
+            else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
+        };
     }
     return true;
 }

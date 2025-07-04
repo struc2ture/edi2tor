@@ -274,6 +274,10 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 {
                     action_buffer_view_undo_command(state, buffer_view);
                 } break;
+                case GLFW_KEY_F4:
+                {
+                    action_buffer_view_set_action_scratch_buffer_id(state, buffer_view);
+                } break;
             }
         }
         else if (e->key.mods == (GLFW_MOD_SUPER | GLFW_MOD_SHIFT))
