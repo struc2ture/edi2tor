@@ -3,9 +3,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include "text_buffer.h"
-
-typedef void (*scratch_on_run_t)(Text_Buffer *text_buffer, void *state);
+typedef void (*scratch_on_run_t)(void *state);
 
 typedef struct {
     void *handle;

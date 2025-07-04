@@ -1131,8 +1131,8 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
 bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_view)
 {
     char *src_name = strf("scratch_%ld", time(NULL));
-    char *src_path = strf("scratch/%s.c", src_name);
-    char *dylib_path = strf("scratch/%s.dylib", src_name);
+    char *src_path = strf(".e2/scratch/%s.c", src_name);
+    char *dylib_path = strf(".e2/scratch/%s.dylib", src_name);
 
     Buffer *scratch_buffer = NULL;
     if (buffer_view->buffer->generic.action_scratch_buffer_id > 0)
@@ -1145,9 +1145,10 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     text_buffer_write_to_file(scratch_buffer->text_buffer, src_path);
 
     const char *cc = "clang";
-    const char *cflags = "-I/opt/homebrew/include -isystemthird_party -DGL_SILENCE_DEPRECATION";
+    const char *cflags = "-I/opt/homebrew/include -I/Users/struc/dev/jects/edi2tor/third_party -I/Users/struc/dev/jects/edi2tor/share -DGL_SILENCE_DEPRECATION";
     const char *lflags = "-L/opt/homebrew/lib -lglfw -framework OpenGL";
-    char *compile_command = strf("%s -dynamiclib %s %s %s src/editor.c -o %s", cc, cflags, lflags, src_path, dylib_path);
+    const char *editor_o = "/Users/struc/dev/jects/edi2tor/share/e.o";
+    char *compile_command = strf("%s -dynamiclib %s %s %s %s -o %s", cc, cflags, lflags, src_path, editor_o, dylib_path);
 
     int result = system(compile_command);
 
@@ -1156,16 +1157,7 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
         Scratch_Dylib dylib = scratch_runner_dylib_open(dylib_path);
         if (dylib.handle)
         {
-            if (!scratch_buffer->generic.linked_buffer)
-            {
-                Rect this_buffer_rect = outer_view(buffer_view)->outer_rect;
-                View *output_view = create_buffer_view_generic((Rect){this_buffer_rect.x + this_buffer_rect.w + 5, this_buffer_rect.y, 600, 400}, state);
-                scratch_buffer->generic.linked_buffer = output_view->bv.buffer;
-            }
-
-            text_buffer_clear(&scratch_buffer->generic.linked_buffer->text_buffer);
-
-            dylib.on_run(&scratch_buffer->generic.linked_buffer->text_buffer, state);
+            dylib.on_run(state);
 
             scratch_runner_dylib_close(&dylib);
 

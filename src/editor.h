@@ -171,7 +171,6 @@ struct Buffer {
     struct {
         char *file_path;
         Live_Scene *linked_live_scene;
-        Buffer *linked_buffer;
         int action_scratch_buffer_id;
     } generic;
     struct {
