@@ -40,6 +40,8 @@ void on_init(Editor_State *state, GLFWwindow *window, float window_w, float wind
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
 
+    state->buffer_seed = 1;
+
     // Working dir can be passed as the third arg to platform
     // e.g. bin/platform bin/editor.dylib /Users/user/project
     if (argc > 2)
@@ -653,9 +655,13 @@ void buffer_free_slot(Buffer *buffer, Editor_State *state)
 Buffer *buffer_create_empty(Editor_State *state)
 {
     Buffer **new_slot = buffer_create_new_slot(state);
+
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_GENERIC;
+
+    buffer->id = state->buffer_seed++;
     buffer->text_buffer = text_buffer_create_empty();
+
     *new_slot = buffer;
     return *new_slot;
 }
@@ -679,6 +685,7 @@ Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Ed
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
     buffer->kind = BUFFER_PROMPT;
+    buffer->id = state->buffer_seed++;
 
     buffer->text_buffer.line_count = 2;
     buffer->text_buffer.lines = xmalloc(buffer->text_buffer.line_count * sizeof(buffer->text_buffer.lines[0]));

@@ -163,8 +163,6 @@ typedef struct Live_Scene Live_Scene;
 
 typedef struct Buffer Buffer;
 struct Buffer {
-    Buffer_Kind kind;
-    Text_Buffer text_buffer;
     union {
     struct {
         char *file_path;
@@ -175,6 +173,9 @@ struct Buffer {
         Prompt_Context context;
     } prompt;
     };
+    Text_Buffer text_buffer;
+    Buffer_Kind kind;
+    int id;
 };
 
 typedef struct {
@@ -237,6 +238,8 @@ typedef struct {
 
     Buffer **buffers;
     int buffer_count;
+    int buffer_seed;
+
     View **views;
     int view_count;
     View *active_view;

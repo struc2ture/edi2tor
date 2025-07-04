@@ -192,6 +192,7 @@ bool action_save_workspace(Editor_State *state)
 
     string_builder_append_f(&sb, "WORK_DIR='%s'\n", state->working_dir);
     string_builder_append_f(&sb, "CANVAS_POS=(%.3f,%.3f)\n", state->canvas_viewport.rect.x, state->canvas_viewport.rect.y);
+    string_builder_append_f(&sb, "BUF_SEED=%d\n", state->buffer_seed);
 
     // Save views in reverse order, so it's easier to load (last loaded view is in the front of the queue)
     for (int i = state->view_count - 1; i >= 0; i--)
@@ -207,6 +208,7 @@ bool action_save_workspace(Editor_State *state)
                 case VIEW_KIND_BUFFER:
                 {
                     Buffer_View *bv = &view->bv;
+                    string_builder_append_f(&sb, "  BUF_ID=%d\n", bv->buffer->id);
                     string_builder_append_f(&sb, "  BUF_VIEWPORT=(%.3f,%.3f,%.3f)\n", bv->viewport.rect.x, bv->viewport.rect.y, bv->viewport.zoom);
                     string_builder_append_f(&sb, "  CURSOR=(%d,%d)\n", bv->cursor.pos.line, bv->cursor.pos.col);
                     if (bv->mark.active)
@@ -265,6 +267,8 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
     bool has_view_kind = false;
     Rect rect = {0};
     bool has_rect = false;
+    int buf_id = 0;
+    bool has_buf_id = false;
     float buf_viewport_x = 0;
     float buf_viewport_y = 0;
     float buf_viewport_zoom = 0;
@@ -331,6 +335,13 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
             if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
 
             has_rect = true;
+        }
+        else if (key.length == 6 && strncmp(key.start, "BUF_ID", 6) == 0)
+        {
+            Token val = ws_parser_next_token(ps);
+            if (val.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            buf_id = atoi(val.start);
+            has_buf_id = true;
         }
         else if (key.length == 12 && strncmp(key.start, "BUF_VIEWPORT", 12) == 0)
         {
@@ -426,6 +437,7 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
 
     // if (has_view_kind) trace_log("View kind: %d", view_kind);
     // if (has_rect) trace_log("Rect: %.3f, %.3f, %.3f, %.3f", rect.x, rect.y, rect.w, rect.h);
+    // if (has_buf_id) trace_log("Buffer ID: %d", buf_id);
     // if (has_buf_viewport) trace_log("Buf viewport: %.3f, %.3f, %.3f", buf_viewport_x, buf_viewport_y, buf_viewport_zoom);
     // if (has_cursor) trace_log("Cursor: %d, %d", cursor.line, cursor.col);
     // if (has_mark) trace_log("Mark: %d, %d", mark.line, mark.col);
@@ -440,6 +452,7 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
     {
         case VIEW_KIND_BUFFER:
         {
+            if (!has_buf_id) LOG_AND_RET("No buffer id.");
             View *view = create_buffer_view_generic(rect, state);
             if (has_buf_viewport)
             {
@@ -447,6 +460,7 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
                 view->bv.viewport.rect.y = buf_viewport_y;
                 viewport_set_zoom(&view->bv.viewport, buf_viewport_zoom);
             }
+            view->bv.buffer->id = buf_id;
 
             if (has_temp_path)
             {
@@ -556,12 +570,26 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
 
             if (ws_parser_next_token(ps).kind != TOKEN_RPAREN) LOG_AND_RET("Expected RPAREN.");
         }
+        else if (key.length == 8 && strncmp(key.start, "BUF_SEED", 8) == 0)
+        {
+            Token value = ws_parser_next_token(ps);;
+            if (value.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
+            int buffer_seed = atoi(value.start);
+
+            // trace_log("Will set buffer seed to %d", buffer_seed);
+            state->buffer_seed = buffer_seed;
+        }
         else if (key.length == 4 && strncmp(key.start, "VIEW", 4) == 0)
         {
             if (ws_parser_next_token(ps).kind != TOKEN_LBRACE) LOG_AND_RET("Expected LBRACE.");
 
+            // TODO: HACK: Save buffer seed temporarily, as creating buffer views will adjust the seed, but then the id gets replaced with the one from the save file.
+            int buffer_seed = state->buffer_seed;
+
             // trace_log("Will create view:");
             if (!_action_load_workspace_parse_view_kvs(ps, state)) LOG_AND_RET("Failed to parse View.");
+
+            state->buffer_seed = buffer_seed;
         }
     }
 
