@@ -1,7 +1,5 @@
 #pragma once
 
-#include "common.h" // IWYU pragma: keep
-
 #include "editor.h"
 
 bool action_run_unit_tests(Editor_State *state);

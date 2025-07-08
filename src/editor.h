@@ -24,7 +24,6 @@
 #define VIEWPORT_CURSOR_BOUNDARY_COLUMNS 5
 #define GO_TO_LINE_CHAR_MAX 32
 #define MAX_LINES 16384
-#define MAX_CHARS_PER_LINE 1024
 #define INDENT_SPACES 4
 #define DEFAULT_ZOOM 1.0f
 #define FONT_PATH "res/UbuntuSansMono-Regular.ttf"
@@ -70,11 +69,6 @@ typedef struct {
     char *path;
     bool has_been_modified;
 } File_Info;
-
-typedef struct {
-    const Text_Buffer *buf;
-    Cursor_Pos pos;
-} Cursor_Iterator;
 
 typedef struct {
     Cursor_Pos pos;
@@ -272,11 +266,6 @@ typedef enum {
     CURSOR_MOVE_DOWN
 } Cursor_Movement_Dir;
 
-typedef struct {
-    char **chunks;
-    int chunk_count;
-} String_Builder;
-
 typedef enum {
     FILE_KIND_NONE,
     FILE_KIND_TEXT,
@@ -387,59 +376,10 @@ Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
 Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
 
-bool cursor_iterator_next(Cursor_Iterator *it);
-bool cursor_iterator_prev(Cursor_Iterator *it);
-char cursor_iterator_get_char(Cursor_Iterator it);
-
-Cursor_Pos cursor_pos_clamp(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_advance_char(Text_Buffer text_buffer, Cursor_Pos pos, int dir, bool can_switch_lines);
-Cursor_Pos cursor_pos_advance_char_n(Text_Buffer text_buffer, Cursor_Pos pos, int n, int dir, bool can_switch_lines);
-Cursor_Pos cursor_pos_advance_line(Text_Buffer text_buffer, Cursor_Pos pos, int dir);
-Cursor_Pos cursor_pos_to_start_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos);
-Cursor_Pos cursor_pos_to_end_of_buffer(Text_Buffer text_buffer, Cursor_Pos cursor_pos);
-Cursor_Pos cursor_pos_to_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_indent_or_start_of_line(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_end_of_line(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_next_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_next_end_of_word(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_prev_start_of_word(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_next_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
-Cursor_Pos cursor_pos_to_prev_start_of_paragraph(Text_Buffer text_buffer, Cursor_Pos pos);
-
-Text_Line text_line_make_dup(const char *line);
-Text_Line text_line_make_dup_range(const char *str, int start, int count);
-Text_Line text_line_make_va(const char *fmt, va_list args);
-Text_Line text_line_make_f(const char *fmt, ...);
-Text_Line text_line_copy(Text_Line source, int start, int end);
-void text_line___resize(Text_Line *text_line, int new_size);
-void text_line_insert_char(Text_Line *text_line, char c, int insert_index);
-void text_line_remove_char(Text_Line *text_line, int remove_index);
-void text_line_insert_range(Text_Line *text_line, const char *range, int insert_index, int insert_count);
-void text_line_remove_range(Text_Line *text_line, int remove_index, int remove_count);
-
-Text_Buffer text_buffer_create_from_lines(const char *first, ...);
-Text_Buffer text_buffer_create_empty();
-void text_buffer_destroy(Text_Buffer *text_buffer);
-void text_buffer_validate(Text_Buffer *text_buffer);
-void text_buffer_append_line(Text_Buffer *text_buffer, Text_Line text_line);
-void text_buffer_insert_line(Text_Buffer *text_buffer, Text_Line new_line, int insert_at);
-void text_buffer_remove_line(Text_Buffer *text_buffer, int remove_at);
-void text_buffer_append_f(Text_Buffer *text_buffer, const char *fmt, ...);
-void text_buffer___split_line(Text_Buffer *text_buffer, Cursor_Pos pos);
-void text_buffer_clear(Text_Buffer *text_buffer);
-void text_buffer_insert_char(Text_Buffer *text_buffer, char c, Cursor_Pos pos);
-char text_buffer_remove_char(Text_Buffer *text_buffer, Cursor_Pos pos);
-Cursor_Pos text_buffer_insert_range(Text_Buffer *text_buffer, const char *range, Cursor_Pos pos);
-void text_buffer_remove_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
-char text_buffer_get_char(Text_Buffer *text_buffer, Cursor_Pos pos);
-char *text_buffer_extract_range(Text_Buffer *text_buffer, Cursor_Pos start, Cursor_Pos end);
-bool text_buffer_search_next(Text_Buffer *text_buffer, const char *query, Cursor_Pos from, Cursor_Pos *out_pos);
-
 void text_buffer_history_insert_char(Text_Buffer *text_buffer, History *history, char c, Cursor_Pos pos);
 void text_buffer_history_remove_char(Text_Buffer *text_buffer, History *history, Cursor_Pos pos);
 Cursor_Pos text_buffer_history_insert_range(Text_Buffer *text_buffer, History *history, const char *range, Cursor_Pos pos);
 void text_buffer_history_remove_range(Text_Buffer *text_buffer, History *history, Cursor_Pos start, Cursor_Pos end);
-int text_buffer_line_indent_get_level(Text_Buffer *text_buffer, int line);
 int text_buffer_history_line_indent_increase_level(Text_Buffer *text_buffer, History *history, int line);
 int text_buffer_history_line_indent_decrease_level(Text_Buffer *text_buffer, History *history, int line);
 int text_buffer_history_line_indent_set_level(Text_Buffer *text_buffer, History *history, int line, int indent_level);
@@ -453,10 +393,6 @@ void buffer_view_validate_mark(Buffer_View *buffer_view);
 void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state);
 
 // --------------------------------
-
-void string_builder_append_f(String_Builder *string_builder, const char *fmt, ...);
-void string_builder_append_str_range(String_Builder *string_builder, const char *str, int start, int count);
-char *string_builder_compile_and_destroy(String_Builder *string_builder);
 
 bool text_buffer_read_from_file(const char *path, Text_Buffer *text_buffer);
 void text_buffer_write_to_file(Text_Buffer text_buffer, const char *path);
@@ -481,6 +417,3 @@ bool sys_file_exists(const char *path);
 Rect_Bounds rect_get_bounds(Rect r);
 bool rect_intersect(Rect a, Rect b);
 bool rect_p_intersect(Vec_2 p, Rect rect);
-bool cursor_pos_eq(Cursor_Pos a, Cursor_Pos b);
-Cursor_Pos cursor_pos_min(Cursor_Pos a, Cursor_Pos b);
-Cursor_Pos cursor_pos_max(Cursor_Pos a, Cursor_Pos b);

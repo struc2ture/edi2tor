@@ -1,3 +1,4 @@
-#include "../src/editor.h"
-#include "../src/util.h"
 #include "../src/actions.h"
+#include "../src/editor.h"
+#include "../src/string_builder.h"
+#include "../src/util.h"

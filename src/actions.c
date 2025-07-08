@@ -7,6 +7,7 @@
 #include "editor.h"
 #include "history.h"
 #include "scratch_runner.h"
+#include "string_builder.h"
 #include "unit_tests.h"
 #include "util.h"
 

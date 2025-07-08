@@ -1,6 +1,6 @@
 #pragma once
 
-#include "misc.h"
+#include "text_buffer.h"
 
 typedef enum {
     DELTA_INSERT_CHAR,

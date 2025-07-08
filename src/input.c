@@ -174,7 +174,9 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
             action_buffer_view_move_cursor(state, buffer_view, dir, e->key.mods & GLFW_MOD_SHIFT, e->key.mods & GLFW_MOD_ALT, e->key.mods & GLFW_MOD_SUPER);
         }
 
-        if (e->key.mods == 0)
+        // Enter and backspace ignore shift modifier
+        else if ((e->key.key == GLFW_KEY_ENTER || e->key.key == GLFW_KEY_BACKSPACE) &&
+            (e->key.mods == 0 || e->key.mods == GLFW_MOD_SHIFT))
         {
             switch(e->key.key)
             {
@@ -197,6 +199,13 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 {
                     action_buffer_view_backspace(state, buffer_view);
                 } break;
+            }
+        }
+
+        else if (e->key.mods == 0)
+        {
+            switch(e->key.key)
+            {
                 case GLFW_KEY_TAB:
                 {
                     action_buffer_view_insert_indent(state, buffer_view);
@@ -211,6 +220,7 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
             }
         }
+
         else if (e->key.mods == GLFW_MOD_SUPER)
         {
             switch(e->key.key)
@@ -280,6 +290,7 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
             }
         }
+
         else if (e->key.mods == (GLFW_MOD_SUPER | GLFW_MOD_SHIFT))
         {
             switch(e->key.key)
