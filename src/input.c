@@ -221,6 +221,17 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
             }
         }
 
+        else if (e->key.mods == GLFW_MOD_ALT)
+        {
+            switch (e->key.key)
+            {
+                case GLFW_KEY_BACKSPACE:
+                {
+                    action_buffer_view_backspace_word(state, buffer_view);
+                } break;
+            }
+        }
+
         else if (e->key.mods == GLFW_MOD_SUPER)
         {
             switch(e->key.key)

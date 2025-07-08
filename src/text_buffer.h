@@ -22,6 +22,11 @@ typedef struct {
 } Cursor_Pos;
 
 typedef struct {
+    bool active;
+    Cursor_Pos pos;
+} Text_Mark;
+
+typedef struct {
     const Text_Buffer *buf;
     Cursor_Pos pos;
 } Cursor_Iterator;

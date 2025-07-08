@@ -176,11 +176,6 @@ struct Buffer {
     int id;
 };
 
-typedef struct {
-    bool active;
-    Cursor_Pos pos;
-} Text_Mark;
-
 struct Buffer_View {
     Buffer *buffer;
     Viewport viewport;

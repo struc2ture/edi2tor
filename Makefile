@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -g -I/opt/homebrew/include -isystemthird_party -DGL_SILENCE_DEPRECATION -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -Wno-unused-variable
+CFLAGS = -g -I/opt/homebrew/include -Ithird_party -DGL_SILENCE_DEPRECATION -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -Wno-unused-variable
 LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 
 editor: bin/platform bin/editor.dylib

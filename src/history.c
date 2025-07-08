@@ -1,9 +1,15 @@
 #include "history.h"
 
-#include "misc.h"
+#include "text_buffer.h"
 #include "util.h"
 
-bool history_begin_command_0(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_command_kind, bool can_interrupt, bool reset_history)
+bool history_begin_command_0(History *history,
+    Cursor_Pos cursor_pos,
+    Text_Mark mark,
+    const char *command_name,
+    Running_Command_Kind running_command_kind,
+    bool can_interrupt,
+    bool reset_history)
 {
     if (history->command_count > 0)
     {
@@ -50,30 +56,31 @@ bool history_begin_command_0(History *history, Cursor_Pos pos, const char *comma
 
     history->commands[history->command_count - 1] = (Command){0};
     history->commands[history->command_count - 1].name = xstrdup(command_name);
-    history->commands[history->command_count - 1].pos = pos;
+    history->commands[history->command_count - 1].cursor_pos = cursor_pos;
+    history->commands[history->command_count - 1].mark = mark;
     history->commands[history->command_count - 1].running_command_kind = running_command_kind;
 
     return true;
 }
 
-bool history_begin_command_running(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_kind)
+bool history_begin_command_running(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name, Running_Command_Kind running_kind)
 {
-    return history_begin_command_0(history, pos, command_name, running_kind, true, true);
+    return history_begin_command_0(history, cursor_pos, mark, command_name, running_kind, true, true);
 }
 
-bool history_begin_command_non_interrupt(History *history, Cursor_Pos pos, const char *command_name)
+bool history_begin_command_non_interrupt(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name)
 {
-    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, false, true);
+    return history_begin_command_0(history, cursor_pos, mark, command_name, RUNNING_COMMAND_NONE, false, true);
 }
 
-bool history_begin_command_non_reset(History *history, Cursor_Pos pos, const char *command_name)
+bool history_begin_command_non_reset(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name)
 {
-    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, true, false);
+    return history_begin_command_0(history, cursor_pos, mark, command_name, RUNNING_COMMAND_NONE, true, false);
 }
 
-bool history_begin_command(History *history, Cursor_Pos pos, const char *command_name)
+bool history_begin_command(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name)
 {
-    return history_begin_command_0(history, pos, command_name, RUNNING_COMMAND_NONE, true, true);
+    return history_begin_command_0(history, cursor_pos, mark, command_name, RUNNING_COMMAND_NONE, true, true);
 }
 
 void history_add_delta(History *history, const Delta *delta)

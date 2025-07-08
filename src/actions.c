@@ -8,6 +8,7 @@
 #include "history.h"
 #include "scratch_runner.h"
 #include "string_builder.h"
+#include "text_buffer.h"
 #include "unit_tests.h"
 #include "util.h"
 
@@ -702,7 +703,7 @@ bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view
         }
     }
 
-    history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, "Text insert", RUNNING_COMMAND_TEXT_INSERT);
+    history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Text insert", RUNNING_COMMAND_TEXT_INSERT);
 
     if (buffer_view->mark.active)
     {
@@ -733,7 +734,7 @@ bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer
     bassert(buffer_view->mark.active);
     bassert(!cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos));
 
-    bool new_command = history_begin_command_non_interrupt(&buffer_view->history, buffer_view->cursor.pos, "Delete selected");
+    bool new_command = history_begin_command_non_interrupt(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Delete selected");
 
     Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
     Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
@@ -750,8 +751,8 @@ bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
 {
     if (buffer_view->mark.active)
     {
-        history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
-        action_buffer_view_delete_selected(state, buffer_view);
+        history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
+        return action_buffer_view_delete_selected(state, buffer_view);
     }
     else
     {
@@ -766,7 +767,7 @@ bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
                 history_commit_command(&buffer_view->history);
             }
 
-            history_begin_command_running(&buffer_view->history, prev_cursor_pos, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
+            history_begin_command_running(&buffer_view->history, prev_cursor_pos, buffer_view->mark, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
 
             text_buffer_history_remove_char(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos);
 
@@ -777,15 +778,43 @@ bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
     return true;
 }
 
+bool action_buffer_view_backspace_word(Editor_State *state, Buffer_View *buffer_view)
+{
+    if (buffer_view->mark.active)
+    {
+        return action_buffer_view_delete_selected(state, buffer_view);
+    }
+    else
+    {
+        if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
+        {
+            bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Backspace word");
+
+            Text_Buffer *tb = &buffer_view->buffer->text_buffer;
+            Cursor_Pos cursor = buffer_view->cursor.pos;
+            Cursor_Pos word_start = cursor_pos_to_prev_start_of_word(*tb, cursor);
+            text_buffer_history_remove_range(tb, &buffer_view->history, word_start, cursor);
+
+            buffer_view->cursor.pos = word_start;
+            buffer_view->cursor.blink_time = 0.0f;
+            viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
+
+            if (new_command) history_commit_command(&buffer_view->history);
+        }
+    }
+
+    return true;
+}
+
 bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_view)
 {
     if (buffer_view->mark.active)
     {
-        action_buffer_view_increase_indent_level(state, buffer_view);
+        return action_buffer_view_increase_indent_level(state, buffer_view);
     }
     else
     {
-        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Insert indent");
+        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Insert indent");
         int spaces_to_insert = INDENT_SPACES - buffer_view->cursor.pos.col % INDENT_SPACES;
         for (int i = 0; i < spaces_to_insert; i++)
         {
@@ -802,12 +831,17 @@ bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_v
 
 bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *buffer_view)
 {
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Decrease indent");
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Decrease indent");
 
     if (buffer_view->mark.active)
     {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+        // If the cursor is at the start of the next linen, a multi-line operation shouldn't be done on that line
+        if (end.col == 0 && end.line > 0)
+        {
+            end.line--;
+        }
         for (int i = start.line; i <= end.line; i++)
         {
             int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->history, i);
@@ -829,12 +863,17 @@ bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *
 
 bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *buffer_view)
 {
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Increase indent");
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Increase indent");
 
     if (buffer_view->mark.active)
     {
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+        // If the cursor is at the start of the next linen, a multi-line operation shouldn't be done on that line
+        if (end.col == 0 && end.line > 0)
+        {
+            end.line--;
+        }
         for (int i = start.line; i <= end.line; i++)
         {
             int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->history, i);
@@ -894,7 +933,7 @@ bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view)
 
     if (copy_buffer)
     {
-        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Paste");
+        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Paste");
 
         if (buffer_view->mark.active)
         {
@@ -1008,7 +1047,7 @@ bool action_buffer_view_repeat_search(Editor_State *state, Buffer_View *buffer_v
 
 bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buffer_view)
 {
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, "Whitespace cleanup");
+    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Whitespace cleanup");
 
     int cleaned_lines = text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
@@ -1031,7 +1070,7 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
             command_i,
             c->name,
             c->committed ? "true" : "false",
-            c->pos.line, c->pos.col);
+            c->cursor_pos.line, c->cursor_pos.col);
         for (int delta_i = 0; delta_i < c->delta_count; delta_i++)
         {
             Delta *d = &c->deltas[delta_i];
@@ -1090,7 +1129,7 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
     {
         bassert(command->delta_count > 0);
 
-        history_begin_command_non_reset(&buffer_view->history, buffer_view->cursor.pos, "Undo action");
+        history_begin_command_non_reset(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Undo action");
         command = history_get_command_to_undo(&buffer_view->history);  // Copy because begin_command could realloc
 
         for (int i = command->delta_count  - 1; i>= 0; i--)
@@ -1123,7 +1162,11 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
         history_commit_command(&buffer_view->history);
         buffer_view->history.history_pos--;
 
-        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, command->pos);
+        buffer_view->mark = command->mark;
+        buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, command->cursor_pos);
+        buffer_view->cursor.blink_time = 0.0f;
+        viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
+
         return true;
     }
     return false;

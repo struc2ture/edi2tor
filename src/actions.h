@@ -23,6 +23,7 @@ bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_v
 bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view, char c);
 bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_backspace_word(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *buffer_view);

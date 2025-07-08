@@ -50,7 +50,8 @@ typedef struct {
     Delta *deltas;
     int delta_count;
     int delta_cap;
-    Cursor_Pos pos;
+    Cursor_Pos cursor_pos;
+    Text_Mark mark;
     Running_Command_Kind running_command_kind;
     bool committed;
 } Command;
@@ -62,11 +63,18 @@ typedef struct {
     int history_pos;
 } History;
 
-bool history_begin_command_0(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_command_kind, bool can_interrupt, bool reset_history);
-bool history_begin_command_running(History *history, Cursor_Pos pos, const char *command_name, Running_Command_Kind running_kind);
-bool history_begin_command_non_interrupt(History *history, Cursor_Pos pos, const char *command_name);
-bool history_begin_command_non_reset(History *history, Cursor_Pos pos, const char *command_name);
-bool history_begin_command(History *history, Cursor_Pos pos, const char *command_name);
+bool history_begin_command_0(History *history,
+    Cursor_Pos cursor_pos,
+    Text_Mark mark,
+    const char *command_name,
+    Running_Command_Kind running_command_kind,
+    bool can_interrupt,
+    bool reset_history);
+
+bool history_begin_command_running(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name, Running_Command_Kind running_kind);
+bool history_begin_command_non_interrupt(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name);
+bool history_begin_command_non_reset(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name);
+bool history_begin_command(History *history, Cursor_Pos cursor_pos, Text_Mark mark, const char *command_name);
 void history_add_delta(History *history, const Delta *delta);
 void history_commit_command(History *history);
 Delta *history_get_last_delta(History *history);
