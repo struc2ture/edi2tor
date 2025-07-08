@@ -326,7 +326,12 @@ void input_mouse_motion_global(Editor_State *state, const Platform_Event *e)
 {
     Mouse_State *m_state = &state->mouse_state;
     m_state->pos = e->mouse_motion.pos;
-    if (m_state->dragged_view)
+    if (m_state->canvas_dragged)
+    {
+        state->canvas_viewport.rect.x -= e->mouse_motion.delta.x;
+        state->canvas_viewport.rect.y -= e->mouse_motion.delta.y;
+    }
+    else if (m_state->dragged_view)
     {
         Rect new_rect = m_state->dragged_view->outer_rect;
         new_rect.x += e->mouse_motion.delta.x;
@@ -383,61 +388,80 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
     {
         if (e->mouse_button.action == GLFW_PRESS)
         {
-            Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
-            View *clicked_view = view_at_pos(mouse_canvas_pos, state);
-            if (clicked_view != NULL)
+            if (glfwh_is_super_pressed(state->window))
             {
-                bool will_propagate_to_inner_view = true;
-
-                // 1. Check if active view is being switched
-                if (state->active_view != clicked_view)
+                state->mouse_state.canvas_dragged = true;
+            }
+            else
+            {
+                Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
+                View *clicked_view = view_at_pos(mouse_canvas_pos, state);
+                if (clicked_view != NULL)
                 {
-                    view_set_active(clicked_view, state);
-                    will_propagate_to_inner_view = false;
-                }
+                    bool will_propagate_to_inner_view = true;
 
-                bool found_target = false;
-
-                // 2. Check if view is being resized
-                Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
-                if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
-                {
-                    state->mouse_state.resized_view = clicked_view;
-                    will_propagate_to_inner_view = false;
-                    found_target = true;
-                }
-
-                // 3. If active view wasn't just switched, and view isn't being resized, propagate click to inner view
-                if (will_propagate_to_inner_view)
-                {
-                    Rect inner_view_rect = view_get_inner_rect(clicked_view, &state->render_state);
-                    if (rect_p_intersect(mouse_canvas_pos, inner_view_rect))
+                    // 1. Check if active view is being switched
+                    if (state->active_view != clicked_view)
                     {
-                        input_mouse_button_view(state, state->active_view, e);
+                        view_set_active(clicked_view, state);
+                        will_propagate_to_inner_view = false;
+                    }
+
+                    bool found_target = false;
+
+                    // 2. Check if view is being resized
+                    Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
+                    if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+                    {
+                        state->mouse_state.resized_view = clicked_view;
+                        will_propagate_to_inner_view = false;
                         found_target = true;
                     }
-                }
 
-                // 4. If view is not being resized, and click didn't propagate to inner view, view is being dragged
-                if (!found_target)
-                {
-                    state->mouse_state.dragged_view = clicked_view;
+                    // 3. If active view wasn't just switched, and view isn't being resized, propagate click to inner view
+                    if (will_propagate_to_inner_view)
+                    {
+                        Rect inner_view_rect = view_get_inner_rect(clicked_view, &state->render_state);
+                        if (rect_p_intersect(mouse_canvas_pos, inner_view_rect))
+                        {
+                            input_mouse_button_view(state, state->active_view, e);
+                            found_target = true;
+                        }
+                    }
+
+                    // 4. If view is not being resized, and click didn't propagate to inner view, view is being dragged
+                    if (!found_target)
+                    {
+                        state->mouse_state.dragged_view = clicked_view;
+                    }
                 }
             }
         }
         else if (e->mouse_button.action == GLFW_RELEASE)
         {
-            // Only pass release event to inner view if it doesn't follow resizing or dragging view
-            if (state->mouse_state.resized_view || state->mouse_state.dragged_view)
+            // Only pass release event to inner view if it doesn't follow canvas-level actions
+            if (state->mouse_state.resized_view || state->mouse_state.dragged_view || state->mouse_state.canvas_dragged)
             {
                 state->mouse_state.resized_view = NULL;
                 state->mouse_state.dragged_view = NULL;
+                state->mouse_state.canvas_dragged = false;
             }
             else if (state->active_view)
             {
                 // I think it's ok to send release event to active view, because only mouse press can switch active view, so nothing could've switched it before GLFW_RELEASE is sent.
                 input_mouse_button_view(state, state->active_view, e);
             }
+        }
+    }
+    else if (e->mouse_button.button == GLFW_MOUSE_BUTTON_MIDDLE)
+    {
+        if (e->mouse_button.action == GLFW_PRESS)
+        {
+            state->mouse_state.canvas_dragged = true;
+        }
+        else if (e->mouse_button.action == GLFW_RELEASE)
+        {
+            state->mouse_state.canvas_dragged = false;
         }
     }
 }

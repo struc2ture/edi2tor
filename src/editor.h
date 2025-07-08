@@ -228,6 +228,7 @@ typedef struct {
     View *scrolled_view;
     Vec_2 pos;
     float scroll_timeout;
+    bool canvas_dragged;
 } Mouse_State;
 
 typedef struct {
