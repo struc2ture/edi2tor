@@ -136,7 +136,8 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
 
 void on_destroy(Editor_State *state)
 {
-    // TODO: Save modified buffers to temp files
+    action_save_workspace(state);
+
     for (int i = 0; i < state->live_scene_count; i++)
     {
         live_scene_destroy(state->live_scenes[i], state);
