@@ -77,6 +77,22 @@ void on_frame(Editor_State *state, const Platform_Timing *t)
 void on_platform_event(Editor_State *state, const Platform_Event *e)
 {
     (void)state; (void)e;
+
+    if (state->input_capture_live_scene_view)
+    {
+        if (e->kind == PLATFORM_EVENT_KEY && e->key.key == GLFW_KEY_F10 && e->key.action == GLFW_PRESS)
+        {
+            action_live_scene_toggle_capture_input(state);
+            return;
+        }
+
+        Live_Scene *ls = state->input_capture_live_scene_view->live_scene;\
+        Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, state->input_capture_live_scene_view, e);
+        ls->dylib.on_platform_event(ls->state, &adjusted_event);
+
+        return;
+    }
+
     switch (e->kind)
     {
         case PLATFORM_EVENT_CHAR:
@@ -113,6 +129,8 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
             state->render_state.dpi_scale = state->render_state.framebuffer_dim.x / state->render_state.window_dim.x;
             // glViewport(0, 0, state->render_state.framebuffer_dim.x, state->render_state.framebuffer_dim.y);
         } break;
+
+        default: break;
     }
 }
 

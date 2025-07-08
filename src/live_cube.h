@@ -22,6 +22,8 @@ typedef struct {
     Cardinal_Direction move_dir;
     Vec_2 position;
     Vec_2 velocity;
+    bool is_captured;
+    GLFWwindow *window;
 } Live_Cube_State;
 
 void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv);

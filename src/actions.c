@@ -6,6 +6,7 @@
 
 #include "editor.h"
 #include "history.h"
+#include "platform_types.h"
 #include "scratch_runner.h"
 #include "string_builder.h"
 #include "text_buffer.h"
@@ -84,6 +85,34 @@ bool action_link_live_scene(Editor_State *state)
         trace_log("Linked live scene to buffer %s", view->bv.buffer->generic.file_path);
     }
     return true;
+}
+
+bool action_live_scene_toggle_capture_input(Editor_State *state)
+{
+    if (!state->input_capture_live_scene_view)
+    {
+        if (state->active_view && state->active_view->kind == VIEW_KIND_LIVE_SCENE)
+        {
+            state->input_capture_live_scene_view = &state->active_view->lsv;
+            Live_Scene *ls = state->input_capture_live_scene_view->live_scene;
+            ls->dylib.on_platform_event(ls->state, &(Platform_Event){
+                .kind = PLATFORM_EVENT_INPUT_CAPTURED,
+                .input_captured.captured = true
+            });
+            return true;
+        }
+    }
+    else
+    {
+        Live_Scene *ls = state->input_capture_live_scene_view->live_scene;
+        ls->dylib.on_platform_event(ls->state, &(Platform_Event){
+            .kind = PLATFORM_EVENT_INPUT_CAPTURED,
+            .input_captured.captured = false
+        });
+        state->input_capture_live_scene_view = NULL;
+        return true;
+    }
+    return false;
 }
 
 bool action_debug_break(Editor_State *state)

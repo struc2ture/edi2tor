@@ -64,6 +64,10 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 {
                     action_link_live_scene(state);
                 } break;
+                case GLFW_KEY_F10:
+                {
+                    action_live_scene_toggle_capture_input(state);
+                } break;
                 case GLFW_KEY_F12:
                 {
                     action_debug_break(state);

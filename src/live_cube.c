@@ -122,6 +122,7 @@ void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float w
 {
     if (!is_live_scene) glfwSetWindowTitle(window, "live_cube");
 
+    state->window = window;
     state->window_dim.x = window_w;
     state->window_dim.y = window_h;
     state->framebuffer_dim.x = window_px_w;
@@ -295,7 +296,7 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
 
         case PLATFORM_EVENT_MOUSE_MOTION:
         {
-            if (state->is_mouse_drag)
+            if (state->is_captured || state->is_mouse_drag)
             {
                 state->angle_yaw -= 0.01f * e->mouse_motion.delta.x;
                 state->angle_roll -= 0.01f * e->mouse_motion.delta.y;
@@ -308,6 +309,19 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
             state->window_dim.y = e->window_resize.logical_h;
             state->framebuffer_dim.x = e->window_resize.px_w;
             state->framebuffer_dim.y = e->window_resize.px_h;
+        } break;
+
+        case PLATFORM_EVENT_INPUT_CAPTURED:
+        {
+            if (e->input_captured.captured)
+            {
+                glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            }
+            else
+            {
+                glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            state->is_captured = e->input_captured.captured;
         } break;
 
         default: break;

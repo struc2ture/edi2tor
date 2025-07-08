@@ -8,7 +8,8 @@ typedef enum {
     PLATFORM_EVENT_MOUSE_BUTTON,
     PLATFORM_EVENT_MOUSE_MOTION,
     PLATFORM_EVENT_MOUSE_SCROLL,
-    PLATFORM_EVENT_WINDOW_RESIZE
+    PLATFORM_EVENT_WINDOW_RESIZE,
+    PLATFORM_EVENT_INPUT_CAPTURED,
 } Platform_Event_Kind;
 
 typedef struct {
@@ -54,6 +55,11 @@ typedef struct {
             int logical_w;
             int logical_h;
         } window_resize;
+
+        struct
+        {
+            bool captured;
+        } input_captured;
     };
     Platform_Event_Kind kind;
 } Platform_Event;

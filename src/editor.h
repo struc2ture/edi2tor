@@ -253,6 +253,8 @@ typedef struct {
     GLFWwindow *window;
 
     bool is_live_scene;
+
+    Live_Scene_View *input_capture_live_scene_view;
 } Editor_State;
 
 typedef enum {

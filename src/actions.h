@@ -7,6 +7,7 @@ bool action_change_working_dir(Editor_State *state);
 bool action_rebuild_live_scene(Editor_State *state);
 bool action_reset_live_scene(Editor_State *state);
 bool action_link_live_scene(Editor_State *state);
+bool action_live_scene_toggle_capture_input(Editor_State *state);
 bool action_debug_break(Editor_State *state);
 bool action_destroy_active_view(Editor_State *state);
 bool action_open_test_file1(Editor_State *state);
