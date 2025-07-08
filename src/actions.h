@@ -28,6 +28,7 @@ bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_v
 bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_copy_selected(Editor_State *state, Buffer_View *buffer_view);
+bool action_buffer_view_cut_selected(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_delete_current_line(Editor_State *state, Buffer_View *buffer_view);
 bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_view);

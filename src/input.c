@@ -254,8 +254,7 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
                 case GLFW_KEY_X:
                 {
-                    // TODO: Make this work with history
-                    // action_buffer_view_delete_current_line(state, buffer_view);
+                    action_buffer_view_cut_selected(state, buffer_view);
                 } break;
                 case GLFW_KEY_R:
                 {

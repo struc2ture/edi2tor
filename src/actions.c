@@ -910,8 +910,38 @@ bool action_buffer_view_copy_selected(Editor_State *state, Buffer_View *buffer_v
             if (state->copy_buffer) free(state->copy_buffer);
             state->copy_buffer = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
         }
+        return true;
     }
-    return true;
+
+    return false;
+}
+
+bool action_buffer_view_cut_selected(Editor_State *state, Buffer_View *buffer_view)
+{
+    if (buffer_view->mark.active)
+    {
+        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Cut selected");
+
+        Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
+        Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
+        if (ENABLE_OS_CLIPBOARD)
+        {
+            char *range = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
+            write_clipboard_mac(range);
+            free(range);
+        }
+        else
+        {
+            if (state->copy_buffer) free(state->copy_buffer);
+            state->copy_buffer = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
+        }
+
+        action_buffer_view_delete_selected(state, buffer_view);
+
+        if (new_command) history_commit_command(&buffer_view->history);
+    }
+
+    return false;
 }
 
 bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view)
