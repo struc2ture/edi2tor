@@ -170,6 +170,12 @@ int main(int argc, char **argv)
 
     glfwSwapInterval(1);
 
+    // Scene run by platform directly will always have captured input
+    g_scene_dylib.on_platform_event(g_scene_state, &(Platform_Event){
+        .kind = PLATFORM_EVENT_INPUT_CAPTURED,
+        .input_captured.captured = true
+    });
+
     while (!glfwWindowShouldClose(window))
     {
         if (scene_loader_dylib_check_and_hotreload(&g_scene_dylib))
