@@ -1292,8 +1292,10 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             Buffer_View *buffer_view = context.save_as.for_buffer_view;
             if (view_exists((View *)buffer_view, state))
             {
+                text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
                 text_buffer_write_to_file(buffer_view->buffer->text_buffer, result.str);
                 buffer_replace_file(buffer_view->buffer, result.str);
+                action_save_workspace(state);
             }
             else log_warning("prompt_submit: PROMPT_SAVE_AS: Buffer_View %p does not exist", context.save_as.for_buffer_view);
         } break;
@@ -1311,7 +1313,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 int action_scratch_buffer_id = xstrtoint(result.str);
                 buffer_view->buffer->generic.action_scratch_buffer_id = action_scratch_buffer_id;
             }
-            else log_warning("prompt_submit: PROMPT_GO_TO_LINE: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
+            else log_warning("prompt_submit: PROMPT_SET_ACTION_SCRATCH_BUFFER_ID: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
         };
     }
     return true;

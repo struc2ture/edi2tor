@@ -1045,7 +1045,9 @@ bool action_buffer_view_save_file(Editor_State *state, Buffer_View *buffer_view)
 {
     if (buffer_view->buffer->generic.file_path)
     {
+        text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
         text_buffer_write_to_file(buffer_view->buffer->text_buffer, buffer_view->buffer->generic.file_path);
+        action_save_workspace(state);
     }
     else
     {
