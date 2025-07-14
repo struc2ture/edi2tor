@@ -429,7 +429,6 @@ void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render
 
     Rect q = ls_view->framebuffer_rect;
     Color c = {255, 255, 255, 255};
-    glUseProgram(render_state->flipped_quad_shader);
     Vert_Buffer vert_buf = {0};
     vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
     vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));

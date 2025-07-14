@@ -1025,6 +1025,7 @@ bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_vie
         Text_Buffer tb;
         text_buffer_read_from_file(buffer_view->buffer->generic.file_path, &tb);
         buffer_replace_text_buffer(buffer_view->buffer, tb);
+        buffer_view->cursor.pos = cursor_pos_clamp(tb, buffer_view->cursor.pos);
     }
     return true;
 }
