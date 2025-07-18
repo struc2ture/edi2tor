@@ -1124,6 +1124,7 @@ Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, fl
     live_scene->state = xcalloc(4096);
     live_scene->dylib = scene_loader_dylib_open(path);
     live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo, 0, NULL);
+    live_scene->dylib.on_reload(live_scene->state);
     *new_slot = live_scene;
     return *new_slot;
 }
