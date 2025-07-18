@@ -108,7 +108,10 @@ void history_add_delta(History *history, const Delta *delta)
 
 void history_commit_command(History *history)
 {
-    history->commands[history->command_count - 1].committed = true;
+    if (history->command_count > 0)
+    {
+        history->commands[history->command_count - 1].committed = true;
+    }
 }
 
 Delta *history_get_last_delta(History *history)

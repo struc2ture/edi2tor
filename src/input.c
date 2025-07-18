@@ -56,14 +56,6 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 {
                     action_change_working_dir(state);
                 } break;
-                case GLFW_KEY_F5:
-                {
-                    action_rebuild_live_scene(state);
-                } break;
-                case GLFW_KEY_F6:
-                {
-                    action_link_live_scene(state);
-                } break;
                 case GLFW_KEY_F10:
                 {
                     action_live_scene_toggle_capture_input(state);
@@ -71,16 +63,6 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 case GLFW_KEY_F12:
                 {
                     action_debug_break(state);
-                } break;
-            }
-        }
-        else if (e->key.mods == GLFW_MOD_SHIFT)
-        {
-            switch(e->key.key)
-            {
-                case GLFW_KEY_F5:
-                {
-                    action_reset_live_scene(state);
                 } break;
             }
         }
@@ -186,17 +168,13 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
             {
                 case GLFW_KEY_ENTER:
                 {
-                    switch (buffer_view->buffer->kind)
+                    if (buffer_view->buffer->prompt_context.kind == PROMPT_NONE)
                     {
-                        case BUFFER_PROMPT:
-                        {
-                            action_buffer_view_prompt_submit(state, buffer_view);
-                        } break;
-
-                        default:
-                        {
-                            action_buffer_view_input_char(state, buffer_view, '\n');
-                        } break;
+                        action_buffer_view_input_char(state, buffer_view, '\n');
+                    }
+                    else
+                    {
+                        action_buffer_view_prompt_submit(state, buffer_view);
                     }
                 } break;
                 case GLFW_KEY_BACKSPACE:
@@ -262,17 +240,11 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 } break;
                 case GLFW_KEY_R:
                 {
-                    if (buffer_view->buffer->kind == BUFFER_GENERIC)
-                    {
-                        action_buffer_view_reload_file(state, buffer_view);
-                    }
+                    action_buffer_view_reload_file(state, buffer_view);
                 } break;
                 case GLFW_KEY_S:
                 {
-                    if (buffer_view->buffer->kind == BUFFER_GENERIC)
-                    {
-                        action_buffer_view_save_file(state, buffer_view);
-                    }
+                    action_buffer_view_save_file(state, buffer_view);
                 } break;
                 case GLFW_KEY_EQUAL:
                 {
@@ -297,10 +269,6 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 case GLFW_KEY_Z:
                 {
                     action_buffer_view_undo_command(state, buffer_view);
-                } break;
-                case GLFW_KEY_F4:
-                {
-                    action_buffer_view_set_action_scratch_buffer_id(state, buffer_view);
                 } break;
             }
         }

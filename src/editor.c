@@ -278,7 +278,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
     }
     mat_stack_pop(&render_state->mat_stack_model_view);
 
-    if (buffer_view->buffer->kind == BUFFER_GENERIC && buffer_view->buffer->generic.file_path)
+    if (buffer_view->buffer->file_path)
     {
         mat_stack_push(&render_state->mat_stack_model_view);
         {
@@ -289,7 +289,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
 
             mvp_update_from_stacks(render_state);
 
-            render_view_buffer_name(buffer_view, is_active, canvas_viewport, render_state);
+            render_view_buffer_name(buffer_view, buffer_view->buffer->file_path, is_active, canvas_viewport, render_state);
         }
         mat_stack_pop(&render_state->mat_stack_model_view);
     }
@@ -392,16 +392,14 @@ void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_v
     }
 }
 
-void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, const Render_State *render_state)
+void render_view_buffer_name(Buffer_View *buffer_view, const char *name, bool is_active, Viewport canvas_viewport, const Render_State *render_state)
 {
-    bassert(buffer_view->buffer->kind == BUFFER_GENERIC && buffer_view->buffer->generic.file_path);
-
     glUseProgram(render_state->font_shader);
 
     if (is_active)
-        draw_string(buffer_view->buffer->generic.file_path, render_state->font, 0, 0, (Color){140, 140, 140, 255}, render_state);
+        draw_string(name, render_state->font, 0, 0, (Color){140, 140, 140, 255}, render_state);
     else
-        draw_string(buffer_view->buffer->generic.file_path, render_state->font, 0, 0, (Color){100, 100, 100, 255}, render_state);
+        draw_string(name, render_state->font, 0, 0, (Color){100, 100, 100, 255}, render_state);
 }
 
 void render_view_image(Image_View *image_view, const Render_State *render_state)
@@ -675,7 +673,6 @@ Buffer *buffer_create_empty(Editor_State *state)
     Buffer **new_slot = buffer_create_new_slot(state);
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_GENERIC;
 
     buffer->id = state->buffer_seed++;
     buffer->text_buffer = text_buffer_create_empty();
@@ -692,9 +689,8 @@ void buffer_replace_text_buffer(Buffer *buffer, Text_Buffer text_buffer)
 
 void buffer_replace_file(Buffer *buffer, const char *path)
 {
-    bassert(buffer->kind == BUFFER_GENERIC);
-    if (buffer->generic.file_path) free(buffer->generic.file_path);
-    buffer->generic.file_path = xstrdup(path);
+    if (buffer->file_path) free(buffer->file_path);
+    buffer->file_path = xstrdup(path);
 }
 
 Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Editor_State *state)
@@ -702,12 +698,11 @@ Buffer *buffer_create_prompt(const char *prompt_text, Prompt_Context context, Ed
     Buffer **new_slot = buffer_create_new_slot(state);
 
     Buffer *buffer = xcalloc(sizeof(Buffer));
-    buffer->kind = BUFFER_PROMPT;
     buffer->id = state->buffer_seed++;
 
     buffer->text_buffer.line_count = 2;
     buffer->text_buffer.lines = xmalloc(buffer->text_buffer.line_count * sizeof(buffer->text_buffer.lines[0]));
-    buffer->prompt.context = context;
+    buffer->prompt_context = context;
 
     char prompt_line_buf[MAX_CHARS_PER_LINE];
     snprintf(prompt_line_buf, sizeof(prompt_line_buf), "%s\n", prompt_text);
@@ -732,16 +727,9 @@ int buffer_get_index(Buffer *buffer, Editor_State *state)
 
 void buffer_destroy(Buffer *buffer, Editor_State *state)
 {
-    switch (buffer->kind)
-    {
-        case BUFFER_GENERIC:
-        case BUFFER_PROMPT:
-        {
-            text_buffer_destroy(&buffer->text_buffer);
-            buffer_free_slot(buffer, state);
-            free(buffer);
-        } break;
-    }
+    text_buffer_destroy(&buffer->text_buffer);
+    buffer_free_slot(buffer, state);
+    free(buffer);
 }
 
 Buffer *buffer_get_by_id(Editor_State *state, int id)
@@ -770,7 +758,7 @@ View *create_buffer_view_open_file(const char *path, Rect rect, Editor_State *st
     if (read_success)
     {
         buffer_replace_text_buffer(buffer, tb);
-        buffer->generic.file_path = xstrdup(path);
+        buffer->file_path = xstrdup(path);
     }
     else
     {
@@ -1194,14 +1182,6 @@ Prompt_Context prompt_create_context_change_working_dir()
     return context;
 }
 
-Prompt_Context prompt_create_context_set_action_scratch_buffer_id(Buffer_View *for_buffer_view)
-{
-    Prompt_Context context;
-    context.kind = PROMPT_SET_ACTION_SCRATCH_BUFFER_ID;
-    context.set_action_scratch_buffer_id.for_buffer_view = for_buffer_view;
-    return context;
-}
-
 Prompt_Result prompt_parse_result(Text_Buffer text_buffer)
 {
     bassert(text_buffer.line_count >= 2);
@@ -1219,6 +1199,8 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
 {
     switch (context.kind)
     {
+        case PROMPT_NONE: break;
+
         case PROMPT_OPEN_FILE:
         {
             Rect new_view_rect =
@@ -1233,12 +1215,10 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             {
                 case FILE_KIND_IMAGE:
                 {
-                    // TODO: Handle if it can't be opened
                     create_image_view(result.str, new_view_rect, state);
                 } break;
                 case FILE_KIND_DYLIB:
                 {
-                    // TODO: Handle if it can't be opened
                     create_live_scene_view(result.str, new_view_rect, state);
                 } break;
                 case FILE_KIND_TEXT:
@@ -1293,9 +1273,10 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
             Buffer_View *buffer_view = context.save_as.for_buffer_view;
             if (view_exists((View *)buffer_view, state))
             {
-                text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
-                text_buffer_write_to_file(buffer_view->buffer->text_buffer, result.str);
-                buffer_replace_file(buffer_view->buffer, result.str);
+                Buffer *b = buffer_view->buffer;
+                text_buffer_history_whitespace_cleanup(&b->text_buffer, &b->history);
+                text_buffer_write_to_file(b->text_buffer, result.str);
+                buffer_replace_file(b, result.str);
                 action_save_workspace(state);
             }
             else log_warning("prompt_submit: PROMPT_SAVE_AS: Buffer_View %p does not exist", context.save_as.for_buffer_view);
@@ -1305,17 +1286,6 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
         {
             return sys_change_working_dir(result.str, state);
         } break;
-
-        case PROMPT_SET_ACTION_SCRATCH_BUFFER_ID:
-        {
-            Buffer_View *buffer_view = context.set_action_scratch_buffer_id.for_buffer_view;
-            if (view_exists((View *)buffer_view, state))
-            {
-                int action_scratch_buffer_id = xstrtoint(result.str);
-                buffer_view->buffer->generic.action_scratch_buffer_id = action_scratch_buffer_id;
-            }
-            else log_warning("prompt_submit: PROMPT_SET_ACTION_SCRATCH_BUFFER_ID: Buffer_View %p does not exist", context.go_to_line.for_buffer_view);
-        };
     }
     return true;
 }

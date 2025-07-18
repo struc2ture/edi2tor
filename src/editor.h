@@ -123,12 +123,12 @@ struct Render_State {
 };
 
 typedef enum {
+    PROMPT_NONE,
     PROMPT_OPEN_FILE,
     PROMPT_SAVE_AS,
     PROMPT_GO_TO_LINE,
     PROMPT_SEARCH_NEXT,
     PROMPT_CHANGE_WORKING_DIR,
-    PROMPT_SET_ACTION_SCRATCH_BUFFER_ID,
 } Prompt_Kind;
 
 typedef struct Buffer_View Buffer_View;
@@ -142,9 +142,6 @@ typedef struct {
     struct {
         Buffer_View *for_buffer_view;
     } save_as;
-    struct {
-        Buffer_View *for_buffer_view;
-    } set_action_scratch_buffer_id;
     };
 } Prompt_Context;
 
@@ -152,29 +149,13 @@ typedef struct {
     char str[MAX_CHARS_PER_LINE];
 } Prompt_Result;
 
-typedef enum {
-    BUFFER_GENERIC,
-    BUFFER_PROMPT
-} Buffer_Kind;
-
-typedef struct Live_Scene Live_Scene;
-
-typedef struct Buffer Buffer;
-struct Buffer {
-    union {
-    struct {
-        char *file_path;
-        Live_Scene *linked_live_scene;
-        int action_scratch_buffer_id;
-    } generic;
-    struct {
-        Prompt_Context context;
-    } prompt;
-    };
+typedef struct {
+    char *file_path;
+    Prompt_Context prompt_context;
+    History history;
     Text_Buffer text_buffer;
-    Buffer_Kind kind;
     int id;
-};
+} Buffer;
 
 struct Buffer_View {
     Buffer *buffer;
@@ -182,7 +163,6 @@ struct Buffer_View {
     Display_Cursor cursor;
     Text_Mark mark;
     bool is_mouse_drag;
-    History history;
 };
 
 typedef struct {
@@ -190,10 +170,10 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
-struct Live_Scene {
+typedef struct {
     void *state;
     Scene_Dylib dylib;
-} ;
+} Live_Scene;
 
 typedef struct {
     Live_Scene *live_scene;
@@ -284,7 +264,7 @@ void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, const R
 void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, const Render_State *render_state, float delta_time);
 void render_view_buffer_selection(Buffer_View *buffer_view, const Render_State *render_state);
 void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, const Render_State *render_state);
-void render_view_buffer_name(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, const Render_State *render_state);
+void render_view_buffer_name(Buffer_View *buffer_view, const char *name, bool is_active, Viewport canvas_viewport, const Render_State *render_state);
 void render_view_image(Image_View *image_view, const Render_State *render_state);
 void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const Platform_Timing *t);
 void render_status_bar(Editor_State *state, const Render_State *render_state, const Platform_Timing *t);

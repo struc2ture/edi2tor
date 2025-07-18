@@ -39,54 +39,6 @@ bool action_change_working_dir(Editor_State *state)
     return true;
 }
 
-bool action_rebuild_live_scene(Editor_State *state)
-{
-    // TODO: view level action
-    View *view = state->active_view;
-    if (view->kind == VIEW_KIND_LIVE_SCENE)
-    {
-        live_scene_rebuild(view->lsv.live_scene);
-    }
-    else if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_GENERIC &&
-        view->bv.buffer->generic.linked_live_scene)
-    {
-        live_scene_rebuild(view->bv.buffer->generic.linked_live_scene);
-    }
-    return true;
-}
-
-bool action_reset_live_scene(Editor_State *state)
-{
-    // TODO: view level action
-    View *view = state->active_view;
-    if (view->kind == VIEW_KIND_LIVE_SCENE)
-    {
-        live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h, view->lsv.framebuffer.fbo);
-    }
-    else if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_GENERIC &&
-        view->bv.buffer->generic.linked_live_scene)
-    {
-        live_scene_reset(state, &view->lsv.live_scene, view->outer_rect.w, view->outer_rect.h, view->lsv.framebuffer.fbo);
-    }
-    return true;
-}
-
-bool action_link_live_scene(Editor_State *state)
-{
-    View *view = state->active_view;
-    if (view->kind == VIEW_KIND_BUFFER &&
-        view->bv.buffer->kind == BUFFER_GENERIC &&
-        state->view_count > 1 &&
-        state->views[1]->kind == VIEW_KIND_LIVE_SCENE)
-    {
-        view->bv.buffer->generic.linked_live_scene = state->views[1]->lsv.live_scene;
-        trace_log("Linked live scene to buffer %s", view->bv.buffer->generic.file_path);
-    }
-    return true;
-}
-
 bool action_live_scene_toggle_capture_input(Editor_State *state)
 {
     if (!state->input_capture_live_scene_view)
@@ -248,24 +200,13 @@ bool action_save_workspace(Editor_State *state)
                     }
 
                     Buffer *b = bv->buffer;
-                    if (b->kind ==  BUFFER_GENERIC)
+                    if (b->prompt_context.kind == PROMPT_NONE) // Don't save prompt views
                     {
                         _action_save_workspace_save_text_buffer_to_temp_loc(b->text_buffer, &sb);
-                        if (b->generic.file_path)
+                        if (b->file_path)
                         {
-                            string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->generic.file_path);
+                            string_builder_append_f(&sb, "  FILE_PATH='%s'\n", b->file_path);
                         }
-
-                        if (b->generic.action_scratch_buffer_id > 0)
-                        {
-                            string_builder_append_f(&sb, "  ACTION_SCRATCH_BUF_ID=%d\n", b->generic.action_scratch_buffer_id);
-                        }
-                    }
-                    else
-                    {
-                        // TODO: Prompts
-                        // Need better buffer ID system to recreate prompt context
-                        // Skip for now
                     }
                 } break;
 
@@ -462,14 +403,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
             temp_path = strndup(val.start, val.length);
             has_temp_path = true;
         }
-        else if (key.length == 21 && strncmp(key.start, "ACTION_SCRATCH_BUF_ID", 21) == 0)
-        {
-            Token val = ws_parser_next_token(ps);
-            if (val.kind != TOKEN_IDENT) LOG_AND_RET("Expected IDENT.");
-
-            action_scratch_buffer_id = atoi(val.start);
-            has_action_scratch_buffer_id = true;
-        }
         else if (key.length == 7 && strncmp(key.start, "DL_PATH", 7) == 0)
         {
             Token val = ws_parser_next_token(ps);
@@ -541,7 +474,7 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
                     }
                 }
 
-                view->bv.buffer->generic.file_path = xstrdup(file_path);
+                view->bv.buffer->file_path = xstrdup(file_path);
                 free(file_path);
             }
 
@@ -554,11 +487,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
             {
                 view->bv.mark.pos = cursor_pos_clamp(view->bv.buffer->text_buffer, mark);
                 view->bv.mark.active = true;
-            }
-
-            if (has_action_scratch_buffer_id)
-            {
-                view->bv.buffer->generic.action_scratch_buffer_id = action_scratch_buffer_id;
             }
         } break;
 
@@ -713,14 +641,14 @@ bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_vie
 bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view)
 {
     Prompt_Result prompt_result = prompt_parse_result(buffer_view->buffer->text_buffer);
-    if (prompt_submit(buffer_view->buffer->prompt.context, prompt_result, outer_view(buffer_view)->outer_rect, state))
+    if (prompt_submit(buffer_view->buffer->prompt_context, prompt_result, outer_view(buffer_view)->outer_rect, state))
         view_destroy(outer_view(buffer_view), state);
     return true;
 }
 
 bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view, char c)
 {
-    Command *last_uncommitted_command = history_get_last_uncommitted_command(&buffer_view->history);
+    Command *last_uncommitted_command = history_get_last_uncommitted_command(&buffer_view->buffer->history);
     if (last_uncommitted_command && last_uncommitted_command->delta_count > 0)
     {
         Delta *prev_delta = &last_uncommitted_command->deltas[last_uncommitted_command->delta_count - 1];
@@ -728,21 +656,21 @@ bool action_buffer_view_input_char(Editor_State *state, Buffer_View *buffer_view
             (!isalnum(prev_delta->insert_char.c) && isalnum(c)))
         {
             // If a word edge has been encountered, commit command
-            history_commit_command(&buffer_view->history);
+            history_commit_command(&buffer_view->buffer->history);
         }
     }
 
-    history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Text insert", RUNNING_COMMAND_TEXT_INSERT);
+    history_begin_command_running(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Text insert", RUNNING_COMMAND_TEXT_INSERT);
 
     if (buffer_view->mark.active)
     {
         action_buffer_view_delete_selected(state, buffer_view);
     }
 
-    text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->history, c, buffer_view->cursor.pos);
+    text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, c, buffer_view->cursor.pos);
     if (c == '\n')
     {
-        int indent_level = text_buffer_history_line_match_indent(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos.line + 1);
+        int indent_level = text_buffer_history_line_match_indent(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, buffer_view->cursor.pos.line + 1);
         buffer_view->cursor.pos = cursor_pos_clamp(
             buffer_view->buffer->text_buffer,
             (Cursor_Pos){buffer_view->cursor.pos.line + 1, indent_level});
@@ -763,13 +691,13 @@ bool action_buffer_view_delete_selected(Editor_State *state, Buffer_View *buffer
     bassert(buffer_view->mark.active);
     bassert(!cursor_pos_eq(buffer_view->mark.pos, buffer_view->cursor.pos));
 
-    bool new_command = history_begin_command_non_interrupt(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Delete selected");
+    bool new_command = history_begin_command_non_interrupt(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Delete selected");
 
     Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
     Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
-    text_buffer_history_remove_range(&buffer_view->buffer->text_buffer, &buffer_view->history, start, end);
+    text_buffer_history_remove_range(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, start, end);
 
-    if (new_command) history_commit_command(&buffer_view->history);
+    if (new_command) history_commit_command(&buffer_view->buffer->history);
 
     buffer_view->mark.active = false;
     buffer_view->cursor.pos = start;
@@ -780,7 +708,7 @@ bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
 {
     if (buffer_view->mark.active)
     {
-        history_begin_command_running(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
+        history_begin_command_running(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
         return action_buffer_view_delete_selected(state, buffer_view);
     }
     else
@@ -793,12 +721,12 @@ bool action_buffer_view_backspace(Editor_State *state, Buffer_View *buffer_view)
             if (c == '\n')
             {
                 // Deleted line break, commit current command, before starting new one
-                history_commit_command(&buffer_view->history);
+                history_commit_command(&buffer_view->buffer->history);
             }
 
-            history_begin_command_running(&buffer_view->history, prev_cursor_pos, buffer_view->mark, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
+            history_begin_command_running(&buffer_view->buffer->history, prev_cursor_pos, buffer_view->mark, "Text deletion", RUNNING_COMMAND_TEXT_DELETION);
 
-            text_buffer_history_remove_char(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos);
+            text_buffer_history_remove_char(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, buffer_view->cursor.pos);
 
             buffer_view->cursor.blink_time = 0.0f;
             viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
@@ -817,18 +745,18 @@ bool action_buffer_view_backspace_word(Editor_State *state, Buffer_View *buffer_
     {
         if (buffer_view->cursor.pos.line > 0 || buffer_view->cursor.pos.col > 0)
         {
-            bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Backspace word");
+            bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Backspace word");
 
             Text_Buffer *tb = &buffer_view->buffer->text_buffer;
             Cursor_Pos cursor = buffer_view->cursor.pos;
             Cursor_Pos word_start = cursor_pos_to_prev_start_of_word(*tb, cursor);
-            text_buffer_history_remove_range(tb, &buffer_view->history, word_start, cursor);
+            text_buffer_history_remove_range(tb, &buffer_view->buffer->history, word_start, cursor);
 
             buffer_view->cursor.pos = word_start;
             buffer_view->cursor.blink_time = 0.0f;
             viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
 
-            if (new_command) history_commit_command(&buffer_view->history);
+            if (new_command) history_commit_command(&buffer_view->buffer->history);
         }
     }
 
@@ -843,24 +771,24 @@ bool action_buffer_view_insert_indent(Editor_State *state, Buffer_View *buffer_v
     }
     else
     {
-        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Insert indent");
+        bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Insert indent");
         int spaces_to_insert = INDENT_SPACES - buffer_view->cursor.pos.col % INDENT_SPACES;
         for (int i = 0; i < spaces_to_insert; i++)
         {
-            text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->history, ' ', buffer_view->cursor.pos);
+            text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, ' ', buffer_view->cursor.pos);
         }
         buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, spaces_to_insert, +1, false);
         buffer_view->cursor.blink_time = 0.0f;
         viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
 
-        if (new_command) history_commit_command(&buffer_view->history);
+        if (new_command) history_commit_command(&buffer_view->buffer->history);
     }
     return true;
 }
 
 bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *buffer_view)
 {
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Decrease indent");
+    bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Decrease indent");
 
     if (buffer_view->mark.active)
     {
@@ -873,26 +801,26 @@ bool action_buffer_view_decrease_indent_level(Editor_State *state, Buffer_View *
         }
         for (int i = start.line; i <= end.line; i++)
         {
-            int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->history, i);
+            int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, i);
             if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_removed, -1, false);
             if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
         }
     }
     else
     {
-        int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos.line);
+        int chars_removed = text_buffer_history_line_indent_decrease_level(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, buffer_view->cursor.pos.line);
         buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_removed, -1, false);
         viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     }
 
-    if (new_command) history_commit_command(&buffer_view->history);
+    if (new_command) history_commit_command(&buffer_view->buffer->history);
 
     return true;
 }
 
 bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *buffer_view)
 {
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Increase indent");
+    bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Increase indent");
 
     if (buffer_view->mark.active)
     {
@@ -905,19 +833,19 @@ bool action_buffer_view_increase_indent_level(Editor_State *state, Buffer_View *
         }
         for (int i = start.line; i <= end.line; i++)
         {
-            int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->history, i);
+            int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, i);
             if (i == buffer_view->mark.pos.line) buffer_view->mark.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->mark.pos, chars_added, +1, false);
             if (i == buffer_view->cursor.pos.line) buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
         }
     }
     else
     {
-        int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->history, buffer_view->cursor.pos.line);
+        int chars_added = text_buffer_history_line_indent_increase_level(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, buffer_view->cursor.pos.line);
         buffer_view->cursor.pos = cursor_pos_advance_char_n(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, chars_added, +1, false);
         viewport_snap_to_cursor(buffer_view->buffer->text_buffer, buffer_view->cursor.pos, &buffer_view->viewport, &state->render_state);
     }
 
-    if (new_command) history_commit_command(&buffer_view->history);
+    if (new_command) history_commit_command(&buffer_view->buffer->history);
 
     return true;
 }
@@ -949,7 +877,7 @@ bool action_buffer_view_cut_selected(Editor_State *state, Buffer_View *buffer_vi
 {
     if (buffer_view->mark.active)
     {
-        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Cut selected");
+        bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Cut selected");
 
         Cursor_Pos start = cursor_pos_min(buffer_view->mark.pos, buffer_view->cursor.pos);
         Cursor_Pos end = cursor_pos_max(buffer_view->mark.pos, buffer_view->cursor.pos);
@@ -967,7 +895,7 @@ bool action_buffer_view_cut_selected(Editor_State *state, Buffer_View *buffer_vi
 
         action_buffer_view_delete_selected(state, buffer_view);
 
-        if (new_command) history_commit_command(&buffer_view->history);
+        if (new_command) history_commit_command(&buffer_view->buffer->history);
     }
 
     return false;
@@ -992,17 +920,17 @@ bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view)
 
     if (copy_buffer)
     {
-        bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Paste");
+        bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Paste");
 
         if (buffer_view->mark.active)
         {
             action_buffer_view_delete_selected(state, buffer_view);
         }
         Cursor_Pos start = buffer_view->cursor.pos;
-        Cursor_Pos end = text_buffer_history_insert_range(&buffer_view->buffer->text_buffer, &buffer_view->history, copy_buffer, buffer_view->cursor.pos);
+        Cursor_Pos end = text_buffer_history_insert_range(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, copy_buffer, buffer_view->cursor.pos);
         buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, end);
 
-        if (new_command) history_commit_command(&buffer_view->history);
+        if (new_command) history_commit_command(&buffer_view->buffer->history);
         return true;
     }
 
@@ -1020,10 +948,10 @@ bool action_buffer_view_delete_current_line(Editor_State *state, Buffer_View *bu
 
 bool action_buffer_view_reload_file(Editor_State *state, Buffer_View *buffer_view)
 {
-    if (buffer_view->buffer->generic.file_path)
+    if (buffer_view->buffer->file_path)
     {
         Text_Buffer tb;
-        text_buffer_read_from_file(buffer_view->buffer->generic.file_path, &tb);
+        text_buffer_read_from_file(buffer_view->buffer->file_path, &tb);
         buffer_replace_text_buffer(buffer_view->buffer, tb);
         buffer_view->cursor.pos = cursor_pos_clamp(tb, buffer_view->cursor.pos);
     }
@@ -1043,11 +971,11 @@ bool action_buffer_view_prompt_save_file_as(Editor_State *state, Buffer_View *bu
 
 bool action_buffer_view_save_file(Editor_State *state, Buffer_View *buffer_view)
 {
-    if (buffer_view->buffer->generic.file_path)
+    if (buffer_view->buffer->file_path)
     {
-        text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
+        text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history);
         buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
-        text_buffer_write_to_file(buffer_view->buffer->text_buffer, buffer_view->buffer->generic.file_path);
+        text_buffer_write_to_file(buffer_view->buffer->text_buffer, buffer_view->buffer->file_path);
         action_save_workspace(state);
     }
     else
@@ -1110,13 +1038,13 @@ bool action_buffer_view_repeat_search(Editor_State *state, Buffer_View *buffer_v
 
 bool action_buffer_view_whitespace_cleanup(Editor_State *state, Buffer_View *buffer_view)
 {
-    bool new_command = history_begin_command(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Whitespace cleanup");
+    bool new_command = history_begin_command(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Whitespace cleanup");
 
-    int cleaned_lines = text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->history);
+    int cleaned_lines = text_buffer_history_whitespace_cleanup(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history);
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, buffer_view->cursor.pos);
     trace_log("buffer_view_whitespace_cleanup: Cleaned up %d lines", cleaned_lines);
 
-    if (new_command) history_commit_command(&buffer_view->history);
+    if (new_command) history_commit_command(&buffer_view->buffer->history);
 
     return true;
 }
@@ -1125,10 +1053,10 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
 {
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
     Text_Buffer history_tb = {0};
-    text_buffer_append_f(&history_tb, "History. Pos: %d. Count: %d", buffer_view->history.history_pos, buffer_view->history.command_count);
-    for (int command_i = 0; command_i < buffer_view->history.command_count; command_i++)
+    text_buffer_append_f(&history_tb, "History. Pos: %d. Count: %d", buffer_view->buffer->history.history_pos, buffer_view->buffer->history.command_count);
+    for (int command_i = 0; command_i < buffer_view->buffer->history.command_count; command_i++)
     {
-        Command *c = &buffer_view->history.commands[command_i];
+        Command *c = &buffer_view->buffer->history.commands[command_i];
         text_buffer_append_f(&history_tb, "%03d: '%s' (committed: %s; initial pos: %d, %d)",
             command_i,
             c->name,
@@ -1182,18 +1110,18 @@ bool action_buffer_view_view_history(Editor_State *state, Buffer_View *buffer_vi
 
 bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_view)
 {
-    if (history_get_last_uncommitted_command(&buffer_view->history))
+    if (history_get_last_uncommitted_command(&buffer_view->buffer->history))
     {
-        history_commit_command(&buffer_view->history);
+        history_commit_command(&buffer_view->buffer->history);
     }
 
-    Command *command = history_get_command_to_undo(&buffer_view->history);
+    Command *command = history_get_command_to_undo(&buffer_view->buffer->history);
     if (command)
     {
         bassert(command->delta_count > 0);
 
-        history_begin_command_non_reset(&buffer_view->history, buffer_view->cursor.pos, buffer_view->mark, "Undo action");
-        command = history_get_command_to_undo(&buffer_view->history);  // Copy because begin_command could realloc
+        history_begin_command_non_reset(&buffer_view->buffer->history, buffer_view->cursor.pos, buffer_view->mark, "Undo action");
+        command = history_get_command_to_undo(&buffer_view->buffer->history);  // Copy because begin_command could realloc
 
         for (int i = command->delta_count  - 1; i>= 0; i--)
         {
@@ -1202,28 +1130,28 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
             {
                 case DELTA_INSERT_CHAR:
                 {
-                    text_buffer_history_remove_char(&buffer_view->buffer->text_buffer, &buffer_view->history, delta->insert_char.pos);
+                    text_buffer_history_remove_char(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, delta->insert_char.pos);
                 } break;
 
                 case DELTA_REMOVE_CHAR:
                 {
-                    text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->history, delta->remove_char.c, delta->remove_char.pos);
+                    text_buffer_history_insert_char(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, delta->remove_char.c, delta->remove_char.pos);
                 } break;
 
                 case DELTA_INSERT_RANGE:
                 {
-                    text_buffer_history_remove_range(&buffer_view->buffer->text_buffer, &buffer_view->history, delta->insert_range.start, delta->insert_range.end);
+                    text_buffer_history_remove_range(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, delta->insert_range.start, delta->insert_range.end);
                 } break;
 
                 case DELTA_REMOVE_RANGE:
                 {
-                    text_buffer_history_insert_range(&buffer_view->buffer->text_buffer, &buffer_view->history, delta->remove_range.range, delta->remove_range.start);
+                    text_buffer_history_insert_range(&buffer_view->buffer->text_buffer, &buffer_view->buffer->history, delta->remove_range.range, delta->remove_range.start);
                 } break;
             }
         }
 
-        history_commit_command(&buffer_view->history);
-        buffer_view->history.history_pos--;
+        history_commit_command(&buffer_view->buffer->history);
+        buffer_view->buffer->history.history_pos--;
 
         buffer_view->mark = command->mark;
         buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, command->cursor_pos);
@@ -1241,15 +1169,7 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     char *src_path = strf(".e2/scratch/%s.c", src_name);
     char *dylib_path = strf(".e2/scratch/%s.dylib", src_name);
 
-    Buffer *scratch_buffer = NULL;
-    if (buffer_view->buffer->generic.action_scratch_buffer_id > 0)
-    {
-        scratch_buffer = buffer_get_by_id(state, buffer_view->buffer->generic.action_scratch_buffer_id);
-        log_warning("Could not find buffer with ID %d", buffer_view->buffer->generic.action_scratch_buffer_id);
-    }
-    if (!scratch_buffer) scratch_buffer = buffer_view->buffer;
-
-    text_buffer_write_to_file(scratch_buffer->text_buffer, src_path);
+    text_buffer_write_to_file(buffer_view->buffer->text_buffer, src_path);
 
     const char *cc = "clang";
     const char *cflags = "-I/opt/homebrew/include -I/Users/struc/dev/jects/edi2tor/third_party -I/Users/struc/dev/jects/edi2tor/share -DGL_SILENCE_DEPRECATION";
@@ -1290,21 +1210,5 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     free(src_path);
     free(src_name);
     free(compile_command);
-    return false;
-}
-
-bool action_buffer_view_set_action_scratch_buffer_id(Editor_State *state, Buffer_View *buffer_view)
-{
-    if (buffer_view->buffer->kind == BUFFER_GENERIC)
-    {
-        trace_log("This buffer's ID: %d", buffer_view->buffer->id);
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
-        create_buffer_view_prompt(
-            "Set action scratch buffer id:",
-            prompt_create_context_set_action_scratch_buffer_id(buffer_view),
-            (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 300, 100},
-            state);
-        return true;
-    }
     return false;
 }
