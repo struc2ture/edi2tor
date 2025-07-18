@@ -1,6 +1,6 @@
 # edi2tor
 
-![image](https://github.com/user-attachments/assets/5d96061d-ea6b-4e54-9452-30dd0969cea0)
+<img width="2672" height="1527" alt="Screenshot 2025-07-15 at 22 38 04" src="https://github.com/user-attachments/assets/8e364ced-6f0e-4121-90df-0c96bd519164" />
 
 GROUNDBREAKING!!! editor
 
