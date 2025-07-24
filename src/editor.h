@@ -66,11 +66,6 @@ typedef struct {
 } Viewport;
 
 typedef struct {
-    char *path;
-    bool has_been_modified;
-} File_Info;
-
-typedef struct {
     Cursor_Pos pos;
     float blink_time;
 } Display_Cursor;
@@ -94,13 +89,9 @@ struct Render_State {
     GLuint vao;
     GLuint vbo;
     GLuint mvp_ubo;
-    GLuint main_shader_mvp_loc;
-    GLuint grid_shader_mvp_loc;
     GLuint grid_shader_offset_loc;
     GLuint grid_shader_spacing_loc;
     GLuint grid_shader_resolution_loc;
-    GLuint image_shader_mvp_loc;
-    GLuint framebuffer_shader_mvp_loc;
     Vec_2 window_dim;
     Vec_2 framebuffer_dim;
     float dpi_scale;
@@ -114,10 +105,6 @@ struct Render_State {
 
     Mat_Stack mat_stack_proj;
     Mat_Stack mat_stack_model_view;
-
-    int texture_slot_white;
-    int texture_slot_font;
-    int texture_slot_misc;
 
     Color text_color;
 };
