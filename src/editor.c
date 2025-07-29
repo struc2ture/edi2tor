@@ -1219,6 +1219,8 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 } break;
                 case FILE_KIND_DYLIB:
                 {
+                    new_view_rect.w = 1280;
+                    new_view_rect.h = 720;
                     create_live_scene_view(result.str, new_view_rect, state);
                 } break;
                 case FILE_KIND_TEXT:
