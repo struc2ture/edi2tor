@@ -39,6 +39,35 @@ bool action_change_working_dir(Editor_State *state)
     return true;
 }
 
+bool action_run_scratch(Editor_State *state)
+{
+    Buffer *scratch_buffer = NULL;
+
+    if (state->scratch_buffer_id > 0)
+    {
+        scratch_buffer = buffer_get_by_id(state, state->scratch_buffer_id);
+        if (!scratch_buffer) log_warning("Failed to get scratch_buffer by id %d", state->scratch_buffer_id);
+    }
+    else if (state->active_view->kind == VIEW_KIND_BUFFER)
+    {
+        state->scratch_buffer_id = state->active_view->bv.buffer->id;
+        scratch_buffer = state->active_view->bv.buffer;
+    }
+
+    if (scratch_buffer)
+    {
+        return action_run_scratch_for_buffer(state, scratch_buffer);
+    }
+
+    return false;
+}
+
+bool action_reset_scratch(Editor_State *state)
+{
+    state->scratch_buffer_id = 0;
+    return true;
+}
+
 bool action_live_scene_toggle_capture_input(Editor_State *state)
 {
     if (!state->input_capture_live_scene_view)
@@ -1163,13 +1192,15 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
     return false;
 }
 
-bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_view)
+// ----------------------------------------------
+
+bool action_run_scratch_for_buffer(Editor_State *state, Buffer *buffer)
 {
     char *src_name = strf("scratch_%ld", time(NULL));
     char *src_path = strf(".e2/scratch/%s.c", src_name);
     char *dylib_path = strf(".e2/scratch/%s.dylib", src_name);
 
-    text_buffer_write_to_file(buffer_view->buffer->text_buffer, src_path);
+    text_buffer_write_to_file(buffer->text_buffer, src_path);
 
     const char *cc = "clang";
     const char *cflags = "-I/opt/homebrew/include -I/Users/struc/dev/jects/edi2tor/third_party -I/Users/struc/dev/jects/edi2tor/share -DGL_SILENCE_DEPRECATION";
@@ -1177,7 +1208,11 @@ bool action_buffer_view_run_scratch(Editor_State *state, Buffer_View *buffer_vie
     const char *editor_o = "/Users/struc/dev/jects/edi2tor/share/e.o";
     char *compile_command = strf("%s -dynamiclib %s %s %s %s -o %s", cc, cflags, lflags, src_path, editor_o, dylib_path);
 
+    printf("Compiling scratch script: %s\n\n", compile_command);
+
     int result = system(compile_command);
+
+    printf("\nCompilation status: %d\n\n", result);
 
     if (result == 0)
     {

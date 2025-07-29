@@ -38,7 +38,7 @@ static void _log_warning(const char *fmt, ...)
     putchar('\n');
 }
 
-#define log_warning(FMT, ...) _log_warning("{%s:%d(%s)} " FMT, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
+#define log_warning(FMT, ...) _log_warning("{%s:%d(%s)} " FMT, __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
 static void fatal(const char *fmt, ...)
 {

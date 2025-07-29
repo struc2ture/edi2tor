@@ -56,6 +56,10 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 {
                     action_change_working_dir(state);
                 } break;
+                case GLFW_KEY_F5:
+                {
+                    action_run_scratch(state);
+                } break;
                 case GLFW_KEY_F10:
                 {
                     action_live_scene_toggle_capture_input(state);
@@ -63,6 +67,16 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 case GLFW_KEY_F12:
                 {
                     action_debug_break(state);
+                } break;
+            }
+        }
+        else if (e->key.mods == GLFW_MOD_SHIFT)
+        {
+            switch (e->key.key)
+            {
+                case GLFW_KEY_F5:
+                {
+                    action_reset_scratch(state);
                 } break;
             }
         }
@@ -195,10 +209,6 @@ void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const 
                 case GLFW_KEY_F3:
                 {
                     action_buffer_view_view_history(state, buffer_view);
-                } break;
-                case GLFW_KEY_F4:
-                {
-                    action_buffer_view_run_scratch(state, buffer_view);
                 } break;
             }
         }

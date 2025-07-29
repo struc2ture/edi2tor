@@ -168,7 +168,7 @@ typedef struct {
     Rect framebuffer_rect;
 } Live_Scene_View;
 
-typedef enum  {
+typedef enum {
     VIEW_KIND_BUFFER,
     VIEW_KIND_IMAGE,
     VIEW_KIND_LIVE_SCENE
@@ -201,27 +201,27 @@ typedef struct {
     int buffer_count;
     int buffer_seed;
 
+    Live_Scene **live_scenes;
+    int live_scene_count;
+
     View **views;
     int view_count;
     View *active_view;
-
-    Live_Scene **live_scenes;
-    int live_scene_count;
+    Live_Scene_View *input_capture_live_scene_view;
+    int scratch_buffer_id;
 
     Viewport canvas_viewport;
 
     char *copy_buffer;
-    bool should_break;
 
     char *working_dir;
 
     char *prev_search;
 
     GLFWwindow *window;
-
     bool is_live_scene;
 
-    Live_Scene_View *input_capture_live_scene_view;
+    bool should_break;
 } Editor_State;
 
 typedef enum {
