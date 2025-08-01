@@ -4,6 +4,9 @@ LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 
 editor: bin/platform bin/editor.dylib
 
+bin/hub: src/hub/hub.c src/hub/hub.h src/hub/hub_internal.h src/hub/scene.c src/hub/scene.h | bin
+	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@
+
 bin/platform: src/platform.c src/scene_loader.c src/scene_loader.h | bin
 	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@
 
