@@ -15,8 +15,9 @@
 #define INITIAL_WINDOW_HEIGHT 900
 #define FPS_MEASUREMENT_FREQ 0.1f
 
-static struct Hub_Timing timing;
 static struct Hub_State hub_state;
+static struct Hub_Context hub_context;
+static struct Hub_Timing hub_timing;
 static Vec_2 mouse_prev_pos;
 
 void perform_timing_calculations(struct Hub_Timing *t)
@@ -151,20 +152,19 @@ int main(int argc, char **argv)
     glfwGetWindowSize(window, &window_w, &window_h);
     glfwGetFramebufferSize(window, &window_px_w, &window_px_h);
 
+    hub_context.window = window;
+    hub_context.window_w = window_w;
+    hub_context.window_h = window_h;
+    hub_context.window_px_w = window_px_w;
+    hub_context.window_px_h = window_px_h;
+    hub_context.is_live_scene = false;
+    hub_context.fbo = 0;
+    hub_context.argc = argc;
+    hub_context.argv = argv;
+
     for (int i = 0; i < hub_state.scene_count; i++)
     {
-        hub_state.scenes[i].on_init(
-            hub_state.scenes[i].state,
-            window,
-            (float)window_w,
-            (float)window_h,
-            (float)window_px_w,
-            (float)window_px_h,
-            false,
-            0,
-            argc,
-            argv
-        );
+        hub_state.scenes[i].on_init(hub_state.scenes[i].state, &hub_context);
     }
 
     glfwSetKeyCallback(window, key_callback);
@@ -194,12 +194,12 @@ int main(int argc, char **argv)
             }
         }
 
-        perform_timing_calculations(&timing);
+        perform_timing_calculations(&hub_timing);
 
         for (int i = 0; i < hub_state.scene_count; i++)
         {
             struct Scene *s = &hub_state.scenes[i];
-            s->on_frame(s->state, &timing);
+            s->on_frame(s->state, &hub_timing);
         }
 
         glfwSwapBuffers(window);

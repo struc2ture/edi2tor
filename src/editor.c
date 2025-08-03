@@ -20,22 +20,30 @@
 #include "input.h"
 #include "history.h"
 #include "misc.h"
-#include "platform_types.h"
+// #include "platform_types.h"
 #include "scene_loader.h"
 #include "shaders.h"
 #include "text_buffer.h"
 #include "util.h"
+#include "hub/hub.h"
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv)
+void on_init(Editor_State *state, const struct Hub_Context *hub_context)
 {
     bassert(sizeof(*state) < 4096);
 
-    state->is_live_scene = is_live_scene;
-    if (!is_live_scene) glfwSetWindowTitle(window, "edi2tor");
+    state->is_live_scene = hub_context->is_live_scene;
+    if (!state->is_live_scene) glfwSetWindowTitle(hub_context->window, "edi2tor");
 
-    state->window = window;
+    state->window = hub_context->window;
 
-    initialize_render_state(&state->render_state, window_w, window_h, window_px_w, window_px_h, fbo);
+    initialize_render_state(
+        &state->render_state,
+        hub_context->window_w,
+        hub_context->window_h,
+        hub_context->window_px_w,
+        hub_context->window_px_h,
+        hub_context->fbo
+    );
 
     state->canvas_viewport.zoom = 1.0f;
     viewport_set_outer_rect(&state->canvas_viewport, (Rect){0, 0, state->render_state.window_dim.x, state->render_state.window_dim.y});
@@ -44,9 +52,9 @@ void on_init(Editor_State *state, GLFWwindow *window, float window_w, float wind
 
     // Working dir can be passed as the third arg to platform
     // e.g. bin/platform bin/editor.dylib /Users/user/project
-    if (argc > 2)
+    if (hub_context->argc > 2)
     {
-        sys_change_working_dir(argv[2], state);
+        sys_change_working_dir(hub_context->argv[2], state);
     }
     else
     {

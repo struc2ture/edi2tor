@@ -12,8 +12,9 @@
 #include <stb_truetype.h>
 
 #include "history.h"
+#include "hub/hub.h"
 #include "misc.h"
-#include "platform_types.h"
+// #include "platform_types.h"
 #include "scene_loader.h"
 #include "text_buffer.h"
 
@@ -238,7 +239,7 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv);
+void on_init(Editor_State *state, const struct Hub_Context *hub_context);
 void on_reload(Editor_State *state);
 void on_frame(Editor_State *state, const Platform_Timing *t);
 void on_platform_event(Editor_State *state, const Platform_Event *event);

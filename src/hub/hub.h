@@ -1,5 +1,8 @@
 #pragma once
 
+#include <OpenGL/gl3.h>
+#include <GLFW/glfw3.h>
+
 #include "../common.h"
 
 #define MAX_SCENES 8
@@ -78,4 +81,26 @@ struct Hub_Timing
     int frame_total_count;
     float fps_avg;
     float fps_instant;
+};
+
+typedef void (*hub_open_scene_t)(const char *path);
+typedef void (*hub_run_scratch_t)(const char *path);
+
+struct Hub_Context
+{
+    struct Scene *scenes;
+    int scene_count;
+
+    hub_open_scene_t open_scene;
+    hub_run_scratch_t run_scratch;
+
+    GLFWwindow *window;
+    float window_w;
+    float window_h;
+    float window_px_w;
+    float window_px_h;
+    bool is_live_scene;
+    GLuint fbo;
+    int argc;
+    char **argv;
 };

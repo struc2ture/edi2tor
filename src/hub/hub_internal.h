@@ -13,4 +13,5 @@ struct Hub_State
 {
     struct Scene scenes[MAX_SCENES];
     int scene_count;
+    // TODO: add function pointers from hub and pass this to each scene. Also they should know their scene ID to get its state.
 };
