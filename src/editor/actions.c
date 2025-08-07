@@ -521,7 +521,7 @@ bool action_reload_workspace(Editor_State *state)
 
 bool action_temp_load_scene(Editor_State *state)
 {
-    state->hub_context->open_scene("bin/live_cube.dylib");
+    state->hub_context->open_scene("bin/debug.dylib");
     return true;
 }
 

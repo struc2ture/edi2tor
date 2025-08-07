@@ -5,7 +5,7 @@ LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 editor: bin/hub bin/editor.dylib
 
 d: bin/hub bin/editor.dylib
-	lldb bin/hub -o run -- bin/editor.dylib
+	DYLD_LIBRARY_PATH=/Users/struc/dev/other/cimgui lldb bin/hub -o run -- bin/editor.dylib
 
 bin:
 	mkdir -p bin
@@ -24,5 +24,8 @@ bin/editor_api.o: src/editor/editor.c $(wildcard src/editor/*) $(wildcard src/li
 bin/editor.dylib: src/scenes/editor_scene.c bin/editor_api.o | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< bin/editor_api.o -o $@
 
-bin/live_cube.dylib: src/scenes/live_cube.c src/scenes/live_cube.h | bin
+bin/cube.dylib: src/scenes/cube.c | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@
+
+bin/debug.dylib: src/scenes/debug_scene.c | bin
+	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) -I/Users/struc/dev/other/cimgui /Users/struc/dev/other/cimgui/cimgui.dylib $< -o $@

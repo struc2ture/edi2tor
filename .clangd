@@ -2,6 +2,7 @@ CompileFlags:
     Add: [
         "-I/opt/homebrew/include",
         "-isystem/Users/struc/dev/jects/edi2tor/third_party",
+        "-isystem/Users/struc/dev/other/cimgui",
         "-DGL_SILENCE_DEPRECATION",
         "-Wall",
         "-Wextra",
