@@ -15,7 +15,6 @@
 #include "hub/hub.h"
 #include "misc.h"
 // #include "platform_types.h"
-#include "scene_loader.h"
 #include "text_buffer.h"
 
 #define VERT_MAX 8192
@@ -158,28 +157,15 @@ typedef struct {
     Rect image_rect;
 } Image_View;
 
-typedef struct {
-    void *state;
-    Scene_Dylib dylib;
-} Live_Scene;
-
-typedef struct {
-    Live_Scene *live_scene;
-    Gl_Framebuffer framebuffer;
-    Rect framebuffer_rect;
-} Live_Scene_View;
-
 typedef enum {
     VIEW_KIND_BUFFER,
     VIEW_KIND_IMAGE,
-    VIEW_KIND_LIVE_SCENE
 } View_Kind;
 
 typedef struct {
     union {
         Buffer_View bv;
         Image_View iv;
-        Live_Scene_View lsv;
     };
     Rect outer_rect;
     View_Kind kind;
@@ -202,14 +188,9 @@ typedef struct {
     int buffer_count;
     int buffer_seed;
 
-    Live_Scene **live_scenes;
-    int live_scene_count;
-
     View **views;
     int view_count;
     View *active_view;
-    Live_Scene_View *input_capture_live_scene_view;
-    int scratch_buffer_id;
 
     Viewport canvas_viewport;
 
@@ -220,7 +201,6 @@ typedef struct {
     char *prev_search;
 
     GLFWwindow *window;
-    bool is_live_scene;
 
     bool should_break;
 
@@ -255,7 +235,6 @@ void render_view_buffer_selection(Buffer_View *buffer_view, const Render_State *
 void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, const Render_State *render_state);
 void render_view_buffer_name(Buffer_View *buffer_view, const char *name, bool is_active, Viewport canvas_viewport, const Render_State *render_state);
 void render_view_image(Image_View *image_view, const Render_State *render_state);
-void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const struct Hub_Timing *t);
 void render_status_bar(Editor_State *state, const Render_State *render_state, const struct Hub_Timing *t);
 
 void draw_quad(Rect q, Color c, const Render_State *render_state);
@@ -280,7 +259,6 @@ View *create_buffer_view_generic(Rect rect, Editor_State *state);
 View *create_buffer_view_open_file(const char *path, Rect rect, Editor_State *state);
 View *create_buffer_view_prompt(const char *prompt_text, Prompt_Context context, Rect rect, Editor_State *state);
 View *create_image_view(const char *file_path, Rect rect, Editor_State *state);
-View *create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state);
 
 int view_get_index(View *view, Editor_State *state);
 View **view_create_new_slot(Editor_State *state);
@@ -306,12 +284,6 @@ Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View *buffer_view, Vec_2 te
 void image_destroy(Image image);
 
 Image_View *image_view_create(Image image, Rect rect, Editor_State *state);
-
-Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo);
-void live_scene_check_hot_reload(Live_Scene *live_scene);
-void live_scene_destroy(Live_Scene *live_scene, Editor_State *state);
-
-Live_Scene_View *live_scene_view_create(Gl_Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state);
 
 Prompt_Context prompt_create_context_open_file();
 Prompt_Context prompt_create_context_go_to_line(Buffer_View *for_buffer_view);
@@ -368,9 +340,6 @@ Image file_open_image(const char *path);
 
 void read_clipboard_mac(char *buf, size_t buf_size);
 void write_clipboard_mac(const char *text);
-
-void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo);
-void live_scene_rebuild(Live_Scene *live_scene);
 
 bool file_is_image(const char *path);
 File_Kind file_detect_kind(const char *path);

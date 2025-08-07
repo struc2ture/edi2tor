@@ -1,9 +1,5 @@
 #include "editor.h"
 
-#include "actions.h"
-#include "common.h"
-#include "text_buffer.h"
-
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,45 +13,16 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
+#include "actions.h"
+#include "common.h"
 #include "input.h"
 #include "history.h"
 #include "misc.h"
 // #include "platform_types.h"
-#include "scene_loader.h"
 #include "shaders.h"
 #include "text_buffer.h"
 #include "util.h"
 #include "hub/hub.h"
-
-// ----------------------------------------------------------------------------------------
-// SCENE INTERFACE
-
-#ifndef EDITOR_STATIC_LIB
-
-void on_init(Editor_State *state, const struct Hub_Context *hub_context)
-{
-    editor_init(state, hub_context);
-}
-
-void on_reload(Editor_State *state)
-{
-}
-
-void on_frame(Editor_State *state, const struct Hub_Timing *t)
-{
-    editor_frame(state, t);
-}
-
-void on_platform_event(Editor_State *state, const struct Hub_Event *e)
-{
-    editor_event(state, e);
-}
-
-void on_destroy(Editor_State *state)
-{
-}
-
-#endif
 
 // ------------------------------------------------------------------------------------------------------------------------
 // HIGH LEVEL API
@@ -64,8 +31,7 @@ void editor_init(Editor_State *state, const struct Hub_Context *hub_context)
 {
     bassert(sizeof(*state) < 4096);
 
-    state->is_live_scene = hub_context->is_live_scene;
-    if (!state->is_live_scene) glfwSetWindowTitle(hub_context->window, "edi2tor");
+    glfwSetWindowTitle(hub_context->window, "edi2tor");
 
     state->window = hub_context->window;
 
@@ -107,21 +73,6 @@ void editor_frame(Editor_State *state, const struct Hub_Timing *t)
 
 void editor_event(Editor_State *state, const struct Hub_Event *e)
 {
-    if (state->input_capture_live_scene_view)
-    {
-        if (e->kind == HUB_EVENT_KEY && e->key.key == GLFW_KEY_F10 && e->key.action == GLFW_PRESS)
-        {
-            action_live_scene_toggle_capture_input(state);
-            return;
-        }
-
-        // Live_Scene *ls = state->input_capture_live_scene_view->live_scene;
-        // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, state->input_capture_live_scene_view, e);
-        // ls->dylib.on_platform_event(ls->state, &adjusted_event);
-
-        return;
-    }
-
     switch (e->kind)
     {
         case HUB_EVENT_CHAR:
@@ -166,11 +117,6 @@ void editor_event(Editor_State *state, const struct Hub_Event *e)
 void editor_destroy(Editor_State *state)
 {
     action_save_workspace(state);
-
-    for (int i = 0; i < state->live_scene_count; i++)
-    {
-        live_scene_destroy(state->live_scenes[i], state);
-    }
 }
 
 // ------------------------------------------------------------------------------------------------------------------------
@@ -241,11 +187,6 @@ void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_St
         case VIEW_KIND_IMAGE:
         {
             render_view_image(&view->iv, render_state);
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            render_view_live_scene(&view->lsv, render_state, t);
         } break;
     }
 }
@@ -435,38 +376,6 @@ void render_view_image(Image_View *image_view, const Render_State *render_state)
 {
     glUseProgram(render_state->tex_shader);
     draw_texture(image_view->image.texture, image_view->image_rect, (Color){255, 255, 255, 255}, render_state);
-}
-
-void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const struct Hub_Timing *t)
-{
-    // TODO: Keep pointers to live scenes in an array and run live scene updates separately, before rendering
-    live_scene_check_hot_reload(ls_view->live_scene);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
-
-    // ls_view->live_scene->dylib.on_frame(ls_view->live_scene->state, t);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
-    glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
-    glClearColor(0, 0, 0, 1.0f);
-    glBindVertexArray(render_state->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, render_state->vbo);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-
-    Rect q = ls_view->framebuffer_rect;
-    Color c = {255, 255, 255, 255};
-    Vert_Buffer vert_buf = {0};
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, c));
-    glUseProgram(render_state->flipped_quad_shader);
-    glBindTexture(GL_TEXTURE_2D, ls_view->framebuffer.tex);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
 void render_status_bar(Editor_State *state, const Render_State *render_state, const struct Hub_Timing *t)
@@ -817,15 +726,6 @@ View *create_image_view(const char *file_path, Rect rect, Editor_State *state)
     return outer_view(image_view);
 }
 
-View *create_live_scene_view(const char *dylib_path, Rect rect, Editor_State *state)
-{
-    Gl_Framebuffer framebuffer = gl_create_framebuffer((int)rect.w, (int)rect.h);
-    Live_Scene *live_scene = live_scene_create(state, dylib_path, rect.w, rect.h, framebuffer.fbo);
-    Live_Scene_View *live_scene_view = live_scene_view_create(framebuffer, live_scene, rect, state);
-    view_set_active(outer_view(live_scene_view), state);
-    return outer_view(live_scene_view);
-}
-
 int view_get_index(View *view, Editor_State *state)
 {
     int index = 0;
@@ -881,14 +781,6 @@ void view_destroy(View *view, Editor_State *state)
             view_free_slot(view, state);
             free(view);
         } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            gl_destroy_framebuffer(&view->lsv.framebuffer);
-            live_scene_destroy(view->lsv.live_scene, state);
-            view_free_slot(view, state);
-            free(view);
-        } break;
     }
 
     if (state->active_view == view)
@@ -913,11 +805,6 @@ Rect view_get_inner_rect(View *view, const Render_State *render_state)
         case VIEW_KIND_BUFFER:
         {
             rect = buffer_view_get_text_area_rect(&view->bv, render_state);
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            rect = view->lsv.framebuffer_rect;
         } break;
 
         default:
@@ -959,23 +846,6 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
                 view->iv.image_rect.h = view->iv.image_rect.w / view->iv.image.width * view->iv.image.height;
                 view->iv.image_rect.y = y + h * 0.5f - view->iv.image_rect.h * 0.5f;
             }
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            view->lsv.framebuffer_rect.x = rect.x + render_state->buffer_view_padding;
-            view->lsv.framebuffer_rect.y = rect.y + render_state->buffer_view_padding;
-            view->lsv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
-            view->lsv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
-
-            struct Hub_Event resize_event;
-            resize_event.kind = HUB_EVENT_WINDOW_RESIZE;
-            resize_event.window_resize.logical_w = view->lsv.framebuffer_rect.w;
-            resize_event.window_resize.logical_h = view->lsv.framebuffer_rect.h;
-            // TODO: Actually recreate framebuffer texture if size changed
-            resize_event.window_resize.px_w = (float)view->lsv.framebuffer.w;
-            resize_event.window_resize.px_h = (float)view->lsv.framebuffer.h;
-            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &resize_event);
         } break;
     }
 }
@@ -1104,75 +974,6 @@ Image_View *image_view_create(Image image, Rect rect, Editor_State *state)
     return (Image_View *)view;
 }
 
-Live_Scene **live_scene_create_new_slot(Editor_State *state)
-{
-    state->live_scene_count++;
-    state->live_scenes = xrealloc(state->live_scenes, state->live_scene_count * sizeof(state->live_scenes[0]));
-    return &state->live_scenes[state->live_scene_count - 1];
-}
-
-int live_scene_get_index(Live_Scene *live_scene, Editor_State *state)
-{
-    int index = 0;
-    Live_Scene **live_scene_c = state->live_scenes;
-    while (*live_scene_c != live_scene)
-    {
-        index++;
-        live_scene_c++;
-    }
-    return index;
-}
-
-void live_scene_free_slot(Live_Scene *live_scene, Editor_State *state)
-{
-    int index_to_delete = live_scene_get_index(live_scene, state);
-    for (int i = index_to_delete; i < state->live_scene_count - 1; i++)
-    {
-        state->live_scenes[i] = state->live_scenes[i + 1];
-    }
-    state->live_scene_count--;
-    state->live_scenes = xrealloc(state->live_scenes, state->live_scene_count * sizeof(state->live_scenes[0]));
-}
-
-Live_Scene *live_scene_create(Editor_State *state, const char *path, float w, float h, GLuint fbo)
-{
-    Live_Scene **new_slot = live_scene_create_new_slot(state);
-    Live_Scene *live_scene = xcalloc(sizeof(Live_Scene));
-    live_scene->state = xcalloc(4096);
-    live_scene->dylib = scene_loader_dylib_open(path);
-    live_scene->dylib.on_init(live_scene->state, state->window, w, h, w, h, true, fbo, 0, NULL);
-    live_scene->dylib.on_reload(live_scene->state);
-    *new_slot = live_scene;
-    return *new_slot;
-}
-
-void live_scene_check_hot_reload(Live_Scene *live_scene)
-{
-    if (scene_loader_dylib_check_and_hotreload(&live_scene->dylib))
-    {
-        live_scene->dylib.on_reload(live_scene->state);
-    }
-}
-
-void live_scene_destroy(Live_Scene *live_scene, Editor_State *state)
-{
-    live_scene->dylib.on_destroy(live_scene->state);
-    scene_loader_dylib_close(&live_scene->dylib);
-    free(live_scene->state);
-    live_scene_free_slot(live_scene, state);
-    free(live_scene);
-}
-
-Live_Scene_View *live_scene_view_create(Gl_Framebuffer framebuffer, Live_Scene *live_scene, Rect rect, Editor_State *state)
-{
-    View *view = view_create(state);
-    view->kind = VIEW_KIND_LIVE_SCENE;
-    view->lsv.framebuffer = framebuffer;
-    view->lsv.live_scene = live_scene;
-    view_set_rect(view, rect, &state->render_state);
-    return (Live_Scene_View *)view;
-}
-
 Prompt_Context prompt_create_context_open_file()
 {
     Prompt_Context context;
@@ -1248,7 +1049,6 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 } break;
                 case FILE_KIND_DYLIB:
                 {
-                    create_live_scene_view(result.str, new_view_rect, state);
                 } break;
                 case FILE_KIND_TEXT:
                 {
@@ -1826,25 +1626,6 @@ void write_clipboard_mac(const char *text)
     pclose(pipe);
 }
 
-void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo)
-{
-    Live_Scene *new_live_scene = live_scene_create(state, (*live_scene)->dylib.original_path, w, h, fbo);
-    live_scene_destroy(*live_scene, state);
-    *live_scene = new_live_scene;
-}
-
-void live_scene_rebuild(Live_Scene *live_scene)
-{
-    char command_buf[1024];
-    snprintf(command_buf, sizeof(command_buf), "make %s", live_scene->dylib.original_path);
-    int result = system(command_buf);
-    if (result != 0)
-    {
-        log_warning("live_scene_rebuild: Build failed with code %d for dylib %s", result, live_scene->dylib.original_path);
-    }
-    trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.original_path);
-}
-
 bool file_is_image(const char *path)
 {
     int x, y, comp;
@@ -1934,8 +1715,6 @@ bool rect_p_intersect(Vec_2 p, Rect rect)
 #include "input.c"
 #include "history.c"
 #include "misc.c"
-#include "scene_loader.c"
-#include "scratch_runner.c"
 #include "string_builder.c"
 #include "text_buffer.c"
 #include "unit_tests.c"

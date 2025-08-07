@@ -30,11 +30,6 @@ void input_char_view(Editor_State *state, View *view, const struct Hub_Event *e)
         {
             // Nothing
         } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
-        } break;
     }
 }
 
@@ -60,28 +55,12 @@ void input_key_global(Editor_State *state, const struct Hub_Event *e)
                 {
                     action_temp_load_scene(state);
                 } break;
-                case GLFW_KEY_F5:
-                {
-                    action_run_scratch(state);
-                } break;
-                case GLFW_KEY_F10:
-                {
-                    action_live_scene_toggle_capture_input(state);
-                } break;
-                case GLFW_KEY_F12:
-                {
-                    action_debug_break(state);
-                } break;
             }
         }
         else if (e->key.mods == GLFW_MOD_SHIFT)
         {
             switch (e->key.key)
             {
-                case GLFW_KEY_F5:
-                {
-                    action_reset_scratch(state);
-                } break;
             }
         }
         else if (e->key.mods == GLFW_MOD_SUPER)
@@ -100,10 +79,6 @@ void input_key_global(Editor_State *state, const struct Hub_Event *e)
                 case GLFW_KEY_2:
                 {
                     action_open_test_image(state);
-                } break;
-                case GLFW_KEY_3:
-                {
-                    action_open_test_live_scene(state);
                 } break;
                 case GLFW_KEY_O:
                 {
@@ -149,11 +124,6 @@ void input_key_view(Editor_State *state, View *view, const struct Hub_Event *e)
         case VIEW_KIND_IMAGE:
         {
             // Nothing for now
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
         } break;
     }
 }
@@ -360,12 +330,6 @@ void input_mouse_motion_view(Editor_State *state, View *view, const struct Hub_E
         {
             // Nothing
         } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
-            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
-        } break;
     }
 }
 
@@ -475,12 +439,6 @@ bool input_mouse_button_view(Editor_State *state, View *view, const struct Hub_E
         {
             // Nothing
         } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
-            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
-        } break;
     }
     return false;
 }
@@ -548,13 +506,6 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const struct Hub_E
         {
             // Nothing
         } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
-            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
-            return true;
-        } break;
     }
     return false;
 }
@@ -571,30 +522,4 @@ void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     if (buffer_view->viewport.rect.y < 0.0f) buffer_view->viewport.rect.y = 0.0f;
     float buffer_max_y = (buffer_view->buffer->text_buffer.line_count - 1) * get_font_line_height(state->render_state.font);
     if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
-}
-
-struct Hub_Event input__adjust_mouse_event_for_live_scene_view(Editor_State *state, Live_Scene_View *lsv, const struct Hub_Event *e)
-{
-    struct Hub_Event adjusted_event = *e;
-    Vec_2 offset = canvas_pos_to_screen_pos((Vec_2){lsv->framebuffer_rect.x, lsv->framebuffer_rect.y}, state->canvas_viewport);
-    switch (adjusted_event.kind)
-    {
-        case PLATFORM_EVENT_MOUSE_BUTTON:
-        {
-            adjusted_event.mouse_button.pos = vec2_sub(e->mouse_button.pos, offset);
-        } break;
-
-        case PLATFORM_EVENT_MOUSE_MOTION:
-        {
-            adjusted_event.mouse_motion.pos = vec2_sub(e->mouse_motion.pos, offset);
-        } break;
-
-        case PLATFORM_EVENT_MOUSE_SCROLL:
-        {
-            adjusted_event.mouse_scroll.pos = vec2_sub(e->mouse_scroll.pos, offset);
-        } break;
-
-        default: break;
-    }
-    return adjusted_event;
 }

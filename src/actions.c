@@ -6,8 +6,6 @@
 
 #include "editor.h"
 #include "history.h"
-// #include "platform_types.h"
-#include "scratch_runner.h"
 #include "string_builder.h"
 #include "text_buffer.h"
 #include "unit_tests.h"
@@ -39,69 +37,6 @@ bool action_change_working_dir(Editor_State *state)
     return true;
 }
 
-bool action_run_scratch(Editor_State *state)
-{
-    Buffer *scratch_buffer = NULL;
-
-    if (state->scratch_buffer_id > 0)
-    {
-        scratch_buffer = buffer_get_by_id(state, state->scratch_buffer_id);
-        if (!scratch_buffer) log_warning("Failed to get scratch_buffer by id %d", state->scratch_buffer_id);
-    }
-    else if (state->active_view->kind == VIEW_KIND_BUFFER)
-    {
-        state->scratch_buffer_id = state->active_view->bv.buffer->id;
-        scratch_buffer = state->active_view->bv.buffer;
-    }
-
-    if (scratch_buffer)
-    {
-        return action_run_scratch_for_buffer(state, scratch_buffer);
-    }
-
-    return false;
-}
-
-bool action_reset_scratch(Editor_State *state)
-{
-    state->scratch_buffer_id = 0;
-    return true;
-}
-
-bool action_live_scene_toggle_capture_input(Editor_State *state)
-{
-    if (!state->input_capture_live_scene_view)
-    {
-        if (state->active_view && state->active_view->kind == VIEW_KIND_LIVE_SCENE)
-        {
-            state->input_capture_live_scene_view = &state->active_view->lsv;
-            Live_Scene *ls = state->input_capture_live_scene_view->live_scene;
-            ls->dylib.on_platform_event(ls->state, &(Platform_Event){
-                .kind = PLATFORM_EVENT_INPUT_CAPTURED,
-                .input_captured.captured = true
-            });
-            return true;
-        }
-    }
-    else
-    {
-        Live_Scene *ls = state->input_capture_live_scene_view->live_scene;
-        ls->dylib.on_platform_event(ls->state, &(Platform_Event){
-            .kind = PLATFORM_EVENT_INPUT_CAPTURED,
-            .input_captured.captured = false
-        });
-        state->input_capture_live_scene_view = NULL;
-        return true;
-    }
-    return false;
-}
-
-bool action_debug_break(Editor_State *state)
-{
-    state->should_break = true;
-    return true;
-}
-
 bool action_destroy_active_view(Editor_State *state)
 {
     // TODO: Should this be view level action?
@@ -130,16 +65,6 @@ bool action_open_test_image(Editor_State *state)
     Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
     create_image_view(
         IMAGE_PATH,
-        (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
-        state);
-    return true;
-}
-
-bool action_open_test_live_scene(Editor_State *state)
-{
-    Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);;
-    create_live_scene_view(
-        LIVE_CUBE_PATH,
         (Rect){mouse_canvas_pos.x, mouse_canvas_pos.y, 500, 500},
         state);
     return true;
@@ -177,11 +102,6 @@ const char *_action_save_workspace_get_view_kind_str(View_Kind kind)
         case VIEW_KIND_IMAGE:
         {
             return "IMAGE";
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            return "LIVE_SCENE";
         } break;
     }
 }
@@ -239,13 +159,6 @@ bool action_save_workspace(Editor_State *state)
                     }
                 } break;
 
-                case VIEW_KIND_LIVE_SCENE:
-                {
-                    Live_Scene *ls = view->lsv.live_scene;
-                    string_builder_append_f(&sb, "  DL_PATH='%s'\n", ls->dylib.original_path);
-                    // TODO: Save live scene state?!!
-                } break;
-
                 case VIEW_KIND_IMAGE:
                 {
                     log_warning("Image view saving not implemented");
@@ -288,8 +201,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
     bool has_temp_path = false;
     int action_scratch_buffer_id = 0;
     bool has_action_scratch_buffer_id = false;
-    char *dl_path = NULL;
-    bool has_dl_path = false;
 
     while (1)
     {
@@ -306,7 +217,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
 
             if (val.length == 6 && strncmp(val.start, "BUFFER", 6) == 0) view_kind = VIEW_KIND_BUFFER;
             else if (val.length == 5 && strncmp(val.start, "IMAGE", 5) == 0) view_kind = VIEW_KIND_IMAGE;
-            else if (val.length == 10 && strncmp(val.start, "LIVE_SCENE", 10) == 0) view_kind = VIEW_KIND_LIVE_SCENE;
             else LOG_AND_RET("Invalid KIND");
 
             has_view_kind = true;
@@ -432,14 +342,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
             temp_path = strndup(val.start, val.length);
             has_temp_path = true;
         }
-        else if (key.length == 7 && strncmp(key.start, "DL_PATH", 7) == 0)
-        {
-            Token val = ws_parser_next_token(ps);
-            if (val.kind != TOKEN_STRING) LOG_AND_RET("Expected STRING.");
-
-            dl_path = strndup(val.start, val.length);
-            has_dl_path = true;
-        }
     }
 
     // if (has_view_kind) trace_log("View kind: %d", view_kind);
@@ -517,13 +419,6 @@ bool _action_load_workspace_parse_view_kvs(Parser_State *ps, Editor_State *state
                 view->bv.mark.pos = cursor_pos_clamp(view->bv.buffer->text_buffer, mark);
                 view->bv.mark.active = true;
             }
-        } break;
-
-        case VIEW_KIND_LIVE_SCENE:
-        {
-            if (!has_dl_path) LOG_AND_RET("No DL path for live scene.");
-            View *view = create_live_scene_view(dl_path, rect, state);
-            free(dl_path);
         } break;
 
         case VIEW_KIND_IMAGE:
@@ -1199,57 +1094,3 @@ bool action_buffer_view_undo_command(Editor_State *state, Buffer_View *buffer_vi
 }
 
 // ----------------------------------------------
-
-bool action_run_scratch_for_buffer(Editor_State *state, Buffer *buffer)
-{
-    char *src_name = strf("scratch_%ld", time(NULL));
-    char *src_path = strf(".e2/scratch/%s.c", src_name);
-    char *dylib_path = strf(".e2/scratch/%s.dylib", src_name);
-
-    text_buffer_write_to_file(buffer->text_buffer, src_path);
-
-    const char *cc = "clang";
-    const char *cflags = "-I/opt/homebrew/include -I/Users/struc/dev/jects/edi2tor/third_party -I/Users/struc/dev/jects/edi2tor/share -DGL_SILENCE_DEPRECATION";
-    const char *lflags = "-L/opt/homebrew/lib -lglfw -framework OpenGL";
-    const char *editor_o = "/Users/struc/dev/jects/edi2tor/share/e.o";
-    char *compile_command = strf("%s -dynamiclib %s %s %s %s -o %s", cc, cflags, lflags, src_path, editor_o, dylib_path);
-
-    printf("Compiling scratch script: %s\n\n", compile_command);
-
-    int result = system(compile_command);
-
-    printf("\nCompilation status: %d\n\n", result);
-
-    if (result == 0)
-    {
-        Scratch_Dylib dylib = scratch_runner_dylib_open(dylib_path);
-        if (dylib.handle)
-        {
-            dylib.on_run(state);
-
-            scratch_runner_dylib_close(&dylib);
-
-            file_delete(dylib_path);
-            file_delete(src_path);
-
-            return true;
-        }
-        else
-        {
-            log_warning("Failed to open dylib at %s", dylib_path);
-            file_delete(dylib_path);
-            file_delete(src_path);
-        }
-    }
-    else
-    {
-        log_warning("Build failed with code %d for scratch dylib. Compile command:\n%s\n", result, compile_command);
-        file_delete(src_path);
-    }
-
-    free(dylib_path);
-    free(src_path);
-    free(src_name);
-    free(compile_command);
-    return false;
-}
