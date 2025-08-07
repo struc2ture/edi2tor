@@ -155,3 +155,85 @@ bool scene_hotreload(struct Scene *s)
     }
     return false;
 }
+
+// ----------------------------------------------------
+
+struct Scene *scene_map_add(struct Scene_Map *m, struct Scene scene, const char *name)
+{
+    bool need_realloc = false;
+    if (m->cap == 0)
+    {
+        m->cap = 4;
+        need_realloc = true;
+    }
+    if (m->cap <= m->size)
+    {
+        m->cap *= 2;
+        need_realloc = true;
+    }
+    if (need_realloc)
+    {
+        m->scenes = realloc(m->scenes, m->cap * sizeof(m->scenes[0]));
+        m->names = realloc(m->names, m->cap * sizeof(m->names[0]));
+    }
+
+    m->scenes[m->size] = scene;
+    m->names[m->size] = strdup(name);
+    m->size++;
+
+    return &m->scenes[m->size - 1];
+}
+
+struct Scene *scene_map_add_debug_scene(struct Scene_Map *m, struct Scene scene)
+{
+    m->debug_scene = scene;
+    return &m->debug_scene;
+}
+
+struct Scene *scene_map_get_debug_scene(struct Scene_Map *m)
+{
+    return &m->debug_scene;
+}
+
+struct Scene *scene_map_get_by_name(struct Scene_Map *m, const char *name)
+{
+    int i;
+    for (i = 0; i < m->size; i++)
+        if (strcmp(m->names[i], name) == 0)
+            break;
+    return i < m->size ? &m->scenes[i] : NULL;
+}
+
+char *scene_map_get_name(struct Scene_Map *m, struct Scene *s)
+{
+    int i;
+    for (i = 0; i < m->size; i++)
+        if (&m->scenes[i] == s)
+            break;
+    return m->names[i];
+}
+
+void scene_map_remove(struct Scene_Map *m, struct Scene *s)
+{
+    if (s == &m->debug_scene)
+    {
+        m->debug_scene = (struct Scene){0};
+    }
+    else
+    {
+        int to_remove;
+        for (to_remove = 0; to_remove < m->size; to_remove++)
+            if (&m->scenes[to_remove] == s)
+                break;
+        
+        free(m->names[to_remove]);
+        
+        for (int i = to_remove; i < m->size - 1; i++)
+        {
+            m->scenes[i] = m->scenes[i + 1];
+            m->names[i] = m->names[i + 1];
+        }
+    }
+
+    m->size--;
+}

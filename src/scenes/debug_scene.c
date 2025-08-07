@@ -14,7 +14,7 @@
 
 struct State
 {
-    const struct Hub_Context *hub_context;
+    struct Hub_Context *hub_context;
     struct ImGuiContext* imgui_context;
     struct ImGuiIO* imgui_io;
     GLFWwindow *window;
@@ -24,7 +24,7 @@ struct State
     char open_scene_buf[256];
 };
 
-void on_init(struct State *state, const struct Hub_Context *hub_context)
+void on_init(struct State *state, struct Hub_Context *hub_context)
 {
     state->hub_context = hub_context;
     state->imgui_context = igCreateContext(NULL);
@@ -62,12 +62,11 @@ void hub_debug(struct State *state)
 
             igSpacing();
 
-            for (int i = 0; i < *state->hub_context->scene_count; i++)
+            scene_map_for_each(&state->hub_context->scene_map, s)
             {
-                igPushID_Int(i);
+                igPushID_Ptr(s);
 
-                const struct Scene *s = &state->hub_context->scenes[i];
-                igBulletText(s->original_path);
+                igBulletText(scene_map_get_name(&state->hub_context->scene_map, s));
 
                 igSameLine(0, 10);
 
@@ -78,6 +77,7 @@ void hub_debug(struct State *state)
 
                 if (igButton("X", (ImVec2){0}))
                 {
+                    state->hub_context->close_scene(s);
                 }
 
                 igPopID();
@@ -89,22 +89,25 @@ void hub_debug(struct State *state)
 
 void editor_debug(struct State *state)
 {
-    if (igBegin("Editor Debug", &state->is_editor_debug_open, ImGuiWindowFlags_None))
+    const struct Scene *editor_scene = scene_map_get_by_name(&state->hub_context->scene_map, "bin/editor.dylib");
+    if (editor_scene)
     {
-        const struct Scene *editor_scene = &state->hub_context->scenes[0];
-        const Editor_State *editor_state = (Editor_State *)editor_scene->state;
-        for (int i = 0; i < editor_state->view_count; i++)
+        if (igBegin("Editor Debug", &state->is_editor_debug_open, ImGuiWindowFlags_None))
         {
-            const View *v = editor_state->views[i];
-            if (v->kind == VIEW_KIND_BUFFER)
+            const Editor_State *editor_state = (Editor_State *)editor_scene->state;
+            for (int i = 0; i < editor_state->view_count; i++)
             {
-                if (v->bv.buffer->file_path) igBulletText(v->bv.buffer->file_path);
-                else igBulletText("Buffer View");
+                const View *v = editor_state->views[i];
+                if (v->kind == VIEW_KIND_BUFFER)
+                {
+                    if (v->bv.buffer->file_path) igBulletText(v->bv.buffer->file_path);
+                    else igBulletText("Buffer View");
+                }
+                else igBulletText("Image View");
             }
-            else igBulletText("Image View");
         }
+        igEnd();
     }
-    igEnd();
 }
 
 void on_frame(struct State *state, const struct Hub_Timing *t)
@@ -129,3 +132,5 @@ void on_platform_event(void *state, const struct Hub_Event *e)
 void on_destroy(void *state)
 {
 }
+
+#include "../hub/scene.c"

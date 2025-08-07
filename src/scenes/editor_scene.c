@@ -1,7 +1,7 @@
 #include "../hub/hub.h"
 #include "../editor/editor.h"
 
-void on_init(Editor_State *state, const struct Hub_Context *hub_context)
+void on_init(Editor_State *state, struct Hub_Context *hub_context)
 {
     editor_init(state, hub_context);
 }

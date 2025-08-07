@@ -4,10 +4,13 @@ LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 
 CIMGUIRPATH = -Wl,-rpath,/Users/struc/dev/other/cimgui/backend_test/example_glfw_opengl3/build
 
-editor: bin/hub bin/editor.dylib
+editor: bin/hub bin/editor.dylib bin/debug.dylib bin/cube.dylib
 
-d: bin/hub bin/editor.dylib
+d: bin/hub bin/editor.dylib bin/debug.dylib
 	lldb bin/hub -o run -- bin/editor.dylib
+
+dd: bin/hub bin/debug.dylib
+	lldb bin/hub -o run
 
 bin:
 	mkdir -p bin
@@ -15,7 +18,7 @@ bin:
 clean:
 	rm -rf bin
 
-.PHONY: editor d bin clean
+.PHONY: editor d dd bin clean
 
 bin/hub: src/hub/hub.c $(wildcard src/hub/*) | bin
 	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@ $(CIMGUIRPATH)

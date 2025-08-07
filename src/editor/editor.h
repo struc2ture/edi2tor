@@ -202,7 +202,7 @@ typedef struct {
 
     bool should_break;
 
-    const struct Hub_Context *hub_context;
+    struct Hub_Context *hub_context;
 } Editor_State;
 
 typedef enum {
@@ -219,7 +219,7 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void editor_init(Editor_State *state, const struct Hub_Context *hub_context);
+void editor_init(Editor_State *state, struct Hub_Context *hub_context);
 void editor_frame(Editor_State *state, const struct Hub_Timing *t);
 void editor_event(Editor_State *state, const struct Hub_Event *e);
 void editor_destroy(Editor_State *state);

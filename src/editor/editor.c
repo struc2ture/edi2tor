@@ -27,7 +27,7 @@
 // ------------------------------------------------------------------------------------------------------------------------
 // HIGH LEVEL API
 
-void editor_init(Editor_State *state, const struct Hub_Context *hub_context)
+void editor_init(Editor_State *state, struct Hub_Context *hub_context)
 {
     bassert(sizeof(*state) < 4096);
 
@@ -116,7 +116,7 @@ void editor_event(Editor_State *state, const struct Hub_Event *e)
 
 void editor_destroy(Editor_State *state)
 {
-    action_save_workspace(state);
+    // action_save_workspace(state);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------

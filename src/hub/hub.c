@@ -1,21 +1,20 @@
-#include "hub.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#include "../lib/common.h"
-#include "../lib/glfw_helpers.h"
+#include "hub.h"
 #include "hub_internal.h"
 #include "scene.h"
+#include "../lib/common.h"
+#include "../lib/glfw_helpers.h"
 
 #define INITIAL_PROGRAM_NAME "hub"
 #define INITIAL_WINDOW_WIDTH 1000
 #define INITIAL_WINDOW_HEIGHT 900
 #define FPS_MEASUREMENT_FREQ 0.1f
 
-static struct Hub_State hub_state;
 static struct Hub_Context hub_context;
 static struct Hub_Timing hub_timing;
 static Vec_2 mouse_prev_pos;
@@ -40,10 +39,12 @@ void perform_timing_calculations(struct Hub_Timing *t)
 
 void dispatch_hub_event(const struct Hub_Event *e)
 {
-    for (int i = 0; i < hub_state.scene_count; i++)
+    scene_map_for_each(&hub_context.scene_map, s)
     {
-        hub_state.scenes[i].on_platform_event(hub_state.scenes[i].state, e);
+        s->on_platform_event(s->state, e);
     }
+    struct Scene *debug_scene = &hub_context.scene_map.debug_scene;
+    debug_scene->on_platform_event(debug_scene->state, e);
 }
 
 void char_callback(GLFWwindow *window, unsigned int codepoint)
@@ -123,11 +124,26 @@ void window_size_callback(GLFWwindow *window, int w, int h)
 
 void open_scene(const char *path)
 {
-    struct Scene *s = &hub_state.scenes[hub_state.scene_count++];
-    *s = scene_open(path);
+    struct Scene *s = scene_map_add(&hub_context.scene_map, scene_open(path), path);
     // TODO: Handle failed allocation
     s->state = calloc(1, 4096);
     s->on_init(s->state, &hub_context);
+}
+
+void open_debug_scene(const char *path)
+{
+    struct Scene *s = scene_map_add_debug_scene(&hub_context.scene_map, scene_open(path));
+    // TODO: Handle failed allocation
+    s->state = calloc(1, 4096);
+    s->on_init(s->state, &hub_context);
+}
+
+void close_scene(struct Scene *s)
+{
+    s->on_destroy(s->state);
+    free(s->state);
+    scene_map_remove(&hub_context.scene_map, s);
+    scene_close(s);
 }
 
 void run_scratch(const char *path)
@@ -137,14 +153,6 @@ void run_scratch(const char *path)
 
 int main(int argc, char **argv)
 {
-    if (argc < 2)
-    {
-        fprintf(stderr, "Usage: %s path/to/library.dylib\n", argv[0]);
-        return 1;
-    }
-
-    const char *scene_path = argv[1];
-
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -159,34 +167,9 @@ int main(int argc, char **argv)
 
     hub_trace("This is a message to make the codebase dirtier");
 
-    hub_state.scenes[hub_state.scene_count] = scene_open(scene_path);
-    // TODO: Handle failed allocation
-    hub_state.scenes[hub_state.scene_count].state = calloc(1, 4096);
-    hub_state.scene_count++;
-
     int window_w, window_h, window_px_w, window_px_h;
     glfwGetWindowSize(window, &window_w, &window_h);
     glfwGetFramebufferSize(window, &window_px_w, &window_px_h);
-
-    hub_context.open_scene = open_scene;
-    hub_context.run_scratch = run_scratch;
-
-    hub_context.window = window;
-    hub_context.window_w = window_w;
-    hub_context.window_h = window_h;
-    hub_context.window_px_w = window_px_w;
-    hub_context.window_px_h = window_px_h;
-    hub_context.is_live_scene = false;
-    hub_context.fbo = 0;
-    hub_context.argc = argc;
-    hub_context.argv = argv;
-    hub_context.scene_count = &hub_state.scene_count;
-    hub_context.scenes = hub_state.scenes;
-
-    for (int i = 0; i < hub_state.scene_count; i++)
-    {
-        hub_state.scenes[i].on_init(hub_state.scenes[i].state, &hub_context);
-    }
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetCharCallback(window, char_callback);
@@ -199,6 +182,28 @@ int main(int argc, char **argv)
 
     glfwSwapInterval(1);
 
+    hub_context.window = window;
+    hub_context.window_w = window_w;
+    hub_context.window_h = window_h;
+    hub_context.window_px_w = window_px_w;
+    hub_context.window_px_h = window_px_h;
+    hub_context.is_live_scene = false;
+    hub_context.fbo = 0;
+    hub_context.argc = argc;
+    hub_context.argv = argv;
+
+    hub_context.open_scene = open_scene;
+    hub_context.close_scene = close_scene;
+    hub_context.run_scratch = run_scratch;
+
+    open_debug_scene("bin/debug.dylib");
+    struct Scene *debug_scene = scene_map_get_debug_scene(&hub_context.scene_map);
+
+    for (int i = 1; i < argc; i++)
+    {
+        open_scene(argv[i]);
+    }
+
     dispatch_hub_event(&(struct Hub_Event) {
         .kind = HUB_EVENT_INPUT_CAPTURED,
         .input_captured.captured = true
@@ -209,34 +214,39 @@ int main(int argc, char **argv)
         // TODO: Re-implement F12 to break.
         // __builtin_debugtrap();
 
-        for (int i = 0; i < hub_state.scene_count; i++)
+        glViewport(0, 0, hub_context.window_px_w, hub_context.window_px_h);
+        glClearColor(0.9f, 0.2f, 0.2f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        scene_map_for_each(&hub_context.scene_map, s)
         {
-            struct Scene *s = &hub_state.scenes[i];
             if (scene_hotreload(s))
             {
                 s->on_reload(s->state);
             }
         }
+        if (scene_hotreload(debug_scene))
+        {
+            debug_scene->on_reload(debug_scene->state);
+        }
 
         perform_timing_calculations(&hub_timing);
 
-        for (int i = 0; i < hub_state.scene_count; i++)
+        scene_map_for_each(&hub_context.scene_map, s)
         {
-            struct Scene *s = &hub_state.scenes[i];
             s->on_frame(s->state, &hub_timing);
         }
+        debug_scene->on_frame(debug_scene->state, &hub_timing);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    for (int i = 0; i < hub_state.scene_count; i++)
+    scene_map_for_each(&hub_context.scene_map, s)
     {
-        struct Scene *s = &hub_state.scenes[i];
-        s->on_destroy(s->state);
-        free(s->state);
-        scene_close(s);
+        close_scene(s);
     }
+    close_scene(debug_scene);
 
     glfwDestroyWindow(window);
     glfwTerminate();
