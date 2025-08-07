@@ -6,7 +6,7 @@
 
 #include "editor.h"
 #include "history.h"
-#include "platform_types.h"
+// #include "platform_types.h"
 #include "scratch_runner.h"
 #include "string_builder.h"
 #include "text_buffer.h"
@@ -622,6 +622,12 @@ bool action_reload_workspace(Editor_State *state)
     }
 
     return action_load_workspace(state);
+}
+
+bool action_temp_load_scene(Editor_State *state)
+{
+    state->hub_context->open_scene("bin/live_cube.dylib");
+    return true;
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

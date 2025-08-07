@@ -1,6 +1,6 @@
 #include "live_cube.h"
 
-#include "common.h"
+#include "../common.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -10,7 +10,8 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#include "platform_types.h"
+#include "../hub/hub.h"
+// #include "platform_types.h"
 
 static bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -118,18 +119,18 @@ void _mat4_mul(mat4 out, mat4 a, mat4 b)
     memcpy(out, res, sizeof(mat4));
 }
 
-void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv)
+void on_init(Live_Cube_State *state, const struct Hub_Context *hub_context)
 {
-    if (!is_live_scene) glfwSetWindowTitle(window, "live_cube");
+    if (!hub_context->is_live_scene) glfwSetWindowTitle(hub_context->window, "live_cube");
 
-    state->window = window;
-    state->window_dim.x = window_w;
-    state->window_dim.y = window_h;
-    state->framebuffer_dim.x = window_px_w;
-    state->framebuffer_dim.y = window_px_h;
+    state->window = hub_context->window;
+    state->window_dim.x = hub_context->window_w;
+    state->window_dim.y = hub_context->window_h;
+    state->framebuffer_dim.x = hub_context->window_px_w;
+    state->framebuffer_dim.y = hub_context->window_px_h;
 
     const char *vs_src =
-        "#version 410 core\n"
+        "#version 330 core\n"
         "layout(location = 0) in vec3 aPos;\n"
         "layout(location = 1) in vec3 aColor;\n"
         "out vec3 Color;\n"
@@ -140,7 +141,7 @@ void on_init(Live_Cube_State *state, GLFWwindow *window, float window_w, float w
         "}\n";
 
     const char *fs_src =
-        "#version 410 core\n"
+        "#version 330 core\n"
         "in vec3 Color;\n"
         "out vec4 FragColor;\n"
         "void main() {\n"
@@ -191,14 +192,14 @@ void on_reload(Live_Cube_State *state)
     (void)state;
 }
 
-void on_frame(Live_Cube_State *state, const Platform_Timing *t)
+void on_frame(Live_Cube_State *state, const struct Hub_Timing *t)
 {
     glViewport(0, 0, (GLsizei)state->framebuffer_dim.x, (GLsizei)state->framebuffer_dim.y);
 
     glEnable(GL_DEPTH_TEST);
 
-    glClearColor(0.4f, 0.5f, 0.6f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // glClearColor(0.4f, 0.5f, 0.6f, 1.0f);
+    // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(state->prog);
     glBindVertexArray(state->vao);
 
@@ -229,11 +230,11 @@ void on_frame(Live_Cube_State *state, const Platform_Timing *t)
 
 #define TRANSLATION_SPEED 1.0f;
 
-void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
+void on_platform_event(Live_Cube_State *state, const struct Hub_Event *e)
 {
     switch (e->kind)
     {
-        case PLATFORM_EVENT_KEY:
+        case HUB_EVENT_KEY:
         {
             if (e->key.action == GLFW_PRESS)
             {
@@ -279,7 +280,7 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
             }
         } break;
 
-        case PLATFORM_EVENT_MOUSE_BUTTON:
+        case HUB_EVENT_MOUSE_BUTTON:
         {
             if (e->mouse_button.button == GLFW_MOUSE_BUTTON_LEFT)
             {
@@ -294,7 +295,7 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
             }
         } break;
 
-        case PLATFORM_EVENT_MOUSE_MOTION:
+        case HUB_EVENT_MOUSE_MOTION:
         {
             if (state->is_captured || state->is_mouse_drag)
             {
@@ -303,7 +304,7 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
             }
         } break;
 
-        case PLATFORM_EVENT_WINDOW_RESIZE:
+        case HUB_EVENT_WINDOW_RESIZE:
         {
             state->window_dim.x = e->window_resize.logical_w;
             state->window_dim.y = e->window_resize.logical_h;
@@ -311,7 +312,7 @@ void on_platform_event(Live_Cube_State *state, const Platform_Event *e)
             state->framebuffer_dim.y = e->window_resize.px_h;
         } break;
 
-        case PLATFORM_EVENT_INPUT_CAPTURED:
+        case HUB_EVENT_INPUT_CAPTURED:
         {
             if (e->input_captured.captured)
             {

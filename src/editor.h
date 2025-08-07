@@ -223,6 +223,8 @@ typedef struct {
     bool is_live_scene;
 
     bool should_break;
+
+    const struct Hub_Context *hub_context;
 } Editor_State;
 
 typedef enum {
@@ -239,14 +241,13 @@ typedef enum {
     FILE_KIND_DYLIB
 } File_Kind;
 
-void on_init(Editor_State *state, const struct Hub_Context *hub_context);
-void on_reload(Editor_State *state);
-void on_frame(Editor_State *state, const Platform_Timing *t);
-void on_platform_event(Editor_State *state, const Platform_Event *event);
-void on_destroy(Editor_State *state);
+void editor_init(Editor_State *state, const struct Hub_Context *hub_context);
+void editor_frame(Editor_State *state, const struct Hub_Timing *t);
+void editor_event(Editor_State *state, const struct Hub_Event *e);
+void editor_destroy(Editor_State *state);
 
-void editor_render(Editor_State *state, const Platform_Timing *t);
-void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t);
+void editor_render(Editor_State *state, const struct Hub_Timing *t);
+void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const struct Hub_Timing *t);
 void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canvas_viewport, Render_State *render_state, float delta_time);
 void render_view_buffer_text(Text_Buffer text_buffer, Viewport viewport, const Render_State *render_state);
 void render_view_buffer_cursor(Text_Buffer text_buffer, Display_Cursor *cursor, Viewport viewport, const Render_State *render_state, float delta_time);
@@ -254,8 +255,8 @@ void render_view_buffer_selection(Buffer_View *buffer_view, const Render_State *
 void render_view_buffer_line_numbers(Buffer_View *buffer_view, Viewport canvas_viewport, const Render_State *render_state);
 void render_view_buffer_name(Buffer_View *buffer_view, const char *name, bool is_active, Viewport canvas_viewport, const Render_State *render_state);
 void render_view_image(Image_View *image_view, const Render_State *render_state);
-void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const Platform_Timing *t);
-void render_status_bar(Editor_State *state, const Render_State *render_state, const Platform_Timing *t);
+void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const struct Hub_Timing *t);
+void render_status_bar(Editor_State *state, const Render_State *render_state, const struct Hub_Timing *t);
 
 void draw_quad(Rect q, Color c, const Render_State *render_state);
 void draw_texture(GLuint texture, Rect q, Color c, const Render_State *render_state);

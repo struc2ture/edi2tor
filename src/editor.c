@@ -27,7 +27,40 @@
 #include "util.h"
 #include "hub/hub.h"
 
+// ----------------------------------------------------------------------------------------
+// SCENE INTERFACE
+
+#ifndef EDITOR_STATIC_LIB
+
 void on_init(Editor_State *state, const struct Hub_Context *hub_context)
+{
+    editor_init(state, hub_context);
+}
+
+void on_reload(Editor_State *state)
+{
+}
+
+void on_frame(Editor_State *state, const struct Hub_Timing *t)
+{
+    editor_frame(state, t);
+}
+
+void on_platform_event(Editor_State *state, const struct Hub_Event *e)
+{
+    editor_event(state, e);
+}
+
+void on_destroy(Editor_State *state)
+{
+}
+
+#endif
+
+// ------------------------------------------------------------------------------------------------------------------------
+// HIGH LEVEL API
+
+void editor_init(Editor_State *state, const struct Hub_Context *hub_context)
 {
     bassert(sizeof(*state) < 4096);
 
@@ -35,9 +68,6 @@ void on_init(Editor_State *state, const struct Hub_Context *hub_context)
     if (!state->is_live_scene) glfwSetWindowTitle(hub_context->window, "edi2tor");
 
     state->window = hub_context->window;
-
-    hub_context->open_scene("hello world");
-    hub_context->run_scratch("hello world");
 
     initialize_render_state(
         &state->render_state,
@@ -64,74 +94,62 @@ void on_init(Editor_State *state, const struct Hub_Context *hub_context)
         state->working_dir = sys_get_working_dir();
     }
 
+    state->hub_context = hub_context;
+
     action_load_workspace(state);
 }
 
-void on_reload(Editor_State *state)
+void editor_frame(Editor_State *state, const struct Hub_Timing *t)
 {
-    (void)state;
-}
-
-void on_frame(Editor_State *state, const Platform_Timing *t)
-{
-    if (state->should_break)
-    {
-        __builtin_debugtrap();
-        state->should_break = false;
-    }
-
     input_mouse_update(state, t->prev_delta_time);
-
     editor_render(state, t);
 }
 
-void on_platform_event(Editor_State *state, const Platform_Event *e)
+void editor_event(Editor_State *state, const struct Hub_Event *e)
 {
-    (void)state; (void)e;
-
     if (state->input_capture_live_scene_view)
     {
-        if (e->kind == PLATFORM_EVENT_KEY && e->key.key == GLFW_KEY_F10 && e->key.action == GLFW_PRESS)
+        if (e->kind == HUB_EVENT_KEY && e->key.key == GLFW_KEY_F10 && e->key.action == GLFW_PRESS)
         {
             action_live_scene_toggle_capture_input(state);
             return;
         }
 
-        Live_Scene *ls = state->input_capture_live_scene_view->live_scene;\
-        Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, state->input_capture_live_scene_view, e);
-        ls->dylib.on_platform_event(ls->state, &adjusted_event);
+        // Live_Scene *ls = state->input_capture_live_scene_view->live_scene;
+        // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, state->input_capture_live_scene_view, e);
+        // ls->dylib.on_platform_event(ls->state, &adjusted_event);
 
         return;
     }
 
     switch (e->kind)
     {
-        case PLATFORM_EVENT_CHAR:
+        case HUB_EVENT_CHAR:
         {
             input_char_global(state, e);
         } break;
 
-        case PLATFORM_EVENT_KEY:
+        case HUB_EVENT_KEY:
         {
             input_key_global(state, e);
         } break;
 
-        case PLATFORM_EVENT_MOUSE_BUTTON:
+        case HUB_EVENT_MOUSE_BUTTON:
         {
             input_mouse_button_global(state, e);
         } break;
 
-        case PLATFORM_EVENT_MOUSE_MOTION:
+        case HUB_EVENT_MOUSE_MOTION:
         {
             input_mouse_motion_global(state, e);
         } break;
 
-        case PLATFORM_EVENT_MOUSE_SCROLL:
+        case HUB_EVENT_MOUSE_SCROLL:
         {
             input_mouse_scroll_global(state, e);
         } break;
 
-        case PLATFORM_EVENT_WINDOW_RESIZE:
+        case HUB_EVENT_WINDOW_RESIZE:
         {
             state->render_state.window_dim.x = e->window_resize.logical_w;
             state->render_state.window_dim.y = e->window_resize.logical_h;
@@ -145,7 +163,7 @@ void on_platform_event(Editor_State *state, const Platform_Event *e)
     }
 }
 
-void on_destroy(Editor_State *state)
+void editor_destroy(Editor_State *state)
 {
     action_save_workspace(state);
 
@@ -157,13 +175,13 @@ void on_destroy(Editor_State *state)
 
 // ------------------------------------------------------------------------------------------------------------------------
 
-void editor_render(Editor_State *state, const Platform_Timing *t)
+void editor_render(Editor_State *state, const struct Hub_Timing *t)
 {
     glViewport(0, 0, (GLsizei)state->render_state.framebuffer_dim.x, (GLsizei)state->render_state.framebuffer_dim.y);
 
     glClearColor(0.4f, 0.3f, 0.1f, 1.0f);
     glDisable(GL_SCISSOR_TEST);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(state->render_state.vao);
     glBindBuffer(GL_ARRAY_BUFFER, state->render_state.vbo);
 
@@ -206,7 +224,7 @@ void editor_render(Editor_State *state, const Platform_Timing *t)
     // TODO: Can I query GL scissor state, for validation? and other glEnable things...
 }
 
-void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const Platform_Timing *t)
+void render_view(View *view, bool is_active, Viewport canvas_viewport, Render_State *render_state, const struct Hub_Timing *t)
 {
     if (is_active)
         draw_quad(view->outer_rect, (Color){40, 40, 40, 255}, render_state);
@@ -419,14 +437,14 @@ void render_view_image(Image_View *image_view, const Render_State *render_state)
     draw_texture(image_view->image.texture, image_view->image_rect, (Color){255, 255, 255, 255}, render_state);
 }
 
-void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const Platform_Timing *t)
+void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const struct Hub_Timing *t)
 {
     // TODO: Keep pointers to live scenes in an array and run live scene updates separately, before rendering
     live_scene_check_hot_reload(ls_view->live_scene);
 
     glBindFramebuffer(GL_FRAMEBUFFER, ls_view->framebuffer.fbo);
 
-    ls_view->live_scene->dylib.on_frame(ls_view->live_scene->state, t);
+    // ls_view->live_scene->dylib.on_frame(ls_view->live_scene->state, t);
 
     glBindFramebuffer(GL_FRAMEBUFFER, render_state->default_fbo);
     glViewport(0, 0, (int)render_state->framebuffer_dim.x, (int)render_state->framebuffer_dim.y);
@@ -451,7 +469,7 @@ void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render
     glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
 }
 
-void render_status_bar(Editor_State *state, const Render_State *render_state, const Platform_Timing *t)
+void render_status_bar(Editor_State *state, const Render_State *render_state, const struct Hub_Timing *t)
 {
     const float font_line_height = get_font_line_height(render_state->font);
     const float x_padding = 10;
@@ -950,14 +968,14 @@ void view_set_rect(View *view, Rect rect, const Render_State *render_state)
             view->lsv.framebuffer_rect.w = rect.w - 2 * render_state->buffer_view_padding;
             view->lsv.framebuffer_rect.h = rect.h - 2 * render_state->buffer_view_padding;
 
-            Platform_Event resize_event;
-            resize_event.kind = PLATFORM_EVENT_WINDOW_RESIZE;
+            struct Hub_Event resize_event;
+            resize_event.kind = HUB_EVENT_WINDOW_RESIZE;
             resize_event.window_resize.logical_w = view->lsv.framebuffer_rect.w;
             resize_event.window_resize.logical_h = view->lsv.framebuffer_rect.h;
             // TODO: Actually recreate framebuffer texture if size changed
             resize_event.window_resize.px_w = (float)view->lsv.framebuffer.w;
             resize_event.window_resize.px_h = (float)view->lsv.framebuffer.h;
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &resize_event);
+            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &resize_event);
         } break;
     }
 }

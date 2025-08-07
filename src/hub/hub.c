@@ -123,7 +123,11 @@ void window_size_callback(GLFWwindow *window, int w, int h)
 
 void open_scene(const char *path)
 {
-    hub_trace("open %s", path);
+    struct Scene *s = &hub_state.scenes[hub_state.scene_count++];
+    *s = scene_open(path);
+    // TODO: Handle failed allocation
+    s->state = calloc(1, 4096);
+    s->on_init(s->state, &hub_context);
 }
 
 void run_scratch(const char *path)
@@ -200,6 +204,9 @@ int main(int argc, char **argv)
 
     while (!glfwWindowShouldClose(window))
     {
+        // TODO: Re-implement F12 to break.
+        // __builtin_debugtrap();
+
         for (int i = 0; i < hub_state.scene_count; i++)
         {
             struct Scene *s = &hub_state.scenes[i];

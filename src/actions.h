@@ -17,6 +17,7 @@ bool action_load_workspace(Editor_State *state);
 bool action_reload_workspace(Editor_State *state);
 bool action_run_scratch(Editor_State *state);
 bool action_reset_scratch(Editor_State *state);
+bool action_temp_load_scene(Editor_State *state);
 
 bool action_buffer_view_move_cursor(Editor_State *state, Buffer_View *buffer_view, Cursor_Movement_Dir dir, bool with_shift, bool with_alt, bool with_super);
 bool action_buffer_view_prompt_submit(Editor_State *state, Buffer_View *buffer_view);

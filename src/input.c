@@ -7,9 +7,9 @@
 #include "actions.h"
 #include "editor.h"
 #include "glfw_helpers.h"
-#include "platform_types.h"
+// #include "platform_types.h"
 
-void input_char_global(Editor_State *state, const Platform_Event *e)
+void input_char_global(Editor_State *state, const struct Hub_Event *e)
 {
     if (state->active_view != NULL)
     {
@@ -17,7 +17,7 @@ void input_char_global(Editor_State *state, const Platform_Event *e)
     }
 }
 
-void input_char_view(Editor_State *state, View *view, const Platform_Event *e)
+void input_char_view(Editor_State *state, View *view, const struct Hub_Event *e)
 {
     switch (view->kind)
     {
@@ -33,12 +33,12 @@ void input_char_view(Editor_State *state, View *view, const Platform_Event *e)
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
         } break;
     }
 }
 
-void input_key_global(Editor_State *state, const Platform_Event *e)
+void input_key_global(Editor_State *state, const struct Hub_Event *e)
 {
     bool will_propagate_to_view = true;
     View *prev_active_view = state->active_view;
@@ -55,6 +55,10 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
                 case GLFW_KEY_F2:
                 {
                     action_change_working_dir(state);
+                } break;
+                case GLFW_KEY_F3:
+                {
+                    action_temp_load_scene(state);
                 } break;
                 case GLFW_KEY_F5:
                 {
@@ -133,7 +137,7 @@ void input_key_global(Editor_State *state, const Platform_Event *e)
         input_key_view(state, prev_active_view, e);
     }
 }
-void input_key_view(Editor_State *state, View *view, const Platform_Event *e)
+void input_key_view(Editor_State *state, View *view, const struct Hub_Event *e)
 {
     switch (view->kind)
     {
@@ -149,12 +153,12 @@ void input_key_view(Editor_State *state, View *view, const Platform_Event *e)
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
+            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, e);
         } break;
     }
 }
 
-void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
+void input_key_buffer_view(Editor_State *state, Buffer_View *buffer_view, const struct Hub_Event *e)
 {
     if (e->key.action == GLFW_PRESS || e->key.action == GLFW_REPEAT)
     {
@@ -314,7 +318,7 @@ void input_mouse_update(Editor_State *state, float delta_time)
     }
 }
 
-void input_mouse_motion_global(Editor_State *state, const Platform_Event *e)
+void input_mouse_motion_global(Editor_State *state, const struct Hub_Event *e)
 {
     Mouse_State *m_state = &state->mouse_state;
     m_state->pos = e->mouse_motion.pos;
@@ -343,7 +347,7 @@ void input_mouse_motion_global(Editor_State *state, const Platform_Event *e)
     }
 }
 
-void input_mouse_motion_view(Editor_State *state, View *view, const Platform_Event *e)
+void input_mouse_motion_view(Editor_State *state, View *view, const struct Hub_Event *e)
 {
     switch (view->kind)
     {
@@ -359,13 +363,13 @@ void input_mouse_motion_view(Editor_State *state, View *view, const Platform_Eve
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
+            // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
+            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
         } break;
     }
 }
 
-void input_mouse_motion_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
+void input_mouse_motion_buffer_view(Editor_State *state, Buffer_View *buffer_view, const struct Hub_Event *e)
 {
     if (buffer_view->is_mouse_drag)
     {
@@ -374,7 +378,7 @@ void input_mouse_motion_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     }
 }
 
-void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
+void input_mouse_button_global(Editor_State *state, const struct Hub_Event *e)
 {
     if (e->mouse_button.button == GLFW_MOUSE_BUTTON_LEFT)
     {
@@ -458,7 +462,7 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
     }
 }
 
-bool input_mouse_button_view(Editor_State *state, View *view, const Platform_Event *e)
+bool input_mouse_button_view(Editor_State *state, View *view, const struct Hub_Event *e)
 {
     switch (view->kind)
     {
@@ -474,14 +478,14 @@ bool input_mouse_button_view(Editor_State *state, View *view, const Platform_Eve
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
+            // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
+            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
         } break;
     }
     return false;
 }
 
-void input_mouse_button_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
+void input_mouse_button_buffer_view(Editor_State *state, Buffer_View *buffer_view, const struct Hub_Event *e)
 {
     if (e->mouse_button.action == GLFW_PRESS)
     {
@@ -509,7 +513,7 @@ void input_mouse_button_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     }
 }
 
-void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
+void input_mouse_scroll_global(Editor_State *state, const struct Hub_Event *e)
 {
     if (state->mouse_state.scroll_timeout <= 0.0f)
     {
@@ -530,7 +534,7 @@ void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
     }
 }
 
-bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Event *e)
+bool input_mouse_scroll_view(Editor_State *state, View *view, const struct Hub_Event *e)
 {
     switch (view->kind)
     {
@@ -547,15 +551,15 @@ bool input_mouse_scroll_view(Editor_State *state, View *view, const Platform_Eve
 
         case VIEW_KIND_LIVE_SCENE:
         {
-            Platform_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
-            view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
+            // struct Hub_Event adjusted_event = input__adjust_mouse_event_for_live_scene_view(state, &view->lsv, e);
+            // view->lsv.live_scene->dylib.on_platform_event(view->lsv.live_scene->state, &adjusted_event);
             return true;
         } break;
     }
     return false;
 }
 
-void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const Platform_Event *e)
+void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_view, const struct Hub_Event *e)
 {
     buffer_view->viewport.rect.x -= e->mouse_scroll.scroll.x * SCROLL_SENS;
     buffer_view->viewport.rect.y -= e->mouse_scroll.scroll.y * SCROLL_SENS;
@@ -569,9 +573,9 @@ void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_vie
     if (buffer_view->viewport.rect.y > buffer_max_y) buffer_view->viewport.rect.y = buffer_max_y;
 }
 
-Platform_Event input__adjust_mouse_event_for_live_scene_view(Editor_State *state, Live_Scene_View *lsv, const Platform_Event *e)
+struct Hub_Event input__adjust_mouse_event_for_live_scene_view(Editor_State *state, Live_Scene_View *lsv, const struct Hub_Event *e)
 {
-    Platform_Event adjusted_event = *e;
+    struct Hub_Event adjusted_event = *e;
     Vec_2 offset = canvas_pos_to_screen_pos((Vec_2){lsv->framebuffer_rect.x, lsv->framebuffer_rect.y}, state->canvas_viewport);
     switch (adjusted_event.kind)
     {
