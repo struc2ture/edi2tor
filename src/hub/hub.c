@@ -5,8 +5,8 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#include "../common.h"
-#include "../glfw_helpers.h"
+#include "../lib/common.h"
+#include "../lib/glfw_helpers.h"
 #include "hub_internal.h"
 #include "scene.h"
 

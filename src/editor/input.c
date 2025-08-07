@@ -1,13 +1,12 @@
 #include "input.h"
 
-#include "common.h"
+#include "../lib/common.h"
 
 #include <GLFW/glfw3.h>
 
 #include "actions.h"
 #include "editor.h"
-#include "glfw_helpers.h"
-// #include "platform_types.h"
+#include "../lib/glfw_helpers.h"
 
 void input_char_global(Editor_State *state, const struct Hub_Event *e)
 {

@@ -14,15 +14,15 @@
 #include <stb_truetype.h>
 
 #include "actions.h"
-#include "common.h"
+#include "../lib/common.h"
 #include "input.h"
 #include "history.h"
-#include "misc.h"
+#include "../lib/misc.h"
 // #include "platform_types.h"
-#include "shaders.h"
+#include "../lib/shaders.h"
 #include "text_buffer.h"
-#include "util.h"
-#include "hub/hub.h"
+#include "../lib/util.h"
+#include "../hub/hub.h"
 
 // ------------------------------------------------------------------------------------------------------------------------
 // HIGH LEVEL API
@@ -212,7 +212,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
         mvp_update_from_stacks(render_state);
 
         Rect text_area_screen_rect = canvas_rect_to_screen_rect(text_area_rect, canvas_viewport);
-        gl_enable_scissor(text_area_screen_rect, render_state);
+        gl_enable_scissor(text_area_screen_rect, render_state->dpi_scale, render_state->window_dim.y);
         {
             render_view_buffer_text(*text_buffer, *buffer_viewport, render_state);
             if (is_active)
@@ -239,7 +239,7 @@ void render_view_buffer(Buffer_View *buffer_view, bool is_active, Viewport canva
         mvp_update_from_stacks(render_state);
 
         Rect line_num_col_screen_rect = canvas_rect_to_screen_rect(line_num_col_rect, canvas_viewport);
-        gl_enable_scissor(line_num_col_screen_rect, render_state);
+        gl_enable_scissor(line_num_col_screen_rect, render_state->dpi_scale, render_state->window_dim.y);
         {
 
             render_view_buffer_line_numbers(buffer_view, canvas_viewport, render_state);
@@ -1714,7 +1714,7 @@ bool rect_p_intersect(Vec_2 p, Rect rect)
 #include "actions.c"
 #include "input.c"
 #include "history.c"
-#include "misc.c"
-#include "string_builder.c"
+#include "../lib/misc.c"
+#include "../lib/string_builder.c"
 #include "text_buffer.c"
 #include "unit_tests.c"

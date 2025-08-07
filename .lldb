@@ -1,4 +1,0 @@
-command script import ~/.lldb/scripts/helpers.py
-command script add -f helpers.make_and_run mr
-
-file bin/hub

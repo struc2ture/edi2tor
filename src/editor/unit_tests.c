@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "string_builder.h"
+#include "../lib/string_builder.h"
 #include "text_buffer.h"
 
 typedef struct

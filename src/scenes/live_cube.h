@@ -1,12 +1,11 @@
 #pragma once
 
-#include "../common.h" // IWYU pragma: keep
 
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
 #include "../hub/hub.h"
-// #include "platform_types.h"
+#include "../lib/common.h"
 
 typedef struct {
     Vec_2 window_dim;

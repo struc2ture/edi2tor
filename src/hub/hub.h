@@ -3,7 +3,7 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#include "../common.h"
+#include "../lib/common.h"
 
 #define MAX_SCENES 8
 

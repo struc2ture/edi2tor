@@ -1,5 +1,5 @@
 #include "../hub/hub.h"
-#include "../editor.h"
+#include "../editor/editor.h"
 
 void on_init(Editor_State *state, const struct Hub_Context *hub_context)
 {

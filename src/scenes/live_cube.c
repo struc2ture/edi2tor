@@ -1,7 +1,5 @@
 #include "live_cube.h"
 
-#include "../common.h"
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +9,7 @@
 #include <GLFW/glfw3.h>
 
 #include "../hub/hub.h"
-// #include "platform_types.h"
+#include "../lib/common.h"
 
 static bool gl_check_compile_success(GLuint shader, const char *src)
 {

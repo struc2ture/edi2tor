@@ -3,8 +3,8 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-#include "string_builder.h"
-#include "util.h"
+#include "../lib/string_builder.h"
+#include "../lib/util.h"
 
 bool cursor_pos_eq(Cursor_Pos a, Cursor_Pos b)
 {

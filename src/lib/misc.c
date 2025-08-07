@@ -7,7 +7,6 @@
 #include <OpenGL/gl3.h>
 
 #include "common.h"
-#include "editor.h" // IWYU pragma: keep
 #include "util.h"
 
 bool gl_check_compile_success(GLuint shader, const char *src)
@@ -61,16 +60,16 @@ GLuint gl_create_shader_program(const char *vs_src, const char *fs_src)
     return prog;
 }
 
-void gl_enable_scissor(Rect screen_rect, Render_State *render_state)
+void gl_enable_scissor(Rect screen_rect, float dpi_scale, float window_h)
 {
     glEnable(GL_SCISSOR_TEST);
     Rect scaled_rect = {
-        .x = screen_rect.x * render_state->dpi_scale,
-        .y = screen_rect.y * render_state->dpi_scale,
-        .w = screen_rect.w * render_state->dpi_scale,
-        .h = screen_rect.h * render_state->dpi_scale
+        .x = screen_rect.x * dpi_scale,
+        .y = screen_rect.y * dpi_scale,
+        .w = screen_rect.w * dpi_scale,
+        .h = screen_rect.h * dpi_scale
     };
-    float scaled_window_h = render_state->window_dim.y * render_state->dpi_scale;
+    float scaled_window_h = window_h * dpi_scale;
     GLint scissor_x = (GLint)floor(scaled_rect.x);
     float screen_rect_topdown_bottom_y = scaled_rect.y + scaled_rect.h;
     float screen_rect_bottomup_bottom_y = scaled_window_h - screen_rect_topdown_bottom_y;

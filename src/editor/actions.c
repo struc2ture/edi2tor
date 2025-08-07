@@ -1,15 +1,15 @@
 #include "actions.h"
 
-#include "common.h"
+#include "../lib/common.h"
 
 #include <GLFW/glfw3.h>
 
 #include "editor.h"
 #include "history.h"
-#include "string_builder.h"
+#include "../lib/string_builder.h"
 #include "text_buffer.h"
 #include "unit_tests.h"
-#include "util.h"
+#include "../lib/util.h"
 
 bool action_run_unit_tests(Editor_State *state)
 {

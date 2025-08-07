@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "../lib/common.h"
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -12,9 +12,8 @@
 #include <stb_truetype.h>
 
 #include "history.h"
-#include "hub/hub.h"
-#include "misc.h"
-// #include "platform_types.h"
+#include "../hub/hub.h"
+#include "../lib/misc.h"
 #include "text_buffer.h"
 
 #define VERT_MAX 8192
@@ -34,7 +33,6 @@
 // #define FILE_PATH1 "res/mock4.txt"
 #define FILE_PATH2 "src/editor.c"
 #define IMAGE_PATH "res/DUCKS.png"
-#define LIVE_CUBE_PATH "bin/live_cube.dylib"
 #define E2_WORKSPACE ".e2/workspace"
 #define E2_TEMP_FILES ".e2/temp_files"
 
