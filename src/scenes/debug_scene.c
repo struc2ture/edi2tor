@@ -9,6 +9,8 @@
 
 #include "../hub/hub.h"
 #include "../hub/scene.h"
+#include "../editor/editor.h"
+#include "../lib/util.h"
 
 struct State
 {
@@ -17,7 +19,9 @@ struct State
     struct ImGuiIO* imgui_io;
     GLFWwindow *window;
     bool is_demo_open;
-    bool is_scene_debug_open;
+    bool is_hub_debug_open;
+    bool is_editor_debug_open;
+    char open_scene_buf[256];
 };
 
 void on_init(struct State *state, const struct Hub_Context *hub_context)
@@ -43,6 +47,66 @@ void on_reload(void *state)
 {
 }
 
+void hub_debug(struct State *state)
+{
+    if (igBegin("Hub Debug", &state->is_hub_debug_open, ImGuiWindowFlags_None))
+    {
+        if (igCollapsingHeader_TreeNodeFlags("Scenes", 0))
+        {
+            igInputText("##OpenScene", state->open_scene_buf, array_size(state->open_scene_buf), 0, NULL, NULL);
+            igSameLine(0, 10);
+            if (igButton("Open Scene", (ImVec2){0}))
+            {
+                state->hub_context->open_scene(state->open_scene_buf);
+            }
+
+            igSpacing();
+
+            for (int i = 0; i < *state->hub_context->scene_count; i++)
+            {
+                igPushID_Int(i);
+
+                const struct Scene *s = &state->hub_context->scenes[i];
+                igBulletText(s->original_path);
+
+                igSameLine(0, 10);
+
+                bool temp;
+                igCheckbox("I", &temp);
+
+                igSameLine(0, 10);
+
+                if (igButton("X", (ImVec2){0}))
+                {
+                }
+
+                igPopID();
+            }
+        }
+    }
+    igEnd();
+}
+
+void editor_debug(struct State *state)
+{
+    if (igBegin("Editor Debug", &state->is_editor_debug_open, ImGuiWindowFlags_None))
+    {
+        const struct Scene *editor_scene = &state->hub_context->scenes[0];
+        const Editor_State *editor_state = (Editor_State *)editor_scene->state;
+        for (int i = 0; i < editor_state->view_count; i++)
+        {
+            const View *v = editor_state->views[i];
+            if (v->kind == VIEW_KIND_BUFFER)
+            {
+                if (v->bv.buffer->file_path) igBulletText(v->bv.buffer->file_path);
+                else igBulletText("Buffer View");
+            }
+            else igBulletText("Image View");
+        }
+    }
+    igEnd();
+}
+
 void on_frame(struct State *state, const struct Hub_Timing *t)
 {
     ImGui_ImplOpenGL3_NewFrame();
@@ -51,15 +115,8 @@ void on_frame(struct State *state, const struct Hub_Timing *t)
 
     igShowDemoWindow(&state->is_demo_open);
 
-    if (igBegin("Hello World", &state->is_scene_debug_open, ImGuiWindowFlags_None))
-    {
-        for (int i = 0; i < *state->hub_context->scene_count; i++)
-        {
-            const struct Scene *s = &state->hub_context->scenes[i];
-            igBulletText(s->original_path);
-        }
-    }
-    igEnd();
+    hub_debug(state);
+    editor_debug(state);
 
     igRender();
     ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());

@@ -12,7 +12,18 @@
 #include <time.h>
 #include <unistd.h>
 
-inline static void bassert(bool condition)
+/* 
+ * __builtin_types_compatible_p (GCC/Clang) checks if typeof(arr) is the same as typeof(&(arr)[0]) (a pointer type).
+ * If they match -> pointer passed -> expression becomes int:-1, which is invalid -> compile error.
+ * If it’s an array -> types differ -> !!0 -> no error.
+ * #define array_size(ARR) \
+ *     (sizeof(ARR) / sizeof((ARR)[0]) + \
+ *      sizeof(struct { int:-!!__builtin_types_compatible_p(typeof(ARR), typeof(&(ARR)[0])); }))
+ */
+
+#define array_size(ARR) (sizeof(ARR) / sizeof((ARR)[0]))
+
+     inline static void bassert(bool condition)
 {
     if (!condition) __builtin_debugtrap();
 }
@@ -244,3 +255,5 @@ static char *read_file(const char *path, size_t *out_size)
     fclose(f);
     return buf;
 }
+
+
