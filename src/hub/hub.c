@@ -121,6 +121,16 @@ void window_size_callback(GLFWwindow *window, int w, int h)
     dispatch_hub_event(&e);
 }
 
+void open_scene(const char *path)
+{
+    hub_trace("open %s", path);
+}
+
+void run_scratch(const char *path)
+{
+    hub_trace("run scratch %s", path);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2)
@@ -151,6 +161,9 @@ int main(int argc, char **argv)
     int window_w, window_h, window_px_w, window_px_h;
     glfwGetWindowSize(window, &window_w, &window_h);
     glfwGetFramebufferSize(window, &window_px_w, &window_px_h);
+
+    hub_context.open_scene = open_scene;
+    hub_context.run_scratch = run_scratch;
 
     hub_context.window = window;
     hub_context.window_w = window_w;

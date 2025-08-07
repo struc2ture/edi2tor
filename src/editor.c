@@ -36,6 +36,9 @@ void on_init(Editor_State *state, const struct Hub_Context *hub_context)
 
     state->window = hub_context->window;
 
+    hub_context->open_scene("hello world");
+    hub_context->run_scratch("hello world");
+
     initialize_render_state(
         &state->render_state,
         hub_context->window_w,
