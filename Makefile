@@ -2,7 +2,7 @@ CC = clang
 CFLAGS = -g -I/opt/homebrew/include -Ithird_party -DGL_SILENCE_DEPRECATION -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -Wno-unused-variable
 LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 
-editor: bin/platform bin/editor.dylib
+editor: bin/platform bin/hub bin/editor.dylib
 
 bin/hub: src/hub/hub.c src/hub/hub.h src/hub/hub_internal.h src/hub/scene.c src/hub/scene.h | bin
 	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@
@@ -28,7 +28,7 @@ runcube: bin/platform bin/live_cube.dylib
 bin:
 	mkdir -p bin
 
-debug: bin/platform bin/editor.dylib
+debug: bin/hub bin/editor.dylib
 	lldb -s .lldb
 
 clean:

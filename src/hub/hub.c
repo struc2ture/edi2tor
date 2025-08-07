@@ -153,6 +153,8 @@ int main(int argc, char **argv)
     hub_trace("OpenGL Renderer: %s", glGetString(GL_RENDERER));
     hub_trace("OpenGL Version: %s", glGetString(GL_VERSION));
 
+    hub_trace("This is a message to make the codebase dirtier");
+
     hub_state.scenes[hub_state.scene_count] = scene_open(scene_path);
     // TODO: Handle failed allocation
     hub_state.scenes[hub_state.scene_count].state = calloc(1, 4096);
