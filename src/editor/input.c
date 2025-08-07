@@ -50,10 +50,6 @@ void input_key_global(Editor_State *state, const struct Hub_Event *e)
                 {
                     action_change_working_dir(state);
                 } break;
-                case GLFW_KEY_F3:
-                {
-                    action_temp_load_scene(state);
-                } break;
             }
         }
         else if (e->key.mods == GLFW_MOD_SHIFT)
@@ -78,6 +74,14 @@ void input_key_global(Editor_State *state, const struct Hub_Event *e)
                 case GLFW_KEY_2:
                 {
                     action_open_test_image(state);
+                } break;
+                case GLFW_KEY_3:
+                {
+                    action_temp_load_debug_scene(state);
+                } break;
+                case GLFW_KEY_4:
+                {
+                    action_temp_load_cube_scene(state);
                 } break;
                 case GLFW_KEY_O:
                 {

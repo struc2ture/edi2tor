@@ -180,6 +180,8 @@ int main(int argc, char **argv)
     hub_context.fbo = 0;
     hub_context.argc = argc;
     hub_context.argv = argv;
+    hub_context.scene_count = &hub_state.scene_count;
+    hub_context.scenes = hub_state.scenes;
 
     for (int i = 0; i < hub_state.scene_count; i++)
     {

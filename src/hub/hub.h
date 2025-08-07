@@ -89,7 +89,7 @@ typedef void (*hub_run_scratch_t)(const char *path);
 struct Hub_Context
 {
     struct Scene *scenes;
-    int scene_count;
+    const int *scene_count;
 
     hub_open_scene_t open_scene;
     hub_run_scratch_t run_scratch;

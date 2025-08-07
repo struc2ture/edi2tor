@@ -519,9 +519,15 @@ bool action_reload_workspace(Editor_State *state)
     return action_load_workspace(state);
 }
 
-bool action_temp_load_scene(Editor_State *state)
+bool action_temp_load_debug_scene(Editor_State *state)
 {
     state->hub_context->open_scene("bin/debug.dylib");
+    return true;
+}
+
+bool action_temp_load_cube_scene(Editor_State *state)
+{
+    state->hub_context->open_scene("bin/cube.dylib");
     return true;
 }
 

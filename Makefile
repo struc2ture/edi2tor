@@ -2,10 +2,12 @@ CC = clang
 CFLAGS = -g -I/opt/homebrew/include -Ithird_party -DGL_SILENCE_DEPRECATION -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -Wno-unused-variable
 LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 
+CIMGUIRPATH = -Wl,-rpath,/Users/struc/dev/other/cimgui/backend_test/example_glfw_opengl3/build
+
 editor: bin/hub bin/editor.dylib
 
 d: bin/hub bin/editor.dylib
-	DYLD_LIBRARY_PATH=/Users/struc/dev/other/cimgui lldb bin/hub -o run -- bin/editor.dylib
+	lldb bin/hub -o run -- bin/editor.dylib
 
 bin:
 	mkdir -p bin
@@ -16,7 +18,7 @@ clean:
 .PHONY: editor d bin clean
 
 bin/hub: src/hub/hub.c $(wildcard src/hub/*) | bin
-	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $(LFLAGS) $< -o $@ $(CIMGUIRPATH)
 
 bin/editor_api.o: src/editor/editor.c $(wildcard src/editor/*) $(wildcard src/lib/*) | bin
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -28,4 +30,4 @@ bin/cube.dylib: src/scenes/cube.c | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@
 
 bin/debug.dylib: src/scenes/debug_scene.c | bin
-	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) -I/Users/struc/dev/other/cimgui /Users/struc/dev/other/cimgui/cimgui.dylib $< -o $@
+	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) -I/Users/struc/dev/other/cimgui -L/Users/struc/dev/other/cimgui/backend_test/example_glfw_opengl3/build -lcimgui $< -o $@
