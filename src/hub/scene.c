@@ -237,3 +237,35 @@ void scene_map_remove(struct Scene_Map *m, struct Scene *s)
 
     m->size--;
 }
+
+bool scene_map_swap_up(struct Scene_Map *m, struct Scene *s)
+{
+    int i = s - m->scenes;
+    if (i > 0)
+    {
+        struct Scene temp = m->scenes[i - 1];
+        m->scenes[i - 1] = m->scenes[i];
+        m->scenes[i] = temp;
+        char *temp_name = m->names[i - 1];
+        m->names[i - 1] = m->names[i];
+        m->names[i] = temp_name;
+        return true;
+    }
+    return false;
+}
+
+bool scene_map_swap_down(struct Scene_Map *m, struct Scene *s)
+{
+    int i = s - m->scenes;
+    if (i < m->size - 1)
+    {
+        struct Scene temp = m->scenes[i + 1];
+        m->scenes[i + 1] = m->scenes[i];
+        m->scenes[i] = temp;
+        char *temp_name = m->names[i + 1];
+        m->names[i + 1] = m->names[i];
+        m->names[i] = temp_name;
+        return true;
+    }
+    return false;
+}

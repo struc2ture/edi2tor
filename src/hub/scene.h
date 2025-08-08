@@ -50,6 +50,8 @@ struct Scene *scene_map_get_debug_scene(struct Scene_Map *m);
 struct Scene *scene_map_get_by_name(struct Scene_Map *m, const char *name);
 char *scene_map_get_name(struct Scene_Map *m, struct Scene *s);
 void scene_map_remove(struct Scene_Map *m, struct Scene *s);
+bool scene_map_swap_up(struct Scene_Map *m, struct Scene *s);
+bool scene_map_swap_down(struct Scene_Map *m, struct Scene *s);
 
 static inline struct Scene *scene_map_begin(struct Scene_Map *m)
 {

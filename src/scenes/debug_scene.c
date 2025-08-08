@@ -82,6 +82,20 @@ void hub_debug(struct State *state)
                     state->hub_context->close_scene(s);
                 }
 
+                igSameLine(0, 10);
+
+                if (igButton("^", (ImVec2){0}))
+                {
+                    scene_map_swap_up(&state->hub_context->scene_map, s);
+                }
+
+                igSameLine(0, 10);
+
+                if (igButton("v", (ImVec2){0}))
+                {
+                    scene_map_swap_down(&state->hub_context->scene_map, s);
+                }
+
                 igPopID();
             }
         }
