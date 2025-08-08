@@ -35,7 +35,7 @@ void on_init(struct State *state, struct Hub_Context *hub_context)
     ImGui_ImplGlfw_InitForOpenGL(state->window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    igStyleColorsDark(NULL);
+    igStyleColorsLight(NULL);
 
     float main_scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor()); // Valid on GLFW 3.3+ only
     ImGuiStyle* style = igGetStyle();
