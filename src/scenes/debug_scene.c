@@ -11,6 +11,7 @@
 #include "../hub/scene.h"
 #include "../editor/editor.h"
 #include "../lib/util.h"
+#include "cube/cube.h"
 
 struct State
 {
@@ -21,6 +22,7 @@ struct State
     bool is_demo_open;
     bool is_hub_debug_open;
     bool is_editor_debug_open;
+    bool is_cube_debug_open;
     char open_scene_buf[256];
 };
 
@@ -110,6 +112,21 @@ void editor_debug(struct State *state)
     }
 }
 
+void cube_debug(struct State *state)
+{
+    const struct Scene *cube_scene = scene_map_get_by_name(&state->hub_context->scene_map, "bin/cube.dylib");
+    if (cube_scene)
+    {
+        if (igBegin("Cube Debug", &state->is_cube_debug_open, ImGuiWindowFlags_None))
+        {
+            Cube_State *cube_state = (Cube_State *)cube_scene->state;
+            igSliderAngle("Roll", &cube_state->angle_roll, -360, 360, "%.0f deg", 0);
+            igSliderAngle("Yaw", &cube_state->angle_yaw, -360, 360, "%.0f deg", 0);
+        }
+        igEnd();
+    }
+}
+
 void on_frame(struct State *state, const struct Hub_Timing *t)
 {
     ImGui_ImplOpenGL3_NewFrame();
@@ -120,6 +137,7 @@ void on_frame(struct State *state, const struct Hub_Timing *t)
 
     hub_debug(state);
     editor_debug(state);
+    cube_debug(state);
 
     igRender();
     ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());

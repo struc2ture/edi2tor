@@ -29,7 +29,7 @@ bin/editor_api.o: src/editor/editor.c $(wildcard src/editor/*) $(wildcard src/li
 bin/editor.dylib: src/scenes/editor_scene.c bin/editor_api.o | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< bin/editor_api.o -o $@
 
-bin/cube.dylib: src/scenes/cube.c | bin
+bin/cube.dylib: src/scenes/cube/cube.c | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@
 
 bin/debug.dylib: src/scenes/debug_scene.c | bin

@@ -6,27 +6,9 @@
 #include <OpenGL/gl3.h>
 #include <GLFW/glfw3.h>
 
-#include "../hub/hub.h"
-#include "../lib/common.h"
-
-typedef struct {
-    Vec_2 window_dim;
-    Vec_2 framebuffer_dim;
-    GLuint prog;
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
-    float angle_roll;
-    float angle_yaw;
-    float w;
-    float h;
-    bool is_mouse_drag;
-    Cardinal_Direction move_dir;
-    Vec_2 position;
-    Vec_2 velocity;
-    bool is_captured;
-    GLFWwindow *window;
-} State;
+#include "cube.h"
+#include "../../hub/hub.h"
+#include "../../lib/common.h"
 
 static bool gl_check_compile_success(GLuint shader, const char *src)
 {
@@ -134,7 +116,7 @@ void _mat4_mul(mat4 out, mat4 a, mat4 b)
     memcpy(out, res, sizeof(mat4));
 }
 
-void on_init(State *state, const struct Hub_Context *hub_context)
+void on_init(Cube_State *state, const struct Hub_Context *hub_context)
 {
     if (!hub_context->is_live_scene) glfwSetWindowTitle(hub_context->window, "live_cube");
 
@@ -202,12 +184,12 @@ void on_init(State *state, const struct Hub_Context *hub_context)
     glBindVertexArray(0);
 }
 
-void on_reload(State *state)
+void on_reload(Cube_State *state)
 {
     (void)state;
 }
 
-void on_frame(State *state, const struct Hub_Timing *t)
+void on_frame(Cube_State *state, const struct Hub_Timing *t)
 {
     glViewport(0, 0, (GLsizei)state->framebuffer_dim.x, (GLsizei)state->framebuffer_dim.y);
 
@@ -245,7 +227,7 @@ void on_frame(State *state, const struct Hub_Timing *t)
 
 #define TRANSLATION_SPEED 1.0f;
 
-void on_platform_event(State *state, const struct Hub_Event *e)
+void on_platform_event(Cube_State *state, const struct Hub_Event *e)
 {
     switch (e->kind)
     {
@@ -344,7 +326,7 @@ void on_platform_event(State *state, const struct Hub_Event *e)
     }
 }
 
-void on_destroy(State *state)
+void on_destroy(Cube_State *state)
 {
     glDeleteBuffers(1, &state->vbo);
     glDeleteVertexArrays(1, &state->vao);

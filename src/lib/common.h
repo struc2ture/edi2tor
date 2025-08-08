@@ -41,7 +41,7 @@ typedef enum {
     DIR_UP,
     DIR_RIGHT,
     DIR_DOWN
-} Cardinal_Direction;
+} Dir;
 
 static inline Vec_2 vec2_sub(Vec_2 a, Vec_2 b)
 {
