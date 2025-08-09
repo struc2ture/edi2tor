@@ -51,11 +51,11 @@ void editor_init(Editor_State *state, struct Hub_Context *hub_context)
 
     // Working dir can be passed as the third arg to platform
     // e.g. bin/platform bin/editor.dylib /Users/user/project
-    if (hub_context->argc > 2)
-    {
-        sys_change_working_dir(hub_context->argv[2], state);
-    }
-    else
+    // if (hub_context->argc > 2)
+    // {
+    //     sys_change_working_dir(hub_context->argv[2], state);
+    // }
+    // else
     {
         state->working_dir = sys_get_working_dir();
     }

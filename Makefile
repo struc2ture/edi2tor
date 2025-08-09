@@ -4,13 +4,13 @@ LFLAGS = -L/opt/homebrew/lib -lglfw -framework OpenGL
 
 CIMGUIRPATH = -Wl,-rpath,/Users/struc/dev/other/cimgui/backend_test/example_glfw_opengl3/build
 
-editor: bin/hub bin/editor.dylib bin/debug.dylib bin/cube.dylib
+editor: bin/hub bin/editor.dylib bin/debug.dylib bin/cube.dylib bin/obj_viewer.dylib
 
-d: bin/hub bin/editor.dylib bin/debug.dylib
-	lldb bin/hub -o run -- bin/editor.dylib
-
-dd: bin/hub bin/debug.dylib
+d: bin/hub bin/debug.dylib
 	lldb bin/hub -o run
+
+dd: bin/hub bin/editor.dylib bin/debug.dylib
+	lldb bin/hub -o run -- bin/editor.dylib
 
 bin:
 	mkdir -p bin
@@ -34,3 +34,9 @@ bin/cube.dylib: src/scenes/cube/cube.c | bin
 
 bin/debug.dylib: src/scenes/debug_scene.c | bin
 	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) -I/Users/struc/dev/other/cimgui -L/Users/struc/dev/other/cimgui/backend_test/example_glfw_opengl3/build -lcimgui $< -o $@
+
+bin/triangle.dylib: src/scenes/triangle.c | bin
+	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@
+
+bin/obj_viewer.dylib: src/scenes/obj_viewer.c | bin
+	$(CC) -dynamiclib $(CFLAGS) $(LFLAGS) $< -o $@

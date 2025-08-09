@@ -128,6 +128,7 @@ void open_scene(const char *path)
     // TODO: Handle failed allocation
     s->state = calloc(1, 4096);
     s->on_init(s->state, &hub_context);
+    s->on_reload(s->state);
 }
 
 void open_debug_scene(const char *path)
@@ -136,6 +137,7 @@ void open_debug_scene(const char *path)
     // TODO: Handle failed allocation
     s->state = calloc(1, 4096);
     s->on_init(s->state, &hub_context);
+    s->on_reload(s->state);
 }
 
 void close_scene(struct Scene *s)
@@ -242,9 +244,9 @@ int main(int argc, char **argv)
         glfwPollEvents();
     }
 
-    scene_map_for_each(&hub_context.scene_map, s)
+    for (int i = 0; i < hub_context.scene_map.size; i++)
     {
-        close_scene(s);
+        close_scene(&hub_context.scene_map.scenes[0]);
     }
     close_scene(debug_scene);
 
