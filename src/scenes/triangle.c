@@ -47,8 +47,6 @@ void on_frame(struct Triangle_State *s, const struct Hub_Timing *t)
     b = mat4_mul_vec3(rot, b);
     c = mat4_mul_vec3(rot, c);
 
-    // s->angle += t->prev_delta_time;
-
     vb_add_vert(s->vb, (struct Vert){a.x, a.y, a.z, 0.0f, 0.0f, (struct Col4f){1.0f, 0.0f, 0.0f, 1.0f}});
     vb_add_vert(s->vb, (struct Vert){b.x, b.y, b.z, 0.0f, 0.0f, (struct Col4f){0.0f, 1.0f, 0.0f, 1.0f}});
     vb_add_vert(s->vb, (struct Vert){c.x, c.y, c.z, 0.0f, 0.0f, (struct Col4f){0.0f, 0.0f, 1.0f, 1.0f}});

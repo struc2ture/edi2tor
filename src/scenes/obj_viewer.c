@@ -4,7 +4,9 @@
 #include <GLFW/glfw3.h>
 
 #include "../hub/hub.h"
+#include "../lib/common.h"
 #include "../lib/gl_glue.h"
+#include "../lib/util.h"
 
 struct Triangle_State
 {
@@ -15,8 +17,8 @@ struct Triangle_State
 
 void on_init(struct Triangle_State *s, struct Hub_Context *hub_context)
 {
-    s->w = hub_context->window_w;
-    s->h = hub_context->window_h;
+    s->w = hub_context->window_px_w;
+    s->h = hub_context->window_px_h;
     s->prog = gl_create_basic_shader();
     s->vb = vb_make();
 }
@@ -34,11 +36,55 @@ void on_frame(struct Triangle_State *s, const struct Hub_Timing *t)
 
     int index_base = vb_next_vert_index(s->vb);
 
-    vb_add_vert(s->vb, (struct Vert){-0.5f, -0.5f, 0.0f, 0.0f, 0.0f, (struct Col4f){1.0f, 0.0f, 0.0f, 1.0f}});
-    vb_add_vert(s->vb, (struct Vert){ 0.0f,  0.5f, 0.0f, 0.0f, 0.0f, (struct Col4f){0.0f, 1.0f, 0.0f, 1.0f}});
-    vb_add_vert(s->vb, (struct Vert){ 0.5f, -0.5f, 0.0f, 0.0f, 0.0f, (struct Col4f){0.0f, 0.0f, 1.0f, 1.0f}});
+    Vec_3 verts[] =
+    {
+        {-0.5f, -0.5f, -0.5f},
+        { 0.5f, -0.5f, -0.5f},
+        { 0.5f, -0.5f,  0.5f},
+        {-0.5f, -0.5f,  0.5f},
+        {-0.5f,  0.5f, -0.5f},
+        { 0.5f,  0.5f, -0.5f},
+        { 0.5f,  0.5f,  0.5f},
+        {-0.5f,  0.5f,  0.5f},
+    };
 
-    vb_add_indices(s->vb, index_base, (int[]){0, 1, 2}, 3);
+    struct Col4f colors[] =
+    {
+        {0.5f, 0.0f, 0.0f, 1.0f},
+        {0.0f, 0.5f, 0.0f, 1.0f},
+        {0.0f, 0.0f, 0.5f, 1.0f},
+        {0.5f, 0.0f, 0.5f, 1.0f},
+        {1.0f, 0.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 0.0f, 1.0f},
+        {0.0f, 0.0f, 1.0f, 1.0f},
+        {1.0f, 0.0f, 1.0f, 1.0f},
+    };
+
+    Mat_4 rot = mat4_rotate_axis(0.0f, 0.5f, 0.5f, 1.5f);
+
+    for (int i = 0; i < (int)array_size(verts); i++)
+    {
+        Vec_3 v = mat4_mul_vec3(rot, verts[i]);
+        vb_add_vert(s->vb, (struct Vert){v.x, v.y, v.z, 0.0f, 0.0f, colors[i]});
+    }
+
+    int indices[] =
+    {
+        0, 1, 2,
+        2, 3, 0,
+        4, 5, 6,
+        6, 7, 4,
+        3, 2, 6,
+        6, 7, 3,
+        0, 1, 5,
+        5, 4, 0,
+        0, 3, 7,
+        7, 4, 0,
+        1, 2, 6,
+        6, 5, 1
+    };
+
+    vb_add_indices(s->vb, index_base, indices, array_size(indices));
 
     vb_draw_call(s->vb);
 }
