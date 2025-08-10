@@ -32,6 +32,8 @@ void on_frame(struct Triangle_State *s, const struct Hub_Timing *t)
     glViewport(0, 0, s->w, s->h);
     glUseProgram(s->prog);
 
+    glEnable(GL_DEPTH_TEST);
+
     vb_clear(s->vb);
 
     int index_base = vb_next_vert_index(s->vb);
@@ -60,7 +62,8 @@ void on_frame(struct Triangle_State *s, const struct Hub_Timing *t)
         {1.0f, 0.0f, 1.0f, 1.0f},
     };
 
-    Mat_4 rot = mat4_rotate_axis(0.0f, 0.5f, 0.5f, 1.5f);
+    Vec_3 axis = vec3_normalize((Vec_3){0.0f, 0.5f, 0.5f});
+    Mat_4 rot = mat4_rotate_axis(axis.x, axis.y, axis.z, 1.5f);
 
     for (int i = 0; i < (int)array_size(verts); i++)
     {
@@ -87,6 +90,8 @@ void on_frame(struct Triangle_State *s, const struct Hub_Timing *t)
     vb_add_indices(s->vb, index_base, indices, array_size(indices));
 
     vb_draw_call(s->vb);
+
+    glDisable(GL_DEPTH_TEST);
 }
 
 void on_platform_event(struct Triangle_State *s, const struct Hub_Event *e)
