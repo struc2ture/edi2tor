@@ -62,12 +62,24 @@ void on_frame(struct Triangle_State *s, const struct Hub_Timing *t)
         {1.0f, 0.0f, 1.0f, 1.0f},
     };
 
+    Mat_4 proj = mat4_proj_perspective(PI32 / 3, s->w / s->h, -1.0f, 1.0f);
+    Mat_4 view = mat4_look_at(
+        (Vec_3){0.0f, 0.0f, 5.0f},
+        (Vec_3){0},
+        (Vec_3){0, 1.0, 0.0f}
+    );
+
     Vec_3 axis = vec3_normalize((Vec_3){0.0f, 0.5f, 0.5f});
-    Mat_4 rot = mat4_rotate_axis(axis.x, axis.y, axis.z, 1.5f);
+    Mat_4 model = mat4_rotate_axis(axis.x, axis.y, axis.z, PI32 * 0.5f);
+
+    Mat_4 mvp = mat4_mul(proj, mat4_mul(view, model));
+
+    glUniformMatrix4fv(glGetUniformLocation(s->prog, "u_mvp"), 1, GL_FALSE, mvp.m);
 
     for (int i = 0; i < (int)array_size(verts); i++)
     {
-        Vec_3 v = mat4_mul_vec3(rot, verts[i]);
+        Vec_3 v = verts[i];
+        // v = mat4_mul_vec3(rot, v);
         vb_add_vert(s->vb, (struct Vert){v.x, v.y, v.z, 0.0f, 0.0f, colors[i]});
     }
 

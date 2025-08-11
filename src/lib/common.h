@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define PI32 3.14159265358979323846264338327950288419716939f
+
 typedef struct {
     float x, y;
 } Vec_2;
