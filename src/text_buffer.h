@@ -5,28 +5,28 @@
 
 #define MAX_CHARS_PER_LINE 1024
 
-typedef struct {
+typedef struct Text_Line {
     char *str;
     int len;
     int buf_len;
 } Text_Line;
 
-typedef struct {
+typedef struct Text_Buffer {
     Text_Line *lines;
     int line_count;
 } Text_Buffer;
 
-typedef struct {
+typedef struct Cursor_Pos {
     int line;
     int col;
 } Cursor_Pos;
 
-typedef struct {
+typedef struct Text_Mark {
     bool active;
     Cursor_Pos pos;
 } Text_Mark;
 
-typedef struct {
+typedef struct Cursor_Iterator {
     const Text_Buffer *buf;
     Cursor_Pos pos;
 } Cursor_Iterator;

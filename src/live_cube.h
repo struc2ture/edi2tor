@@ -7,7 +7,7 @@
 
 #include "platform_types.h"
 
-typedef struct {
+typedef struct Live_Cube_State {
     Vec_2 window_dim;
     Vec_2 framebuffer_dim;
     GLuint prog;

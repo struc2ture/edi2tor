@@ -8,7 +8,7 @@
 #include "string_builder.h"
 #include "text_buffer.h"
 
-typedef struct
+typedef struct UT_State
 {
     bool break_on_failure;
     Text_Buffer *log_buffer;

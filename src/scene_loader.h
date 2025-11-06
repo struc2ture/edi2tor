@@ -16,7 +16,7 @@ typedef void (*scene_on_render_t)(void *state, const Platform_Timing *t);
 typedef void (*scene_on_platform_event_t)(void *state, const Platform_Event *e);
 typedef void (*scene_on_destroy_t)(void *state);
 
-typedef struct {
+typedef struct Scene_Dylib {
     void *handle;
     char *original_path;
     char *copied_path;

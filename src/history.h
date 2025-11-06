@@ -2,7 +2,7 @@
 
 #include "text_buffer.h"
 
-typedef enum {
+typedef enum DeltaKind {
     DELTA_INSERT_CHAR,
     DELTA_REMOVE_CHAR,
     DELTA_INSERT_RANGE,
@@ -11,7 +11,7 @@ typedef enum {
 
 static const char *DeltaKind_Str[] = { "Insert char", "Remove char", "Insert range", "Remove range" };
 
-typedef struct {
+typedef struct Delta {
     union {
         struct {
             Cursor_Pos pos;
@@ -39,13 +39,13 @@ typedef struct {
     DeltaKind kind;
 } Delta;
 
-typedef enum {
+typedef enum Running_Command_Kind {
     RUNNING_COMMAND_NONE,
     RUNNING_COMMAND_TEXT_INSERT,
     RUNNING_COMMAND_TEXT_DELETION,
 } Running_Command_Kind;
 
-typedef struct {
+typedef struct Command {
     const char *name;
     Delta *deltas;
     int delta_count;
@@ -56,7 +56,7 @@ typedef struct {
     bool committed;
 } Command;
 
-typedef struct {
+typedef struct History {
     Command *commands;
     int command_count;
     int command_cap;

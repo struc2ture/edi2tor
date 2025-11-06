@@ -38,39 +38,39 @@
 #define E2_WORKSPACE ".e2/workspace"
 #define E2_TEMP_FILES ".e2/temp_files"
 
-typedef struct {
+typedef struct Color {
     unsigned char r, g, b, a;
 } Color;
 
-typedef struct {
+typedef struct Vert {
     float x, y;
     float u, v;
     Color c;
 } Vert;
 
-typedef struct {
+typedef struct Vert_Buffer {
     Vert verts[VERT_MAX];
     int vert_count;
 } Vert_Buffer;
 
-typedef struct {
+typedef struct Image {
     GLuint texture;
     float width;
     float height;
     int channels;
 } Image;
 
-typedef struct {
+typedef struct Viewport {
     Rect rect;
     float zoom;
 } Viewport;
 
-typedef struct {
+typedef struct Display_Cursor {
     Cursor_Pos pos;
     float blink_time;
 } Display_Cursor;
 
-typedef struct {
+typedef struct Render_Font {
     stbtt_bakedchar *char_data;
     int char_count;
     GLuint texture;
@@ -80,7 +80,7 @@ typedef struct {
     float i_dpi_scale;
 } Render_Font;
 
-struct Render_State {
+typedef struct Render_State {
     GLuint font_shader;
     GLuint grid_shader;
     GLuint quad_shader;
@@ -107,9 +107,9 @@ struct Render_State {
     Mat_Stack mat_stack_model_view;
 
     Color text_color;
-};
+} Render_State;
 
-typedef enum {
+typedef enum Prompt_Kind{
     PROMPT_NONE,
     PROMPT_OPEN_FILE,
     PROMPT_SAVE_AS,
@@ -118,25 +118,25 @@ typedef enum {
     PROMPT_CHANGE_WORKING_DIR,
 } Prompt_Kind;
 
-typedef struct Buffer_View Buffer_View;
+struct Buffer_View;
 typedef struct {
     Prompt_Kind kind;
     union {
     struct {/* nothing for open_file */} open_file;
     struct {
-        Buffer_View *for_buffer_view;
+        struct Buffer_View *for_buffer_view;
     } go_to_line;
     struct {
-        Buffer_View *for_buffer_view;
+        struct Buffer_View *for_buffer_view;
     } save_as;
     };
 } Prompt_Context;
 
-typedef struct {
+typedef struct Prompt_Result {
     char str[MAX_CHARS_PER_LINE];
 } Prompt_Result;
 
-typedef struct {
+typedef struct Buffer {
     char *file_path;
     Prompt_Context prompt_context;
     History history;
@@ -144,37 +144,37 @@ typedef struct {
     int id;
 } Buffer;
 
-struct Buffer_View {
+typedef struct Buffer_View {
     Buffer *buffer;
     Viewport viewport;
     Display_Cursor cursor;
     Text_Mark mark;
     bool is_mouse_drag;
-};
+} Buffer_View;
 
-typedef struct {
+typedef struct Image_View {
     Image image;
     Rect image_rect;
 } Image_View;
 
-typedef struct {
+typedef struct Live_Scene {
     void *state;
     Scene_Dylib dylib;
 } Live_Scene;
 
-typedef struct {
+typedef struct Live_Scene_View {
     Live_Scene *live_scene;
     Gl_Framebuffer framebuffer;
     Rect framebuffer_rect;
 } Live_Scene_View;
 
-typedef enum {
+typedef enum View_Kind {
     VIEW_KIND_BUFFER,
     VIEW_KIND_IMAGE,
     VIEW_KIND_LIVE_SCENE
 } View_Kind;
 
-typedef struct {
+typedef struct View {
     union {
         Buffer_View bv;
         Image_View iv;
@@ -184,7 +184,7 @@ typedef struct {
     View_Kind kind;
 } View;
 
-typedef struct {
+typedef struct Mouse_State {
     View *resized_view;
     View *dragged_view;
     View *scrolled_view;
@@ -193,7 +193,7 @@ typedef struct {
     bool canvas_dragged;
 } Mouse_State;
 
-typedef struct {
+typedef struct Editor_State {
     Render_State render_state;
     Mouse_State mouse_state;
 
@@ -224,14 +224,14 @@ typedef struct {
     bool should_break;
 } Editor_State;
 
-typedef enum {
+typedef enum Cursor_Movement_Dir {
     CURSOR_MOVE_LEFT,
     CURSOR_MOVE_RIGHT,
     CURSOR_MOVE_UP,
     CURSOR_MOVE_DOWN
 } Cursor_Movement_Dir;
 
-typedef enum {
+typedef enum File_Kind {
     FILE_KIND_NONE,
     FILE_KIND_TEXT,
     FILE_KIND_IMAGE,

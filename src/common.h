@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct Vec_2 {
     float x, y;
 } Vec_2;
 #define VEC2_FMT "<%0.2f, %0.2f>"
@@ -21,21 +21,21 @@ typedef struct {
  * Laid out in memory like this:
  * M00 M10 M20 M30 M01 M11 ...
  */
-typedef struct {
+typedef struct Mat_4 {
     float m[16];
 } Mat_4;
 
-typedef struct {
+typedef struct Rect {
     float x, y;
     float w, h;
 } Rect;
 
-typedef struct {
+typedef struct Rect_Bounds {
     float min_x, min_y;
     float max_x, max_y;
 } Rect_Bounds;
 
-typedef enum {
+typedef enum Cardinal_Direction {
     DIR_NONE,
     DIR_LEFT,
     DIR_UP,

@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-typedef enum {
+typedef enum Platform_Event_Kind {
     PLATFORM_EVENT_CHAR,
     PLATFORM_EVENT_KEY,
     PLATFORM_EVENT_MOUSE_BUTTON,
@@ -12,7 +12,7 @@ typedef enum {
     PLATFORM_EVENT_INPUT_CAPTURED,
 } Platform_Event_Kind;
 
-typedef struct {
+typedef struct Platform_Event {
     union
     {
         struct
@@ -64,7 +64,7 @@ typedef struct {
     Platform_Event_Kind kind;
 } Platform_Event;
 
-typedef struct {
+typedef struct Platform_Timing {
     float prev_frame_time;
     float prev_prev_frame_time;
     float prev_delta_time;

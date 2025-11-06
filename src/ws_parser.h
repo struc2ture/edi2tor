@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef enum {
+typedef enum Token_Kind {
     TOKEN_IDENT,
     TOKEN_EQUALS,
     TOKEN_LBRACE,
@@ -17,13 +17,13 @@ typedef enum {
     TOKEN_EOF
 } Token_Kind;
 
-typedef struct {
+typedef struct Token {
     Token_Kind kind;
     const char *start;
     int length;
 } Token;
 
-typedef struct {
+typedef struct Parser_State {
     const char *src;
 } Parser_State;
 
