@@ -3,6 +3,8 @@
 #include <OpenGL/gl3.h>
 
 #include "common.h"
+#include "rect.h"
+#include "types.h"
 
 typedef struct Gl_Framebuffer {
     int w;
@@ -25,15 +27,15 @@ Gl_Framebuffer gl_create_framebuffer(int width, int height);
 void gl_destroy_framebuffer(Gl_Framebuffer *framebuffer);
 
 typedef struct Mat_Stack {
-    Mat_4 *mm;
+    m4 *mm;
     int size;
     int capacity;
 } Mat_Stack;
 
 void mat_stack_push(Mat_Stack *s);
-Mat_4 mat_stack_pop(Mat_Stack *s);
-Mat_4 mat_stack_peek(Mat_Stack *s);
-void mat_stack_mul_r(Mat_Stack *s, Mat_4 m);
+m4 mat_stack_pop(Mat_Stack *s);
+m4 mat_stack_peek(Mat_Stack *s);
+void mat_stack_mul_r(Mat_Stack *s, m4 m);
 
 
 char *strf(const char *fmt, ...);

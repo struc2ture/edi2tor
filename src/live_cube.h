@@ -8,8 +8,8 @@
 #include "platform_types.h"
 
 typedef struct Live_Cube_State {
-    Vec_2 window_dim;
-    Vec_2 framebuffer_dim;
+    v2 window_dim;
+    v2 framebuffer_dim;
     GLuint prog;
     GLuint vao;
     GLuint vbo;
@@ -20,8 +20,8 @@ typedef struct Live_Cube_State {
     float h;
     bool is_mouse_drag;
     Cardinal_Direction move_dir;
-    Vec_2 position;
-    Vec_2 velocity;
+    v2 position;
+    v2 velocity;
     bool is_captured;
     GLFWwindow *window;
 } Live_Cube_State;

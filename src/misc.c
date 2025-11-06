@@ -152,19 +152,19 @@ void mat_stack_push(Mat_Stack *s)
     s->size++;
 }
 
-Mat_4 mat_stack_pop(Mat_Stack *s)
+m4 mat_stack_pop(Mat_Stack *s)
 {
     bassert(s->size > 0);
     s->size--;
     return s->mm[s->size];
 }
 
-Mat_4 mat_stack_peek(Mat_Stack *s)
+m4 mat_stack_peek(Mat_Stack *s)
 {
     return s->mm[s->size - 1];
 }
 
-void mat_stack_mul_r(Mat_Stack *s, Mat_4 m)
+void mat_stack_mul_r(Mat_Stack *s, m4 m)
 {
     bassert(s->size > 0);
     s->mm[s->size - 1] = mat4_mul(s->mm[s->size - 1], m);

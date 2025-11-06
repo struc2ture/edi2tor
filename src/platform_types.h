@@ -33,19 +33,19 @@ typedef struct Platform_Event {
             int button;
             int action;
             int mods;
-            Vec_2 pos;
+            v2 pos;
         } mouse_button;
 
         struct
         {
-            Vec_2 pos;
-            Vec_2 delta;
+            v2 pos;
+            v2 delta;
         } mouse_motion;
 
         struct
         {
-            Vec_2 scroll;
-            Vec_2 pos;
+            v2 scroll;
+            v2 pos;
         } mouse_scroll;
 
         struct

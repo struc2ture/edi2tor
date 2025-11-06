@@ -11,9 +11,11 @@
 #include <stb_image.h>
 #include <stb_truetype.h>
 
+#include "color.h"
 #include "history.h"
 #include "misc.h"
 #include "platform_types.h"
+#include "rect.h"
 #include "scene_loader.h"
 #include "text_buffer.h"
 
@@ -37,10 +39,6 @@
 #define LIVE_CUBE_PATH "bin/live_cube.dylib"
 #define E2_WORKSPACE ".e2/workspace"
 #define E2_TEMP_FILES ".e2/temp_files"
-
-typedef struct Color {
-    unsigned char r, g, b, a;
-} Color;
 
 typedef struct Vert {
     float x, y;
@@ -92,8 +90,8 @@ typedef struct Render_State {
     GLuint grid_shader_offset_loc;
     GLuint grid_shader_spacing_loc;
     GLuint grid_shader_resolution_loc;
-    Vec_2 window_dim;
-    Vec_2 framebuffer_dim;
+    v2 window_dim;
+    v2 framebuffer_dim;
     float dpi_scale;
     Render_Font font;
     GLuint white_texture;
@@ -188,7 +186,7 @@ typedef struct Mouse_State {
     View *resized_view;
     View *dragged_view;
     View *scrolled_view;
-    Vec_2 pos;
+    v2 pos;
     float scroll_timeout;
     bool canvas_dragged;
 } Mouse_State;
@@ -256,11 +254,6 @@ void render_view_image(Image_View *image_view, const Render_State *render_state)
 void render_view_live_scene(Live_Scene_View *ls_view, const Render_State *render_state, const Platform_Timing *t);
 void render_status_bar(Editor_State *state, const Render_State *render_state, const Platform_Timing *t);
 
-void draw_quad(Rect q, Color c, const Render_State *render_state);
-void draw_texture(GLuint texture, Rect q, Color c, const Render_State *render_state);
-void draw_string(const char *str, Render_Font font, float x, float y, Color c, const Render_State *render_state);
-void draw_grid(Vec_2 offset, float spacing, const Render_State *render_state);
-
 void mvp_update_from_stacks(Render_State *render_state);
 void initialize_render_state(Render_State *render_state, float window_w, float window_h, float window_px_w, float window_px_h, GLuint fbo);
 
@@ -290,7 +283,7 @@ Rect view_get_inner_rect(View *view, const Render_State *render_state);
 void view_set_rect(View *view, Rect rect, const Render_State *render_state);
 void view_set_active(View *view, Editor_State *state);
 Rect view_get_resize_handle_rect(View *view, const Render_State *render_state);
-View *view_at_pos(Vec_2 pos, Editor_State *state);
+View *view_at_pos(v2 pos, Editor_State *state);
 bool view_handle_scroll(View *view, float x_offset, float y_offset, const Render_State *render_state);
 #define outer_view(child_view_ptr) ((View *)(child_view_ptr))
 
@@ -298,8 +291,8 @@ Buffer_View *buffer_view_create(Buffer *buffer, Rect rect, Editor_State *state);
 Rect buffer_view_get_text_area_rect(Buffer_View *buffer_view, const Render_State *render_state);
 Rect buffer_view_get_line_num_col_rect(Buffer_View *buffer_view, const Render_State *render_state);
 Rect buffer_view_get_name_rect(Buffer_View *buffer_view, const Render_State *render_state);
-Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View *buffer_view, Vec_2 canvas_pos, const Render_State *render_state);
-Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View *buffer_view, Vec_2 text_area_pos);
+v2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View *buffer_view, v2 canvas_pos, const Render_State *render_state);
+v2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View *buffer_view, v2 text_area_pos);
 
 void image_destroy(Image image);
 
@@ -336,9 +329,9 @@ int get_char_i_at_pos_in_string(const char *str, Render_Font font, float x);
 Rect get_cursor_rect(Text_Buffer text_buffer, Cursor_Pos cursor_pos, const Render_State *render_state);
 
 Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport);
-Vec_2 canvas_pos_to_screen_pos(Vec_2 canvas_pos, Viewport canvas_viewport);
-Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport);
-Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
+v2 canvas_pos_to_screen_pos(v2 canvas_pos, Viewport canvas_viewport);
+v2 screen_pos_to_canvas_pos(v2 screen_pos, Viewport canvas_viewport);
+Cursor_Pos buffer_pos_to_cursor_pos(v2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state);
 void viewport_snap_to_cursor(Text_Buffer text_buffer, Cursor_Pos cursor_pos, Viewport *viewport, Render_State *render_state);
 
 void text_buffer_history_insert_char(Text_Buffer *text_buffer, History *history, char c, Cursor_Pos pos);
@@ -355,7 +348,7 @@ int text_buffer_history_whitespace_cleanup(Text_Buffer *text_buffer, History *hi
 
 void buffer_view_set_mark(Buffer_View *buffer_view, Cursor_Pos pos);
 void buffer_view_validate_mark(Buffer_View *buffer_view);
-void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state);
+void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, v2 mouse_canvas_pos, const Render_State *render_state);
 
 // --------------------------------
 
@@ -376,9 +369,3 @@ File_Kind file_detect_kind(const char *path);
 char *sys_get_working_dir();
 bool sys_change_working_dir(const char *dir, Editor_State *state);
 bool sys_file_exists(const char *path);
-
-// -------------------------------
-
-Rect_Bounds rect_get_bounds(Rect r);
-bool rect_intersect(Rect a, Rect b);
-bool rect_p_intersect(Vec_2 p, Rect rect);

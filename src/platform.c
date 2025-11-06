@@ -18,7 +18,7 @@
 static Scene_Dylib g_scene_dylib;
 static void *g_scene_state;
 
-static Vec_2 g_mouse_prev_pos;
+static v2 g_mouse_prev_pos;
 static Platform_Timing g_timing;
 
 void perform_timing_calculations(Platform_Timing *t)
@@ -67,7 +67,7 @@ void mouse_cursor_pos_callback(GLFWwindow *window, double xpos, double ypos)
     (void)window;
     Platform_Event e;
     e.kind = PLATFORM_EVENT_MOUSE_MOTION;
-    e.mouse_motion.pos = (Vec_2){(float)xpos, (float)ypos};
+    e.mouse_motion.pos = V2((float)xpos, (float)ypos);
     e.mouse_motion.delta = vec2_sub(e.mouse_motion.pos, g_mouse_prev_pos);
     g_mouse_prev_pos = e.mouse_motion.pos;
     g_scene_dylib.on_platform_event(g_scene_state, &e);
@@ -89,7 +89,7 @@ void scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
     (void)window;
     Platform_Event e;
     e.kind = PLATFORM_EVENT_MOUSE_SCROLL;
-    e.mouse_scroll.scroll = (Vec_2){(float)x_offset, (float)y_offset};
+    e.mouse_scroll.scroll = V2((float)x_offset, (float)y_offset);
     e.mouse_scroll.pos = glfwh_get_mouse_position(window);
     g_scene_dylib.on_platform_event(g_scene_state, &e);
 }

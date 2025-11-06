@@ -369,7 +369,7 @@ void input_mouse_motion_buffer_view(Editor_State *state, Buffer_View *buffer_vie
 {
     if (buffer_view->is_mouse_drag)
     {
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_motion.pos, state->canvas_viewport);
+        v2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_motion.pos, state->canvas_viewport);
         buffer_view_set_cursor_to_pixel_position(buffer_view, mouse_canvas_pos, &state->render_state);
     }
 }
@@ -386,7 +386,7 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
             }
             else
             {
-                Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
+                v2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
                 View *clicked_view = view_at_pos(mouse_canvas_pos, state);
                 if (clicked_view != NULL)
                 {
@@ -403,7 +403,7 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
 
                     // 2. Check if view is being resized
                     Rect resize_handle_rect = view_get_resize_handle_rect(clicked_view, &state->render_state);
-                    if (rect_p_intersect(mouse_canvas_pos, resize_handle_rect))
+                    if (rect_contains_p(mouse_canvas_pos, resize_handle_rect))
                     {
                         state->mouse_state.resized_view = clicked_view;
                         will_propagate_to_inner_view = false;
@@ -414,7 +414,7 @@ void input_mouse_button_global(Editor_State *state, const Platform_Event *e)
                     if (will_propagate_to_inner_view)
                     {
                         Rect inner_view_rect = view_get_inner_rect(clicked_view, &state->render_state);
-                        if (rect_p_intersect(mouse_canvas_pos, inner_view_rect))
+                        if (rect_contains_p(mouse_canvas_pos, inner_view_rect))
                         {
                             input_mouse_button_view(state, state->active_view, e);
                             found_target = true;
@@ -485,7 +485,7 @@ void input_mouse_button_buffer_view(Editor_State *state, Buffer_View *buffer_vie
 {
     if (e->mouse_button.action == GLFW_PRESS)
     {
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
+        v2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_button.pos, state->canvas_viewport);
         if (glfwh_is_shift_pressed(state->window))
         {
             if (!buffer_view->mark.active)
@@ -513,7 +513,7 @@ void input_mouse_scroll_global(Editor_State *state, const Platform_Event *e)
 {
     if (state->mouse_state.scroll_timeout <= 0.0f)
     {
-        Vec_2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_scroll.pos, state->canvas_viewport);
+        v2 mouse_canvas_pos = screen_pos_to_canvas_pos(e->mouse_scroll.pos, state->canvas_viewport);
         state->mouse_state.scrolled_view = view_at_pos(mouse_canvas_pos, state);
     }
     state->mouse_state.scroll_timeout = SCROLL_TIMEOUT; // There's an ongoing scroll when this function is called, so reset the scroll timeout
@@ -572,7 +572,7 @@ void input_mouse_scroll_buffer_view(Editor_State *state, Buffer_View *buffer_vie
 Platform_Event input__adjust_mouse_event_for_live_scene_view(Editor_State *state, Live_Scene_View *lsv, const Platform_Event *e)
 {
     Platform_Event adjusted_event = *e;
-    Vec_2 offset = canvas_pos_to_screen_pos((Vec_2){lsv->framebuffer_rect.x, lsv->framebuffer_rect.y}, state->canvas_viewport);
+    v2 offset = canvas_pos_to_screen_pos(V2(lsv->framebuffer_rect.x, lsv->framebuffer_rect.y), state->canvas_viewport);
     switch (adjusted_event.kind)
     {
         case PLATFORM_EVENT_MOUSE_BUTTON:

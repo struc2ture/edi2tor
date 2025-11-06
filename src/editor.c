@@ -21,6 +21,7 @@
 #include "history.h"
 #include "misc.h"
 #include "platform_types.h"
+#include "renderer.h"
 #include "scene_loader.h"
 #include "shaders.h"
 #include "text_buffer.h"
@@ -163,7 +164,7 @@ void editor_render(Editor_State *state, const Platform_Timing *t)
 
         mvp_update_from_stacks(&state->render_state);
 
-        draw_grid((Vec_2){state->canvas_viewport.rect.x, state->canvas_viewport.rect.y}, 50, &state->render_state);
+        draw_grid(V2(state->canvas_viewport.rect.x, state->canvas_viewport.rect.y), 50, &state->render_state);
 
         mat_stack_push(&state->render_state.mat_stack_model_view);
         {
@@ -477,97 +478,15 @@ void render_status_bar(Editor_State *state, const Render_State *render_state, co
         status_str_y += font_line_height;
     }
 
-    Vec_2 mouse_screen_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
+    v2 mouse_screen_pos = screen_pos_to_canvas_pos(state->mouse_state.pos, state->canvas_viewport);
 
-    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s; M: " VEC2_FMT, t->fps_avg, t->prev_delta_time, state->working_dir, VEC2_ARG(mouse_screen_pos));
+    snprintf(status_str_buf, sizeof(status_str_buf), "FPS: %3.0f; Delta: %.3f; Working dir: %s; M: <%.2f, %.2f>", t->fps_avg, t->prev_delta_time, state->working_dir, mouse_screen_pos.x, mouse_screen_pos.y);
     draw_string(status_str_buf, render_state->font, status_str_x, status_str_y, status_str_color, render_state);
 }
 
-// ---------------------------------------------------------------------------------------------------------------------------
-
-// TODO: Move this out of this file?
-void draw_quad(Rect q, Color c, const Render_State *render_state)
-{
-    Vert_Buffer vert_buf = {0};
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 0, 0, c));
-    glUseProgram(render_state->quad_shader);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-}
-
-void draw_texture(GLuint texture, Rect q, Color c, const Render_State *render_state)
-{
-    Vert_Buffer vert_buf = {0};
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       1, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 1, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 1, 1, c));
-    glUseProgram(render_state->tex_shader);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-}
-
-void draw_string(const char *str, Render_Font font, float x, float y, Color c, const Render_State *render_state)
-{
-    // NOTE: Assumes glUseProgram(font_shader) is called outside
-    y += font.ascent * font.i_dpi_scale;
-    Vert_Buffer vert_buf = {0};
-    while (*str)
-    {
-        if (*str >= 32)
-        {
-            stbtt_aligned_quad q;
-            stbtt_GetBakedQuad(font.char_data, font.atlas_w, font.atlas_h, *str-32, &x, &y ,&q, 1, font.i_dpi_scale);
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y0, q.s0, q.t0, c));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, c));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, c));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y0, q.s1, q.t0, c));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x0, q.y1, q.s0, q.t1, c));
-            vert_buffer_add_vert(&vert_buf, make_vert(q.x1, q.y1, q.s1, q.t1, c));
-        }
-        str++;
-    }
-    glBufferData(GL_ARRAY_BUFFER, VERT_MAX * sizeof(Vert), NULL, GL_DYNAMIC_DRAW); // Orphan existing buffer to stay on the fast path on mac
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-    glBindTexture(GL_TEXTURE_2D, render_state->white_texture);
-}
-
-void draw_grid(Vec_2 offset, float spacing, const Render_State *render_state)
-{
-    glUseProgram(render_state->grid_shader);
-    glUniform2f(render_state->grid_shader_resolution_loc, render_state->framebuffer_dim.x, render_state->framebuffer_dim.y);
-    float scaled_offset_x = offset.x * render_state->dpi_scale;
-    float scaled_offset_y = offset.y * render_state->dpi_scale;
-    glUniform2f(render_state->grid_shader_offset_loc, scaled_offset_x, scaled_offset_y);
-    glUniform1f(render_state->grid_shader_spacing_loc, spacing * render_state->dpi_scale);
-
-    Rect q = {0, 0, render_state->window_dim.x, render_state->window_dim.y};
-    Color c = {0};
-    Vert_Buffer vert_buf = {0};
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y,       0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x,       q.y + q.h, 0, 0, c));
-    vert_buffer_add_vert(&vert_buf, make_vert(q.x + q.w, q.y + q.h, 0, 0, c));
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vert_buf.vert_count * sizeof(vert_buf.verts[0]), vert_buf.verts);
-    glDrawArrays((GL_TRIANGLES), 0, vert_buf.vert_count);
-}
-
-// ---------------------------------------------------------------------------------------------------------------------------
-
 void mvp_update_from_stacks(Render_State *render_state)
 {
-    Mat_4 mvp;
+    m4 mvp;
     if (render_state->mat_stack_proj.size > 0 && render_state->mat_stack_model_view.size > 0)
     {
         mvp = mat4_mul(mat_stack_peek(&render_state->mat_stack_proj), mat_stack_peek(&render_state->mat_stack_model_view));
@@ -581,7 +500,7 @@ void mvp_update_from_stacks(Render_State *render_state)
         mvp = mat4_identity();
     }
     glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.m);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(mvp), mvp.d);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
@@ -610,7 +529,7 @@ void initialize_render_state(Render_State *render_state, float window_w, float w
 
     glGenBuffers(1, &render_state->mvp_ubo);
     glBindBuffer(GL_UNIFORM_BUFFER, render_state->mvp_ubo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(Mat_4), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(m4), NULL, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
     GLuint mvp_ubo_binding_point = 0;
     glBindBufferBase(GL_UNIFORM_BUFFER, mvp_ubo_binding_point, render_state->mvp_ubo);
@@ -972,14 +891,14 @@ Rect view_get_resize_handle_rect(View *view, const Render_State *render_state)
     return r;
 }
 
-View *view_at_pos(Vec_2 pos, Editor_State *state)
+View *view_at_pos(v2 pos, Editor_State *state)
 {
     for (int i = 0; i < state->view_count; i++)
     {
         Rect buffer_view_rect = state->views[i]->outer_rect;
         Rect resize_handle_rect = view_get_resize_handle_rect(state->views[i], &state->render_state);
-        bool at_buffer_view_rect = rect_p_intersect(pos, buffer_view_rect);
-        bool at_resize_handle = rect_p_intersect(pos, resize_handle_rect);
+        bool at_buffer_view_rect = rect_contains_p(pos, buffer_view_rect);
+        bool at_resize_handle = rect_contains_p(pos, resize_handle_rect);
         if (at_buffer_view_rect || at_resize_handle)
         {
             return state->views[i];
@@ -1044,18 +963,18 @@ Rect buffer_view_get_name_rect(Buffer_View *buffer_view, const Render_State *ren
     return r;
 }
 
-Vec_2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View *buffer_view, Vec_2 canvas_pos, const Render_State *render_state)
+v2 buffer_view_canvas_pos_to_text_area_pos(Buffer_View *buffer_view, v2 canvas_pos, const Render_State *render_state)
 {
     Rect text_area_rect = buffer_view_get_text_area_rect(buffer_view, render_state);
-    Vec_2 text_area_pos;
+    v2 text_area_pos;
     text_area_pos.x = canvas_pos.x - text_area_rect.x;
     text_area_pos.y = canvas_pos.y - text_area_rect.y;
     return text_area_pos;
 }
 
-Vec_2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View *buffer_view, Vec_2 text_area_pos)
+v2 buffer_view_text_area_pos_to_buffer_pos(Buffer_View *buffer_view, v2 text_area_pos)
 {
-    Vec_2 buffer_pos;
+    v2 buffer_pos;
     buffer_pos.x = buffer_view->viewport.rect.x + text_area_pos.x / buffer_view->viewport.zoom;
     buffer_pos.y = buffer_view->viewport.rect.y + text_area_pos.y / buffer_view->viewport.zoom;
     return buffer_pos;
@@ -1490,23 +1409,23 @@ Rect canvas_rect_to_screen_rect(Rect canvas_rect, Viewport canvas_viewport)
     return screen_rect;
 }
 
-Vec_2 canvas_pos_to_screen_pos(Vec_2 canvas_pos, Viewport canvas_viewport)
+v2 canvas_pos_to_screen_pos(v2 canvas_pos, Viewport canvas_viewport)
 {
-    Vec_2 screen_pos;
+    v2 screen_pos;
     screen_pos.x = (canvas_pos.x - canvas_viewport.rect.x) * canvas_viewport.zoom;
     screen_pos.y = (canvas_pos.y - canvas_viewport.rect.y) * canvas_viewport.zoom;
     return screen_pos;
 }
 
-Vec_2 screen_pos_to_canvas_pos(Vec_2 screen_pos, Viewport canvas_viewport)
+v2 screen_pos_to_canvas_pos(v2 screen_pos, Viewport canvas_viewport)
 {
-    Vec_2 canvas_pos;
+    v2 canvas_pos;
     canvas_pos.x = canvas_viewport.rect.x + screen_pos.x / canvas_viewport.zoom;
     canvas_pos.y = canvas_viewport.rect.y + screen_pos.y / canvas_viewport.zoom;
     return canvas_pos;
 }
 
-Cursor_Pos buffer_pos_to_cursor_pos(Vec_2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)
+Cursor_Pos buffer_pos_to_cursor_pos(v2 buffer_pos, Text_Buffer text_buffer, const Render_State *render_state)
 {
     Cursor_Pos cursor;
     cursor.line = buffer_pos.y / (float)get_font_line_height(render_state->font);
@@ -1709,10 +1628,10 @@ void buffer_view_validate_mark(Buffer_View *buffer_view)
         buffer_view->mark.active = false;
 }
 
-void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, Vec_2 mouse_canvas_pos, const Render_State *render_state)
+void buffer_view_set_cursor_to_pixel_position(Buffer_View *buffer_view, v2 mouse_canvas_pos, const Render_State *render_state)
 {
-    Vec_2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(buffer_view, mouse_canvas_pos, render_state);
-    Vec_2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(buffer_view, mouse_text_area_pos);
+    v2 mouse_text_area_pos = buffer_view_canvas_pos_to_text_area_pos(buffer_view, mouse_canvas_pos, render_state);
+    v2 mouse_buffer_pos = buffer_view_text_area_pos_to_buffer_pos(buffer_view, mouse_text_area_pos);
     Cursor_Pos text_cursor_under_mouse = buffer_pos_to_cursor_pos(mouse_buffer_pos, buffer_view->buffer->text_buffer, render_state);
     buffer_view->cursor.pos = cursor_pos_clamp(buffer_view->buffer->text_buffer, text_cursor_under_mouse);
 }
@@ -1861,50 +1780,11 @@ bool sys_file_exists(const char *path)
     return false;
 }
 
-// -------------------------------------------------
-
-Rect_Bounds rect_get_bounds(Rect r)
-{
-    Rect_Bounds b;
-    b.min_x = r.x;
-    b.min_y = r.y;
-    b.max_x = r.x + r.w;
-    b.max_y = r.y + r.h;
-    return b;
-}
-
-bool rect_intersect(Rect a, Rect b)
-{
-    float a_min_x = a.x;
-    float a_min_y = a.y;
-    float a_max_x = a.x + a.w;
-    float a_max_y = a.y + a.h;
-    float b_min_x = b.x;
-    float b_min_y = b.y;
-    float b_max_x = b.x + b.w;
-    float b_max_y = b.y + b.h;
-    bool intersect =
-        a_min_x < b_max_x && a_max_x > b_min_x &&
-        a_min_y < b_max_y && a_max_y > b_min_y;
-    return intersect;
-}
-
-bool rect_p_intersect(Vec_2 p, Rect rect)
-{
-    float min_x = rect.x;
-    float min_y = rect.y;
-    float max_x = rect.x + rect.w;
-    float max_y = rect.y + rect.h;
-    bool intersect =
-        p.x > min_x && p.x < max_x &&
-        p.y > min_y && p.y < max_y;
-    return intersect;
-}
-
 #include "actions.c"
 #include "input.c"
 #include "history.c"
 #include "misc.c"
+#include "renderer.c"
 #include "scene_loader.c"
 #include "scratch_runner.c"
 #include "string_builder.c"

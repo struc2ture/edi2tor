@@ -16,9 +16,9 @@ static inline bool glfwh_is_super_pressed(GLFWwindow *window)
             glfwGetKey(window, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS);
 }
 
-static inline Vec_2 glfwh_get_mouse_position(GLFWwindow *window)
+static inline v2 glfwh_get_mouse_position(GLFWwindow *window)
 {
     double x, y;
     glfwGetCursorPos(window, &x, &y);
-    return (Vec_2){x, y};
+    return V2(x, y);
 }

@@ -11,3 +11,5 @@ CompileFlags:
         "-xc",
         "-std=c99"
     ]
+Diagnostics:
+    UnusedIncludes: None
