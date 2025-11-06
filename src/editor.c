@@ -20,6 +20,7 @@
 #include "input.h"
 #include "history.h"
 #include "misc.h"
+#include "os.h"
 #include "platform_types.h"
 #include "renderer.h"
 #include "scene_loader.h"
@@ -47,11 +48,11 @@ void on_init(Editor_State *state, GLFWwindow *window, float window_w, float wind
     // e.g. bin/platform bin/editor.dylib /Users/user/project
     if (argc > 2)
     {
-        sys_change_working_dir(argv[2], state);
+        os_change_working_dir(argv[2], state);
     }
     else
     {
-        state->working_dir = sys_get_working_dir();
+        state->working_dir = os_get_working_dir();
     }
 
     action_load_workspace(state);
@@ -1129,7 +1130,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
                 .w = 800,
                 .h = 600
             };
-            File_Kind file_kind = file_detect_kind(result.str);
+            File_Kind file_kind = os_file_detect_kind(result.str);
             switch (file_kind)
             {
                 case FILE_KIND_IMAGE:
@@ -1203,7 +1204,7 @@ bool prompt_submit(Prompt_Context context, Prompt_Result result, Rect prompt_rec
 
         case PROMPT_CHANGE_WORKING_DIR:
         {
-            return sys_change_working_dir(result.str, state);
+            return os_change_working_dir(result.str, state);
         } break;
     }
     return true;
@@ -1695,27 +1696,6 @@ Image file_open_image(const char *path)
     return image;
 }
 
-void read_clipboard_mac(char *buf, size_t buf_size)
-{
-    FILE *pipe = popen("pbpaste", "r");
-    if (!pipe) return;
-    size_t len = 0;
-    while (fgets(buf + len, buf_size - len, pipe))
-    {
-        len = strlen(buf);
-        if (len >= buf_size - 1) break;
-    }
-    pclose(pipe);
-}
-
-void write_clipboard_mac(const char *text)
-{
-    FILE *pipe = popen("pbcopy", "w");
-    if (!pipe) return;
-    fputs(text, pipe);
-    pclose(pipe);
-}
-
 void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo)
 {
     Live_Scene *new_live_scene = live_scene_create(state, (*live_scene)->dylib.original_path, w, h, fbo);
@@ -1735,55 +1715,11 @@ void live_scene_rebuild(Live_Scene *live_scene)
     trace_log("live_scene_rebuild: Rebuilt dylib (%s)", live_scene->dylib.original_path);
 }
 
-bool file_is_image(const char *path)
-{
-    int x, y, comp;
-    return stbi_info(path, &x, &y, &comp) != 0;
-}
-
-File_Kind file_detect_kind(const char *path)
-{
-    if (!sys_file_exists(path)) return FILE_KIND_NONE;
-    const char *ext = strrchr(path, '.');
-    if (ext && strcmp(ext, ".dylib") == 0) return FILE_KIND_DYLIB;
-    if (file_is_image(path)) return FILE_KIND_IMAGE;
-    return FILE_KIND_TEXT;
-}
-
-char *sys_get_working_dir()
-{
-    char *dir = xmalloc(1024);
-    getcwd(dir, 1024);
-    return dir;
-}
-
-bool sys_change_working_dir(const char *dir, Editor_State *state)
-{
-    if (chdir(dir) == 0)
-    {
-        if (state->working_dir) free(state->working_dir);
-        state->working_dir = sys_get_working_dir();
-        return true;
-    }
-    log_warning("Failed to change working dir to %s", dir);
-    return false;
-}
-
-bool sys_file_exists(const char *path)
-{
-    FILE *f = fopen(path, "r");
-    if (f)
-    {
-        fclose(f);
-        return true;
-    }
-    return false;
-}
-
 #include "actions.c"
 #include "input.c"
 #include "history.c"
 #include "misc.c"
+#include "os.c"
 #include "renderer.c"
 #include "scene_loader.c"
 #include "scratch_runner.c"

@@ -229,13 +229,6 @@ typedef enum Cursor_Movement_Dir {
     CURSOR_MOVE_DOWN
 } Cursor_Movement_Dir;
 
-typedef enum File_Kind {
-    FILE_KIND_NONE,
-    FILE_KIND_TEXT,
-    FILE_KIND_IMAGE,
-    FILE_KIND_DYLIB
-} File_Kind;
-
 void on_init(Editor_State *state, GLFWwindow *window, float window_w, float window_h, float window_px_w, float window_px_h, bool is_live_scene, GLuint fbo, int argc, char **argv);
 void on_reload(Editor_State *state);
 void on_frame(Editor_State *state, const Platform_Timing *t);
@@ -357,15 +350,5 @@ void text_buffer_write_to_file(Text_Buffer text_buffer, const char *path);
 
 Image file_open_image(const char *path);
 
-void read_clipboard_mac(char *buf, size_t buf_size);
-void write_clipboard_mac(const char *text);
-
 void live_scene_reset(Editor_State *state, Live_Scene **live_scene, float w, float h, GLuint fbo);
 void live_scene_rebuild(Live_Scene *live_scene);
-
-bool file_is_image(const char *path);
-File_Kind file_detect_kind(const char *path);
-
-char *sys_get_working_dir();
-bool sys_change_working_dir(const char *dir, Editor_State *state);
-bool sys_file_exists(const char *path);

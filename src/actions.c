@@ -6,6 +6,7 @@
 
 #include "editor.h"
 #include "history.h"
+#include "os.h"
 #include "platform_types.h"
 #include "scratch_runner.h"
 #include "string_builder.h"
@@ -552,7 +553,7 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
 
             char *working_dir = strndup(val.start, val.length);
             // trace_log("Will change working dir to %s", state->working_dir);
-            sys_change_working_dir(working_dir, state);
+            os_change_working_dir(working_dir, state);
             free(working_dir);
         }
         else if (key.length == 10 && strncmp(key.start, "CANVAS_POS", 10) == 0)
@@ -605,7 +606,7 @@ bool _action_load_workspace_parse_kvs(Parser_State *ps, Editor_State *state)
 
 bool action_load_workspace(Editor_State *state)
 {
-    if (!sys_file_exists(E2_WORKSPACE)) return false;
+    if (!os_file_exists(E2_WORKSPACE)) return false;
 
     char *workspace = read_file(E2_WORKSPACE, NULL);
     if (!workspace) return false;
@@ -888,7 +889,7 @@ bool action_buffer_view_copy_selected(Editor_State *state, Buffer_View *buffer_v
         if (ENABLE_OS_CLIPBOARD)
         {
             char *range = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
-            write_clipboard_mac(range);
+            os_write_clipboard(range);
             free(range);
         }
         else
@@ -913,7 +914,7 @@ bool action_buffer_view_cut_selected(Editor_State *state, Buffer_View *buffer_vi
         if (ENABLE_OS_CLIPBOARD)
         {
             char *range = text_buffer_extract_range(&buffer_view->buffer->text_buffer, start, end);
-            write_clipboard_mac(range);
+            os_write_clipboard(range);
             free(range);
         }
         else
@@ -936,7 +937,7 @@ bool action_buffer_view_paste(Editor_State *state, Buffer_View *buffer_view)
     if (ENABLE_OS_CLIPBOARD)
     {
         char buf[10*1024];
-        read_clipboard_mac(buf, sizeof(buf));
+        os_read_clipboard(buf, sizeof(buf));
         if (strlen(buf) > 0)
         {
             copy_buffer = buf;
